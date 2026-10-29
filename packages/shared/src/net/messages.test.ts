@@ -1,5 +1,6 @@
 // packages/shared/src/net/messages.test.ts
 import { describe, expect, it } from "vitest";
+import type { TeamSheet } from "../domain/football-data";
 import { PROTOCOL_VERSION } from "../version";
 import {
   CLOSE_CODES,
@@ -165,6 +166,40 @@ describe("M2 lobby messages", () => {
     expect(parseClientMessage('{"t":"joinRoom","code":"abc"}')).toBeNull();
   });
 
+  it("parses team selection and sheet edits", () => {
+    expect(
+      parseClientMessage(
+        JSON.stringify({ t: "setTeam", teamId: "kingsport-united" }),
+      ),
+    ).toEqual({ t: "setTeam", teamId: "kingsport-united" });
+    expect(
+      parseClientMessage(JSON.stringify({ t: "setTeam", teamId: "../bad" })),
+    ).toBeNull();
+
+    const sheet = makeSheet();
+    expect(
+      parseClientMessage(JSON.stringify({ t: "updateSheet", sheet })),
+    ).toEqual({ t: "updateSheet", sheet });
+
+    const wrongRole = {
+      ...sheet,
+      startingXI: sheet.startingXI.map((slot, index) =>
+        index === 0 ? { ...slot, role: "CB" } : slot,
+      ),
+    };
+    expect(
+      parseClientMessage(JSON.stringify({ t: "updateSheet", sheet: wrongRole })),
+    ).toBeNull();
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          t: "updateSheet",
+          sheet: { ...sheet, kit: "fourth" },
+        }),
+      ),
+    ).toBeNull();
+  });
+
   it("round-trips lobby state", () => {
     const message = {
       t: "lobbyState" as const,
@@ -179,6 +214,8 @@ describe("M2 lobby messages", () => {
             ready: false,
             connected: true,
             host: true,
+            teamId: "kingsport-united",
+            sheet: makeSheet(),
           },
         ],
         reconnectSeconds: null,
@@ -188,6 +225,7 @@ describe("M2 lobby messages", () => {
         team: "home" as const,
         host: true,
         ready: false,
+        teamId: "kingsport-united",
       },
     };
     expect(parseServerMessage(encodeServerMessage(message))).toEqual(message);
@@ -270,6 +308,45 @@ describe("M2 lobby messages", () => {
     ).toBeNull();
   });
 });
+
+function makeSheet(): TeamSheet {
+  const roles = [
+    "GK",
+    "RB",
+    "CB",
+    "CB",
+    "LB",
+    "CDM",
+    "CM",
+    "CM",
+    "RW",
+    "ST",
+    "LW",
+  ] as const;
+  const startingXI = roles.map((role, slot) => ({
+    slot,
+    role,
+    playerId: `starter-${slot + 1}`,
+  }));
+  return {
+    formation: "4-3-3",
+    kit: "home",
+    startingXI,
+    bench: ["bench-1", "bench-2", "bench-3", "bench-4", "bench-5"],
+    reserves: ["reserve-1", "reserve-2"],
+    captain: "starter-1",
+    penaltyTaker: "starter-1",
+    freeKickTaker: "starter-1",
+    cornerLeft: "starter-1",
+    cornerRight: "starter-1",
+    tactics: {
+      defensiveDepth: 50,
+      width: 55,
+      pressIntensity: "medium",
+      buildUpStyle: "balanced",
+    },
+  };
+}
 
 function makeSetup() {
   const players = (side: "home" | "away") =>

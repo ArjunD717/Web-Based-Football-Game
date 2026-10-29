@@ -8,6 +8,7 @@ import {
 } from "@fb/shared";
 import { consoleLogger, startGameServer } from "./create-server";
 import { loadServerConfig } from "./config";
+import { loadTeamRegistry } from "./data/registry";
 import { formatHttpsUrl, listLanIpv4Addresses } from "./lan";
 import { RoomManager } from "./rooms/room-manager";
 import { loadTlsMaterial } from "./tls";
@@ -15,12 +16,14 @@ import { loadTlsMaterial } from "./tls";
 async function main(): Promise<void> {
   const config = loadServerConfig();
   const tls = await loadTlsMaterial(config.certPath, config.keyPath);
+  const registry = await loadTeamRegistry(config.dataDir);
   const lanAddresses = listLanIpv4Addresses();
   const primaryAddress = lanAddresses[0] ?? "localhost";
   let runtimePort = config.port;
 
   const roomManager = new RoomManager({
     logger: consoleLogger,
+    registry,
     onRoomCreated: (code) => {
       const base = formatHttpsUrl(primaryAddress, runtimePort);
       const url = `${base}/?room=${code}`;
@@ -37,6 +40,7 @@ async function main(): Promise<void> {
     host: config.host,
     port: config.port,
     staticDir: config.staticDir,
+    dataDir: config.dataDir,
     tls,
     handlers: {
       onReady: (client) => {
@@ -83,6 +87,7 @@ async function main(): Promise<void> {
     `WebSocket:     ${WS_PATH} (${TUNING.network.snapshotHz} Hz snapshots)`,
   );
   console.log(`Client dist:   ${config.staticDir}`);
+  console.log(`Match data:    ${config.dataDir} (${registry.teams.length} teams)`);
   console.log("If the client is missing, run pnpm dev (Vite :5173) or pnpm build.");
   console.log("");
   console.log("Scan to open the lobby:");

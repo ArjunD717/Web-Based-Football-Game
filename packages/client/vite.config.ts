@@ -43,6 +43,10 @@ export default defineConfig(({ command, isPreview = false }) => {
           target: `https://127.0.0.1:${serverPort}`,
           secure: false,
         },
+        "/data": {
+          target: `https://127.0.0.1:${serverPort}`,
+          secure: false,
+        },
       }
     : undefined;
 

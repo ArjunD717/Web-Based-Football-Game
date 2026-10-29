@@ -1,8 +1,10 @@
 // packages/server/src/rooms/room-manager.test.ts
-import { describe, expect, it, vi } from "vitest";
+import { fileURLToPath } from "node:url";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CONTROL_BUTTONS,
   PLAYER_STATE_CODES,
+  buildDefaultSheet,
   encodeInputFrame,
   encodeSnapshotAck,
   decodeSnapshot,
@@ -13,6 +15,7 @@ import {
 } from "@fb/shared";
 import type { ClientConnection } from "../client";
 import type { Logger } from "../create-server";
+import { loadTeamRegistry, type TeamRegistry } from "../data/registry";
 import { RoomManager } from "./room-manager";
 
 const silentLogger: Logger = {
@@ -20,6 +23,14 @@ const silentLogger: Logger = {
   warn: () => undefined,
   error: () => undefined,
 };
+
+let registry: TeamRegistry;
+
+beforeAll(async () => {
+  registry = await loadTeamRegistry(
+    fileURLToPath(new URL("../../../../data/", import.meta.url)),
+  );
+});
 
 class FakeClient implements ClientConnection {
   readonly json: ServerMessage[] = [];
@@ -87,6 +98,7 @@ function setupRoom(options: { reconnectGraceMs?: number } = {}): Fixture {
   const created: string[] = [];
   const manager = new RoomManager({
     logger: silentLogger,
+    registry,
     generateCode: () => (created.length === 0 ? "ABCD" : "EFGH"),
     onRoomCreated: (code) => created.push(code),
     ...options,
@@ -269,6 +281,124 @@ describe("match snapshots", () => {
   });
 });
 
+describe("team selection and live sheets", () => {
+  it("assigns distinct teams with parseable default sheets", () => {
+    const fixture = setupRoom();
+    const host = fixture.host.lastLobby().room?.players.find(
+      (player) => player.seat === 0,
+    );
+    const guest = fixture.host.lastLobby().room?.players.find(
+      (player) => player.seat === 1,
+    );
+    expect(host?.teamId).toBeTruthy();
+    expect(guest?.teamId).toBeTruthy();
+    expect(host?.teamId).not.toBe(guest?.teamId);
+    expect(host?.sheet?.startingXI).toHaveLength(11);
+    expect(guest?.sheet?.startingXI).toHaveLength(11);
+  });
+
+  it("syncs a valid sheet to the opponent and rejects a broken sheet", () => {
+    const fixture = setupRoom();
+    const host = fixture.host.lastLobby().room?.players.find(
+      (player) => player.seat === 0,
+    );
+    if (host?.sheet === null || host?.sheet === undefined) {
+      throw new Error("Host has no sheet");
+    }
+    const next = {
+      ...host.sheet,
+      bench: [...host.sheet.bench].reverse(),
+      tactics: {
+        ...host.sheet.tactics,
+        defensiveDepth: 72,
+        pressIntensity: "high" as const,
+      },
+    };
+    fixture.manager.onMessage(fixture.host, {
+      t: "updateSheet",
+      sheet: next,
+    });
+
+    const guestView = fixture.guest.lastLobby().room?.players.find(
+      (player) => player.seat === 0,
+    );
+    expect(guestView?.sheet?.bench).toEqual(next.bench);
+    expect(guestView?.sheet?.tactics.defensiveDepth).toBe(72);
+    expect(guestView?.sheet?.tactics.pressIntensity).toBe("high");
+
+    const duplicate = {
+      ...next,
+      startingXI: next.startingXI.map((slot, index) =>
+        index === 1
+          ? { ...slot, playerId: next.startingXI[0]!.playerId }
+          : slot,
+      ),
+    };
+    fixture.manager.onMessage(fixture.host, {
+      t: "updateSheet",
+      sheet: duplicate,
+    });
+    expect(fixture.host.lastMessageType("error")?.code).toBe("invalid_sheet");
+    const after = fixture.host.lastLobby().room?.players.find(
+      (player) => player.seat === 0,
+    );
+    expect(after?.sheet?.tactics.defensiveDepth).toBe(72);
+  });
+
+  it("rejects a team already selected by the opponent", () => {
+    const fixture = setupRoom();
+    const lobby = fixture.host.lastLobby().room;
+    const hostTeam = lobby?.players.find((player) => player.seat === 0)?.teamId;
+    const guestTeam = lobby?.players.find((player) => player.seat === 1)?.teamId;
+    if (hostTeam === null || hostTeam === undefined || guestTeam == null) {
+      throw new Error("Teams were not assigned");
+    }
+    fixture.manager.onMessage(fixture.host, {
+      t: "setTeam",
+      teamId: guestTeam,
+    });
+    expect(fixture.host.lastMessageType("error")?.code).toBe("invalid_team");
+    expect(
+      fixture.host.lastLobby().room?.players.find(
+        (player) => player.seat === 0,
+      )?.teamId,
+    ).toBe(hostTeam);
+
+    fixture.manager.onMessage(fixture.host, {
+      t: "setTeam",
+      teamId: "not-a-team",
+    });
+    expect(fixture.host.lastMessageType("error")?.code).toBe("invalid_team");
+  });
+
+  it("starts with the authoritative selected starting XI", () => {
+    const fixture = setupRoom();
+    const host = fixture.host.lastLobby().room?.players.find(
+      (player) => player.seat === 0,
+    );
+    if (host?.teamId === null || host?.teamId === undefined) {
+      throw new Error("Host has no team");
+    }
+    const team = registry.getTeam(host.teamId);
+    if (team === null) {
+      throw new Error("Host team is missing");
+    }
+    const players = registry.getPlayers(host.teamId);
+    const built = buildDefaultSheet(players, "4-4-2");
+    const sheet = { ...built.sheet, kit: "away" as const };
+    fixture.manager.onMessage(fixture.host, {
+      t: "updateSheet",
+      sheet,
+    });
+    startReadyMatch(fixture);
+    const setup = fixture.host.lastMatchStart().setup;
+    expect(setup.home.players.map((player) => player.id)).toEqual(
+      sheet.startingXI.map((slot) => `home:${slot.playerId}`),
+    );
+    expect(setup.home.colors.primary).toBe(team.colours.away);
+  });
+});
+
 describe("disconnect and reconnect", () => {
   it("pauses when a player drops and resumes on token reconnect", () => {
     const fixture = setupRoom();
@@ -315,7 +445,7 @@ describe("disconnect and reconnect", () => {
 
 describe("input validation", () => {
   it("requires membership before ready or resync", () => {
-    const manager = new RoomManager({ logger: silentLogger });
+    const manager = new RoomManager({ logger: silentLogger, registry });
     const client = new FakeClient("solo");
     manager.onReady(client);
     manager.onMessage(client, { t: "setReady", ready: true });
@@ -325,7 +455,7 @@ describe("input validation", () => {
   });
 
   it("rejects malformed binary acks", () => {
-    const manager = new RoomManager({ logger: silentLogger });
+    const manager = new RoomManager({ logger: silentLogger, registry });
     const client = new FakeClient("solo");
     manager.onReady(client);
     manager.onBinaryMessage(client, new Uint8Array([1, 2, 3]));

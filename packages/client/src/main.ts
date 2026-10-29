@@ -23,6 +23,7 @@ import {
   type GameClientState,
   type GameLinkStatus,
 } from "./net/game-client";
+import { TeamEditor } from "./lobby/team-editor";
 import { createCanvasRenderer } from "./render/canvas-renderer";
 import type { MatchView } from "./render/view";
 import { describeMatchEvent, formatCardCounts } from "./match/event-label";
@@ -96,6 +97,17 @@ const resetBindingsButton = byId<HTMLButtonElement>("reset-bindings");
 const bindingsGrid = byId<HTMLElement>("bindings-grid");
 const toast = byId<HTMLElement>("toast");
 
+const teamEditor = new TeamEditor({
+  onSetTeam: (teamId) => client.setTeam(teamId),
+  onUpdateSheet: (sheet) => client.updateSheet(sheet),
+  onToast: showToast,
+  onAvailabilityChange: () => {
+    if (currentState !== null) {
+      renderLobby(currentState);
+    }
+  },
+});
+
 const queryCode = readQueryRoomCode();
 if (queryCode !== null) {
   roomInput.value = queryCode;
@@ -155,6 +167,10 @@ roomInput.addEventListener("input", () => {
 readyButton.addEventListener("click", () => {
   const you = currentState?.lobby?.you ?? null;
   if (you === null) {
+    return;
+  }
+  if (!you.ready && !teamEditor.canReady()) {
+    showToast("Fix the team sheet before readying up");
     return;
   }
   client.setReady(!you.ready);
@@ -499,6 +515,7 @@ function renderLobby(state: GameClientState): void {
   if (room === null) {
     entryView.hidden = false;
     roomView.hidden = true;
+    teamEditor.render(null, null);
     return;
   }
 
@@ -517,14 +534,16 @@ function renderLobby(state: GameClientState): void {
         : "idle";
 
   const you = state.lobby?.you ?? null;
+  const selfSeat = you?.seat ?? null;
+  teamEditor.render(room, selfSeat);
+  renderRoomPlayers(room, selfSeat);
   readyButton.disabled =
     state.status !== "online" ||
     room.phase === "live" ||
-    room.phase === "paused";
+    room.phase === "paused" ||
+    (!you?.ready && !teamEditor.canReady());
   readyButton.textContent = you?.ready ? "Cancel ready" : "Ready";
   roomHint.textContent = roomHintText(room);
-
-  renderRoomPlayers(room, you?.seat ?? null);
 }
 
 function renderRoomPlayers(

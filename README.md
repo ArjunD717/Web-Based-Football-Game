@@ -2,12 +2,10 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 6**:
-server-authoritative matches with the referee-owned clock, score, half-time ends
-swap, goal/out-of-play restarts, fouls and cards, advantage, offside, free kicks
-with a wall, penalties and handball, plus the data pipeline that ingests CSV,
-mutates names, validates a registry and maps full player attributes into the
-simulation.
+both devices are thin clients. This repository is at **Milestone 7**:
+server-authoritative matches, a live two-player team editor with every supported
+formation, squad/bench/reserve management, tactics and set-piece takers, plus the
+referee laws and data pipeline delivered earlier.
 
 ## Requirements
 
@@ -41,14 +39,17 @@ The server prints its local/LAN HTTPS URLs and a lobby QR. On the host:
 2. **Create room**.
 3. The terminal prints a room join URL and a scannable QR. Share either.
 4. On the second device, scan the room QR (or open the URL/enter the 4-letter
-   code), then press **Ready** on both devices.
-5. For touch play, open the printed **phone controller** URL (also shown in the
+   code). Both devices can pick distinct clubs, arrange the XI, bench,
+   reserves, tactics and takers in the live editor.
+5. Press **Ready** on both devices.
+6. For touch play, open the printed **phone controller** URL (also shown in the
    room panel) instead of the lobby URL. The controller page occupies the second
    seat: move with the virtual stick and use Pass / Through / Lob / Shoot /
    Tackle / Switch / Sprint / Finesse buttons.
 
 The match starts automatically when both players are ready. Host takes the home
-side, guest takes away.
+side, guest takes away; the selected starting XI and formation are the ones the
+server simulates.
 
 `pnpm certs` installs/refreshes the mkcert local CA and writes
 `certs/dev-cert.pem` + `certs/dev-key.pem` for `localhost`, `127.0.0.1`, `::1`
@@ -72,7 +73,7 @@ pnpm dev
 - M0 transport check: **https://localhost:5173/link.html**
 - Node HTTPS/WSS host: **https://localhost:8443/**
 
-The Vite proxy forwards `/ws` to the Node host. When playing across two devices
+The Vite proxy forwards `/ws` and `/data` to the Node host. When playing across two devices
 in dev, use the 5173 URL shown in the room UI; the terminal's room QR points at
 the packaged 8443 origin.
 
@@ -109,7 +110,67 @@ Useful environment overrides:
 | `FB_CLIENT_PORT` | `5173` | Vite dev port |
 | `FB_CERT_DIR` | `certs` | Certificate directory |
 | `FB_STATIC_DIR` | `packages/client/dist` | Built client directory |
+| `FB_DATA_DIR` | `data` | Generated public football data |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
+
+## Milestone 7 scope
+
+Implemented:
+
+- Shared formation geometry for all 16 documented shapes (`4-4-2`, five
+  `4-3-3` variants, `4-2-3-1`, `4-1-4-1`, `3-5-2`, `3-4-3`, `5-3-2`, `5-2-3`,
+  `4-4-1-1`, `4-3-2-1`, `4-1-2-1-2`, `3-4-1-2`); the data pipeline, editor and
+  simulation consume one canonical slot order
+- Shared deterministic sheet builder/parser/validator: best-XI auto-pick,
+  formation/role checks, exactly one starting goalkeeper, backup keeper on the
+  bench, all squad players accounted for, unique players, and takers in the XI
+- Server loads and validates generated data on startup (failing with a clear
+  `pnpm data:build` message), serves only whitelisted public JSON/SVG under
+  `/data`, and never exposes `data/input` or `data/reports`
+- Draft room owns each seat's club and full team sheet. `setTeam` and
+  `updateSheet` are validated against the selected squad; invalid or conflicting
+  changes are rejected with structured errors
+- Every accepted edit is broadcast to both devices, so club, formation, XI,
+  bench size, tactics and takers stay live-synced. Players can pick only a club
+  the opponent has not chosen
+- Editor UI: responsive pitch with role-labelled cards, tap-to-swap and
+  drag-and-drop, bench 5-9, reserves, auto-pick, reset, local save/load,
+  JSON import/export, searchable and position-filterable reserves, full player
+  cards (headshot, nation, face stats, all detailed/GK attributes, PlayStyles, weak foot,
+  skill moves, work rates, height/weight/body type) and opponent live summary
+- Club picker filters by league and shows the generated crest, home/away/third
+  kit artwork, club colours, stadium and manager; player cards show generated
+  headshots and nationality names
+- Home/away/third kit selection is stored in the sheet, previewed in the
+  editor, and becomes the primary kit colour in match setup and the renderer
+- Role-fit badges mark natural, accomplished and out-of-position outfielders;
+  the editor explains the one-keeper, bench-size and full-squad rules, while
+  the server enforces them. Exactly one goalkeeper and a bench keeper remain
+  hard requirements
+- Tactics include defensive depth, width, press intensity and build-up style;
+  captain, penalty, free-kick and corner takers are selectable from the XI
+- Match creation consumes the server-approved sheet: the selected XI, kit
+  numbers, club colours, names and shape feed the deterministic simulation and
+  the wire roster. Room tests prove an edited `4-4-2` XI reaches match setup
+- Protocol v6 adds `setTeam`, `updateSheet`, and team/sheet fields in lobby
+  state; the client catalog fetches the generated data through the same origin
+- Data schema v2 adds the match-kit choice to every sheet; `pnpm data:build`
+  rewrites the manifest and defaults
+- Tests cover all shared formation mappings, protocol parsing, team assignment,
+  live sheet sync, invalid/conflicting edits, and match setup from an edited
+  sheet including the selected kit colour
+
+Known M7 limitations (by design):
+
+- In-match substitutions, injuries and send-off replacements remain M10 work;
+  the draft bench/reserves are validated now but only the starting XI enters the
+  simulation
+- Tactics and set-piece taker choices are stored and synced authoritatively;
+  their AI/gameplay influence lands with the M8 tactical brain
+- Formation shapes are fixed by the chosen preset; free-form slot dragging and
+  custom formations are not part of M7
+- Local prediction, match history and persistent career saves still wait for
+  later milestones
 
 ## Milestone 6 scope
 
@@ -188,9 +249,9 @@ pnpm data:build -- --no-assets --rename-clubs
 pnpm data:validate -- --data data
 ```
 
-Known M6 boundary: the data builder generates every documented formation name;
-the simulation/team factory consumes **4-3-3** until M7 adds the editor
-geometries for the others. The full attribute-to-sim map covers the
+M7 note: the data builder, editor and simulation now consume the same geometry
+for every documented formation name; the M6 pipeline already generated all of
+them. The full attribute-to-sim map covers the
 movement/contact ratings used today; passing/shooting/AI consumption follows in
 M8.
 
@@ -277,12 +338,9 @@ Not implemented yet (by milestone design):
 - Skill moves, charged/driven passes, first-time pass modifiers, manual pause
   and controller vibration
 - Gamepad rebinding; only the standard mapping is wired
-- Club/nation selection, team editor and tactics (M7/M9); M6 produces and
-  validates the registry/sample league but no selection screen consumes it yet
+- National-team selection and call-ups (M9); M7 consumes the club registry
 - Real CSV registry and national call-ups (M9); M6 ships only clearly marked
   fake sample data
-- Sim team factory intake for formations other than 4-3-3 (M7; the data
-  pipeline already generates all documented formations)
 - M8 AI layers, difficulty, set-piece routines beyond the defensive wall
 - Three.js, animation, replays, audio (M11)
 - Local prediction/reconciliation; controls feel the RTT on a LAN
@@ -290,9 +348,12 @@ Not implemented yet (by milestone design):
 
 ## Protocol and reconnect notes
 
-- `PROTOCOL_VERSION = 5`. Hello accepts an optional `sessionToken`; the welcome
+- `PROTOCOL_VERSION = 6`. Hello accepts an optional `sessionToken`; the welcome
   returns the stable token as `sessionId`. The browser keeps it in
   `sessionStorage`.
+- Lobby JSON carries each seat's selected club and full `TeamSheet`;
+  `setTeam` and `updateSheet` are client commands, and `lobbyState` is
+  re-broadcast to both seats after every accepted edit.
 - Snapshot deltas are sent at 30 Hz. Each client acks the latest decoded
   sequence with a 5-byte binary message; the server builds the next delta from
   that ack.
@@ -355,16 +416,18 @@ pnpm data:preview
 
 Expect one league, three teams, 60 players, five nations, 72 generated SVG
 assets and 60 audit rows; every record must report the sample marker. The
-preview must print a `Kingsport United` 4-3-3 XI with mapped sim ratings.
+preview must print a `Kingsport United` 4-3-3 XI with mapped sim ratings. Load
+the lobby and verify all 16 formations can be selected and auto-picked.
 
 The two-minute match check:
 
 1. `pnpm certs`, `pnpm build`, `pnpm start`.
 2. Open the printed LAN URL on the host; trust the certificate.
 3. Host **Create room**; verify the terminal prints a room URL, a phone
-   controller URL and a room QR.
+   controller URL and a room QR, and the team editor loads Kingsport United.
 4. The guest either opens the room URL (desktop controls) or the controller URL
-   (touch controls), then ready both; verify both canvases show the same room and
+   (touch controls). Change the host formation and bench size; verify the guest
+   opponent summary updates. Then ready both; verify both canvases show the same room and
    moving server tick, with ping in the HUD. Confirm the scoreline reads
    `0 – 0`, the clock starts at `00:00`, and the **Kick-off** overlay clears when
    play goes live.
@@ -386,7 +449,7 @@ The two-minute match check:
 10. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 11. Guest **Leave**: host returns to the room lobby with the code intact.
-12. `pnpm check`: expect 36 test files and 413 tests passing.
+12. `pnpm check`: expect 36 test files and 420 tests passing.
 
 ## Layout
 

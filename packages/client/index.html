@@ -18,7 +18,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <div>
             <p class="brand-kicker">Web Football</p>
-            <p class="brand-milestone">M5 / laws live</p>
+            <p class="brand-milestone">M7 / team editor</p>
           </div>
         </div>
 
@@ -91,7 +91,7 @@
           <ol class="how-list">
             <li><span>1</span> Host runs <code>pnpm start</code> with mkcert TLS.</li>
             <li><span>2</span> Create a room, both devices open the HTTPS URL.</li>
-            <li><span>3</span> Press Ready on both devices. AI kickabout is live.</li>
+            <li><span>3</span> Edit both squads live, then press Ready. The host starts the match.</li>
           </ol>
         </section>
 
@@ -114,6 +114,146 @@
           <p id="controller-url" class="join-url mono">—</p>
 
           <div id="room-players" class="room-players" aria-label="Room players"></div>
+
+          <section id="team-editor" class="team-editor" aria-label="Team editor" hidden>
+            <div class="editor-head">
+              <div>
+                <p class="eyebrow">Draft room</p>
+                <h2>Build your XI</h2>
+              </div>
+              <span id="editor-sync" class="chip editor-sync" data-state="ok">Synced with host</span>
+            </div>
+
+            <p id="editor-status" class="editor-status" hidden></p>
+
+            <div id="editor-body" hidden>
+              <div class="editor-toolbar">
+                <label class="editor-select">
+                  <span>League</span>
+                  <select id="league-filter"></select>
+                </label>
+                <label class="editor-select">
+                  <span>Team</span>
+                  <select id="team-select"></select>
+                </label>
+                <label class="editor-select">
+                  <span>Formation</span>
+                  <select id="formation-select"></select>
+                </label>
+                <label class="editor-select">
+                  <span>Kit</span>
+                  <select id="kit-select">
+                    <option value="home">Home</option>
+                    <option value="away">Away</option>
+                    <option value="third">Third</option>
+                  </select>
+                </label>
+                <div class="editor-toolbar-actions">
+                  <button id="auto-pick" class="button small" type="button">Auto pick</button>
+                  <button id="reset-sheet" class="button small" type="button">Reset</button>
+                  <button id="save-sheet" class="button small" type="button">Save</button>
+                  <button id="load-sheet" class="button small" type="button">Load</button>
+                  <button id="export-sheet" class="button small" type="button">Export</button>
+                  <button id="import-sheet" class="button small" type="button">Import</button>
+                  <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" />
+                </div>
+              </div>
+
+              <div id="club-preview" class="club-preview"></div>
+              <p class="editor-rules">
+                Formation rules: exactly 1 goalkeeper in the XI; bench 5-9 with a
+                backup keeper; every squad player assigned once. Out-of-position
+                outfielders are allowed but marked as a role warning.
+              </p>
+
+              <div class="editor-layout">
+                <div class="editor-pitch-column">
+                  <div class="panel-head">
+                    <h3>Starting XI</h3>
+                    <span class="panel-hint">Tap two players to swap</span>
+                  </div>
+                  <div id="formation-pitch" class="formation-pitch" aria-label="Formation pitch"></div>
+
+                  <div class="bench-block">
+                    <div class="panel-head">
+                      <h3>Substitutes</h3>
+                      <label class="inline-select">
+                        <span>Bench</span>
+                        <select id="bench-size"></select>
+                      </label>
+                    </div>
+                    <div id="bench-list" class="squad-list"></div>
+                  </div>
+                </div>
+
+                <aside class="editor-side">
+                  <section id="player-detail" class="editor-panel"></section>
+
+                  <section class="editor-panel">
+                    <div class="panel-head">
+                      <h3>Reserves</h3>
+                      <span id="reserve-count" class="panel-hint">0 players</span>
+                    </div>
+                    <div class="squad-filters">
+                      <input id="player-search" type="search" placeholder="Search reserves" aria-label="Search reserves" />
+                      <select id="position-filter" aria-label="Filter reserves by position">
+                        <option value="all">All positions</option>
+                        <option value="GK">Goalkeepers</option>
+                        <option value="DEF">Defenders</option>
+                        <option value="MID">Midfielders</option>
+                        <option value="ATT">Attackers</option>
+                      </select>
+                    </div>
+                    <div id="reserve-list" class="squad-list"></div>
+                  </section>
+
+                  <section class="editor-panel">
+                    <div class="panel-head">
+                      <h3>Tactics</h3>
+                      <span class="panel-hint">Live to both players</span>
+                    </div>
+                    <label class="range-row">
+                      <span>Defensive depth <output id="tactics-depth-value">50</output></span>
+                      <input id="tactics-depth" type="range" min="0" max="100" step="1" />
+                    </label>
+                    <label class="range-row">
+                      <span>Width <output id="tactics-width-value">50</output></span>
+                      <input id="tactics-width" type="range" min="0" max="100" step="1" />
+                    </label>
+                    <div class="tactics-grid">
+                      <label class="editor-select">
+                        <span>Press</span>
+                        <select id="tactics-press">
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                        </select>
+                      </label>
+                      <label class="editor-select">
+                        <span>Build-up</span>
+                        <select id="tactics-build-up">
+                          <option value="short">Short</option>
+                          <option value="balanced">Balanced</option>
+                          <option value="direct">Direct</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <h3 class="subheading">Set-piece takers</h3>
+                    <div class="taker-grid">
+                      <label class="editor-select"><span>Captain</span><select id="captain-select"></select></label>
+                      <label class="editor-select"><span>Penalties</span><select id="penalty-select"></select></label>
+                      <label class="editor-select"><span>Free kicks</span><select id="freekick-select"></select></label>
+                      <label class="editor-select"><span>Corners L</span><select id="corner-left-select"></select></label>
+                      <label class="editor-select"><span>Corners R</span><select id="corner-right-select"></select></label>
+                    </div>
+                  </section>
+
+                  <section id="opponent-panel" class="editor-panel opponent-panel"></section>
+                </aside>
+              </div>
+            </div>
+          </section>
 
           <div class="room-actions">
             <button id="ready" class="button primary" type="button">Ready</button>

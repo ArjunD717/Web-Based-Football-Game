@@ -42,6 +42,7 @@
     ],
     "defaultSheet": {
       "formation": "4-3-3",
+      "kit": "home",
       "startingXI": [
         {
           "slot": 0,
@@ -169,6 +170,7 @@
     ],
     "defaultSheet": {
       "formation": "4-3-3",
+      "kit": "home",
       "startingXI": [
         {
           "slot": 0,
@@ -296,6 +298,7 @@
     ],
     "defaultSheet": {
       "formation": "4-3-3",
+      "kit": "home",
       "startingXI": [
         {
           "slot": 0,

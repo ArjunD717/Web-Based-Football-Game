@@ -67,6 +67,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@fb/data-tools':
+        specifier: workspace:*
+        version: link:../data-tools
       '@fb/shared':
         specifier: workspace:*
         version: link:../shared

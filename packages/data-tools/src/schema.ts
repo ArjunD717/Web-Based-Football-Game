@@ -4,6 +4,7 @@ import {
   BODY_TYPES,
   BUILD_UP_STYLES,
   FORMATION_NAMES,
+  KIT_CHOICES,
   PLAYER_POSITIONS,
   PREFERRED_FEET,
   PRESS_INTENSITIES,
@@ -23,7 +24,7 @@ import type {
 } from "@fb/shared";
 import { z } from "zod";
 
-export const DATA_SCHEMA_VERSION = 1;
+export const DATA_SCHEMA_VERSION = 2;
 
 const rating = z.number().int().min(1).max(99);
 const shortText = z.string().trim().min(1).max(80);
@@ -187,6 +188,7 @@ export const TeamTacticsSchema = z
 export const TeamSheetSchema: z.ZodType<TeamSheet> = z
   .object({
     formation: z.enum(FORMATION_NAMES),
+    kit: z.enum(KIT_CHOICES),
     startingXI: z.array(StartingSlotSchema).length(11),
     bench: z.array(id).min(5).max(9),
     reserves: z.array(id),

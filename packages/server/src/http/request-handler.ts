@@ -18,6 +18,8 @@ export interface HealthPayload {
 
 export interface RequestHandlerOptions {
   readonly staticDir: string;
+  /** Generated data root. Only whitelisted public JSON and assets are served. */
+  readonly dataDir?: string;
   readonly startedAtMs: number;
   readonly secure: boolean;
   readonly getConnectedClients: () => number;
@@ -28,6 +30,14 @@ export type RequestHandler = (
   request: IncomingMessage,
   response: ServerResponse,
 ) => void;
+
+const PUBLIC_DATA_FILES = new Set([
+  "manifest.json",
+  "leagues.json",
+  "teams.json",
+  "players.json",
+  "nations.json",
+]);
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".html": "text/html; charset=utf-8",
@@ -114,6 +124,29 @@ async function handleRequest(
     return;
   }
 
+  if (decodedPath.startsWith("/data/")) {
+    if (options.dataDir === undefined) {
+      sendText(response, isHead, 404, "Not found");
+      return;
+    }
+    const relative = decodedPath.slice("/data/".length);
+    if (!isPublicDataPath(relative)) {
+      sendText(response, isHead, 404, "Not found");
+      return;
+    }
+    const servedData = await serveStaticFile(
+      response,
+      method,
+      `/${relative}`,
+      options.dataDir,
+    );
+    if (servedData) {
+      return;
+    }
+    sendText(response, isHead, 404, "Not found");
+    return;
+  }
+
   const served = await serveStaticFile(
     response,
     method,
@@ -130,6 +163,13 @@ async function handleRequest(
   }
 
   sendText(response, isHead, 404, "Not found");
+}
+
+function isPublicDataPath(relativePath: string): boolean {
+  if (PUBLIC_DATA_FILES.has(relativePath)) {
+    return true;
+  }
+  return /^assets\/[a-z0-9][a-z0-9/_-]*\.svg$/.test(relativePath);
 }
 
 async function serveStaticFile(

@@ -7,6 +7,7 @@ import {
   WORK_RATES,
   isPlayerPosition,
 } from "@fb/shared";
+import { createDefaultTactics } from "@fb/shared";
 import type {
   BodyType,
   DetailedAttributes,
@@ -628,12 +629,7 @@ export function normaliseDataset(
 
 /** Kept exported so callers can build deterministic default tactics consistently. */
 export function defaultTactics(): TeamTactics {
-  return {
-    defensiveDepth: 50,
-    width: 55,
-    pressIntensity: "medium",
-    buildUpStyle: "balanced",
-  };
+  return createDefaultTactics();
 }
 
 /** Convenience for tests and future M7 editors. */

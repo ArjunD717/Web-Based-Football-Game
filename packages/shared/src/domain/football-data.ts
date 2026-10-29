@@ -64,6 +64,9 @@ export type PressIntensity = (typeof PRESS_INTENSITIES)[number];
 export const BUILD_UP_STYLES = ["short", "balanced", "direct"] as const;
 export type BuildUpStyle = (typeof BUILD_UP_STYLES)[number];
 
+export const KIT_CHOICES = ["home", "away", "third"] as const;
+export type KitChoice = (typeof KIT_CHOICES)[number];
+
 /** FC-style six-field summary; keys mirror the source-data headings. */
 export interface FaceStats {
   readonly PAC: number;
@@ -179,6 +182,8 @@ export interface StartingSlot {
 
 export interface TeamSheet {
   readonly formation: FormationName;
+  /** Match kit selection; drives the primary colour sent to the renderer. */
+  readonly kit: KitChoice;
   readonly startingXI: readonly StartingSlot[];
   readonly bench: readonly string[];
   readonly reserves: readonly string[];

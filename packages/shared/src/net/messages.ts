@@ -1,4 +1,6 @@
 // packages/shared/src/net/messages.ts
+import type { TeamSheet } from "../domain/football-data";
+import { parseTeamSheet } from "../domain/team-sheet";
 import { PROTOCOL_VERSION } from "../version";
 
 /** WebSocket endpoint shared by the dev proxy, phone controller and server. */
@@ -26,6 +28,8 @@ export const SERVER_ERROR_CODES = [
   "room_unavailable",
   "already_in_room",
   "not_in_room",
+  "invalid_team",
+  "invalid_sheet",
 ] as const;
 
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
@@ -71,6 +75,16 @@ export interface ClientSetReadyMessage {
   readonly ready: boolean;
 }
 
+export interface ClientSetTeamMessage {
+  readonly t: "setTeam";
+  readonly teamId: string;
+}
+
+export interface ClientUpdateSheetMessage {
+  readonly t: "updateSheet";
+  readonly sheet: TeamSheet;
+}
+
 export interface ClientLeaveRoomMessage {
   readonly t: "leaveRoom";
 }
@@ -85,6 +99,8 @@ export type ClientMessage =
   | ClientCreateRoomMessage
   | ClientJoinRoomMessage
   | ClientSetReadyMessage
+  | ClientSetTeamMessage
+  | ClientUpdateSheetMessage
   | ClientLeaveRoomMessage
   | ClientResyncMessage;
 
@@ -182,6 +198,8 @@ export interface LobbyPlayerWire {
   readonly ready: boolean;
   readonly connected: boolean;
   readonly host: boolean;
+  readonly teamId: string | null;
+  readonly sheet: TeamSheet | null;
 }
 
 export interface LobbyRoomWire {
@@ -196,6 +214,7 @@ export interface LobbyYouWire {
   readonly team: WireTeamSide;
   readonly host: boolean;
   readonly ready: boolean;
+  readonly teamId: string | null;
 }
 
 export interface ServerLobbyStateMessage {
@@ -285,6 +304,14 @@ export function parseClientMessage(text: string): ClientMessage | null {
       return typeof value.ready === "boolean"
         ? { t: "setReady", ready: value.ready }
         : null;
+    case "setTeam":
+      return isEntityId(value.teamId)
+        ? { t: "setTeam", teamId: value.teamId }
+        : null;
+    case "updateSheet": {
+      const sheet = parseTeamSheet(value.sheet);
+      return sheet === null ? null : { t: "updateSheet", sheet };
+    }
     case "leaveRoom":
       return { t: "leaveRoom" };
     case "resync":
@@ -428,8 +455,13 @@ function parseLobbyPlayer(value: unknown): LobbyPlayerWire | null {
     !isWireTeamSide(record.team) ||
     typeof record.ready !== "boolean" ||
     typeof record.connected !== "boolean" ||
-    typeof record.host !== "boolean"
+    typeof record.host !== "boolean" ||
+    !isNullableEntityId(record.teamId)
   ) {
+    return null;
+  }
+  const sheet = record.sheet === null ? null : parseTeamSheet(record.sheet);
+  if ((record.teamId === null) !== (sheet === null)) {
     return null;
   }
   return {
@@ -439,6 +471,8 @@ function parseLobbyPlayer(value: unknown): LobbyPlayerWire | null {
     ready: record.ready,
     connected: record.connected,
     host: record.host,
+    teamId: record.teamId,
+    sheet,
   };
 }
 
@@ -454,7 +488,8 @@ function parseLobbyYou(value: unknown): LobbyYouWire | null | undefined {
     (record.seat !== 0 && record.seat !== 1) ||
     !isWireTeamSide(record.team) ||
     typeof record.host !== "boolean" ||
-    typeof record.ready !== "boolean"
+    typeof record.ready !== "boolean" ||
+    !isNullableEntityId(record.teamId)
   ) {
     return undefined;
   }
@@ -463,6 +498,7 @@ function parseLobbyYou(value: unknown): LobbyYouWire | null | undefined {
     team: record.team,
     host: record.host,
     ready: record.ready,
+    teamId: record.teamId,
   };
 }
 
@@ -645,6 +681,17 @@ function isUint32(value: unknown): value is number {
 
 function isPositiveInteger(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) > 0;
+}
+
+function isEntityId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[a-z0-9][a-z0-9-]{0,63}$/.test(value)
+  );
+}
+
+function isNullableEntityId(value: unknown): value is string | null {
+  return value === null || isEntityId(value);
 }
 
 function isServerErrorCode(value: unknown): value is ServerErrorCode {

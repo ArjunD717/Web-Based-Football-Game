@@ -15,6 +15,7 @@ import {
   type MatchSetupWire,
   type ServerErrorCode,
   type SnapshotFrame,
+  type TeamSheet,
   type WireTeamSide,
 } from "@fb/shared";
 import {
@@ -31,6 +32,7 @@ import {
   type TeamControlRuntime,
 } from "./control";
 import type { ClientConnection } from "../client";
+import type { TeamRegistry } from "../data/registry";
 import type { Logger } from "../create-server";
 import {
   buildSnapshotFrame,
@@ -51,6 +53,8 @@ interface Seat {
   readonly host: boolean;
   readonly name: string;
   readonly team: WireTeamSide;
+  teamId: string | null;
+  sheet: TeamSheet | null;
   ready: boolean;
   client: ClientConnection | null;
   reconnectTimer: NodeJS.Timeout | null;
@@ -83,6 +87,7 @@ interface Room {
 
 export interface RoomManagerOptions {
   readonly logger: Logger;
+  readonly registry: TeamRegistry;
   readonly reconnectGraceMs?: number;
   readonly generateCode?: () => string;
   readonly onRoomCreated?: (code: string) => void;
@@ -96,12 +101,14 @@ export class RoomManager {
   private readonly rooms = new Map<string, Room>();
   private readonly membership = new Map<string, Room>();
   private readonly logger: Logger;
+  private readonly registry: TeamRegistry;
   private readonly reconnectGraceMs: number;
   private readonly generateCode: () => string;
   private readonly onRoomCreated: (code: string) => void;
 
   constructor(options: RoomManagerOptions) {
     this.logger = options.logger;
+    this.registry = options.registry;
     this.reconnectGraceMs =
       options.reconnectGraceMs ?? TUNING.network.reconnectGraceMs;
     this.generateCode = options.generateCode ?? (() => this.randomCode());
@@ -169,6 +176,12 @@ export class RoomManager {
         return;
       case "setReady":
         this.setReady(client, message.ready);
+        return;
+      case "setTeam":
+        this.setTeam(client, message.teamId);
+        return;
+      case "updateSheet":
+        this.updateSheet(client, message.sheet);
         return;
       case "leaveRoom":
         this.leaveRoom(client);
@@ -310,6 +323,7 @@ export class RoomManager {
       this.sendError(client, "room_unavailable", "Could not create a room");
       return;
     }
+    this.assignTeam(host, new Set());
     const room: Room = {
       code,
       host,
@@ -363,6 +377,14 @@ export class RoomManager {
       return;
     }
     room.guest = guest;
+    this.assignTeam(
+      guest,
+      new Set(
+        [room.host?.teamId, room.guest?.teamId].filter(
+          (id): id is string => typeof id === "string",
+        ),
+      ),
+    );
     this.membership.set(client.token, room);
     this.refreshLobbyPhase(room);
     this.broadcastLobby(room);
@@ -379,11 +401,73 @@ export class RoomManager {
       this.sendError(client, "room_unavailable", "The match already started");
       return;
     }
+    if (ready) {
+      const errors = this.validateSeatSheet(seat);
+      if (errors.length > 0) {
+        this.sendError(client, "invalid_sheet", errors.join("; "));
+        return;
+      }
+    }
 
     seat.ready = ready;
     this.refreshLobbyPhase(room);
     this.broadcastLobby(room);
     this.maybeStartMatch(room);
+  }
+
+  private setTeam(client: ClientConnection, teamId: string): void {
+    const room = this.membership.get(client.token);
+    const seat = room === undefined ? null : this.findSeat(room, client.token);
+    if (room === undefined || seat === null) {
+      this.sendError(client, "not_in_room", "Join a room before choosing a team");
+      return;
+    }
+    if (room.match !== null) {
+      this.sendError(client, "room_unavailable", "The match already started");
+      return;
+    }
+    if (this.registry.getTeam(teamId) === null) {
+      this.sendError(client, "invalid_team", `Unknown team ${teamId}`);
+      return;
+    }
+    const other = this.seats(room).find((candidate) => candidate !== seat);
+    if (other?.teamId === teamId) {
+      this.sendError(client, "invalid_team", "That team is already selected");
+      return;
+    }
+
+    seat.teamId = teamId;
+    seat.sheet = this.registry.getDefaultSheet(teamId);
+    seat.ready = false;
+    this.refreshLobbyPhase(room);
+    this.broadcastLobby(room);
+  }
+
+  private updateSheet(client: ClientConnection, sheet: TeamSheet): void {
+    const room = this.membership.get(client.token);
+    const seat = room === undefined ? null : this.findSeat(room, client.token);
+    if (room === undefined || seat === null) {
+      this.sendError(client, "not_in_room", "Join a room before editing a team");
+      return;
+    }
+    if (room.match !== null) {
+      this.sendError(client, "room_unavailable", "The match already started");
+      return;
+    }
+    if (seat.teamId === null) {
+      this.sendError(client, "invalid_team", "Choose a team first");
+      return;
+    }
+    const errors = this.registry.validateSheet(seat.teamId, sheet);
+    if (errors.length > 0) {
+      this.sendError(client, "invalid_sheet", errors.join("; "));
+      return;
+    }
+
+    seat.sheet = sheet;
+    seat.ready = false;
+    this.refreshLobbyPhase(room);
+    this.broadcastLobby(room);
   }
 
   private leaveRoom(client: ClientConnection): void {
@@ -470,6 +554,8 @@ export class RoomManager {
       host,
       name: host ? HOST_NAME : GUEST_NAME,
       team: host ? "home" : "away",
+      teamId: null,
+      sheet: null,
       ready: false,
       client,
       reconnectTimer: null,
@@ -489,14 +575,62 @@ export class RoomManager {
       room.host.client !== null &&
       room.guest.client !== null &&
       room.host.ready &&
-      room.guest.ready
+      room.guest.ready &&
+      room.host.teamId !== null &&
+      room.host.sheet !== null &&
+      room.guest.teamId !== null &&
+      room.guest.sheet !== null
     ) {
       this.startMatch(room);
     }
   }
 
   private startMatch(room: Room): void {
-    const serverMatch = createServerMatch();
+    const host = room.host;
+    const guest = room.guest;
+    if (
+      host === null ||
+      guest === null ||
+      host.teamId === null ||
+      host.sheet === null ||
+      guest.teamId === null ||
+      guest.sheet === null
+    ) {
+      return;
+    }
+    const hostTeam = this.registry.getTeam(host.teamId);
+    const guestTeam = this.registry.getTeam(guest.teamId);
+    if (hostTeam === null || guestTeam === null) {
+      this.failMatchStart(room, "Selected team is no longer available");
+      return;
+    }
+    try {
+      const serverMatch = createServerMatch({
+        home: {
+          team: hostTeam,
+          sheet: host.sheet,
+          players: this.registry.getPlayers(hostTeam.id),
+        },
+        away: {
+          team: guestTeam,
+          sheet: guest.sheet,
+          players: this.registry.getPlayers(guestTeam.id),
+        },
+      });
+      this.installMatch(room, serverMatch);
+    } catch (error) {
+      this.logger.error("Could not build the selected match", error);
+      this.failMatchStart(
+        room,
+        error instanceof Error ? error.message : "Could not build the match",
+      );
+    }
+  }
+
+  private installMatch(
+    room: Room,
+    serverMatch: ReturnType<typeof createServerMatch>,
+  ): void {
     room.match = {
       setup: serverMatch.setup,
       state: serverMatch.state,
@@ -526,6 +660,39 @@ export class RoomManager {
     }
     this.broadcastSnapshot(room);
     this.logger.info(`Room ${room.code} started a match`);
+  }
+
+  private failMatchStart(room: Room, message: string): void {
+    room.match = null;
+    for (const seat of this.seats(room)) {
+      seat.ready = false;
+      if (seat.client !== null) {
+        this.sendError(seat.client, "invalid_sheet", message);
+      }
+    }
+    this.refreshLobbyPhase(room);
+    this.broadcastLobby(room);
+  }
+
+  private assignTeam(seat: Seat, excluded: ReadonlySet<string>): void {
+    const team = this.registry.teams.find((item) => !excluded.has(item.id));
+    if (team === undefined) {
+      seat.teamId = null;
+      seat.sheet = null;
+      return;
+    }
+    seat.teamId = team.id;
+    seat.sheet = this.registry.getDefaultSheet(team.id);
+  }
+
+  private validateSeatSheet(seat: Seat): readonly string[] {
+    if (seat.teamId === null) {
+      return ["Choose a team first"];
+    }
+    if (seat.sheet === null) {
+      return ["Generate a team sheet first"];
+    }
+    return this.registry.validateSheet(seat.teamId, seat.sheet);
   }
 
   private stopMatch(room: Room): void {
@@ -640,6 +807,8 @@ export class RoomManager {
         ready: seat.ready,
         connected: seat.client !== null,
         host: seat.host,
+        teamId: seat.teamId,
+        sheet: seat.sheet,
       });
     }
     return {
@@ -662,6 +831,7 @@ export class RoomManager {
       team: seat.team,
       host: seat.host,
       ready: seat.ready,
+      teamId: seat.teamId,
     };
   }
 

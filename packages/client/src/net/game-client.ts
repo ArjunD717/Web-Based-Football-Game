@@ -17,6 +17,7 @@ import {
   type ServerLobbyStateMessage,
   type ServerMessage,
   type SnapshotFrame,
+  type TeamSheet,
 } from "@fb/shared";
 import { SnapshotInterpolator } from "./interpolation";
 
@@ -117,6 +118,14 @@ export class GameClient {
 
   setReady(ready: boolean): void {
     this.send({ t: "setReady", ready });
+  }
+
+  setTeam(teamId: string): void {
+    this.send({ t: "setTeam", teamId });
+  }
+
+  updateSheet(sheet: TeamSheet): void {
+    this.send({ t: "updateSheet", sheet });
   }
 
   leaveRoom(): void {

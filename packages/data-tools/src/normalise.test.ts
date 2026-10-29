@@ -183,7 +183,7 @@ describe("input normalisation", () => {
       assertValidBundle(
         parseBundle({
           manifest: {
-            schemaVersion: 1,
+            schemaVersion: 2,
             sample: true,
             leagues: 1,
             teams: 3,

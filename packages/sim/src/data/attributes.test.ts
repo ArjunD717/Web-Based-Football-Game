@@ -1,14 +1,19 @@
 // packages/sim/src/data/attributes.test.ts
 
-import type {
-  DetailedAttributes,
-  PlayerData,
-  TeamData,
+import {
+  FORMATION_NAMES,
+  type DetailedAttributes,
+  type PlayerData,
+  type TeamData,
 } from "@fb/shared";
 import { describe, expect, it } from "vitest";
 import { createPitch } from "../pitch";
 import { topSpeedFor } from "../physics/players";
-import { mapPlayerAttributes, createTeamFromData } from "../index";
+import {
+  createTeamFromData,
+  formationForName,
+  mapPlayerAttributes,
+} from "../index";
 
 const attributes: DetailedAttributes = {
   acceleration: 80,
@@ -130,6 +135,7 @@ function team(): TeamData {
     squad: players.map((entry) => entry.id),
     defaultSheet: {
       formation: "4-3-3",
+      kit: "home",
       startingXI: players.map((entry, index) => ({
         slot: index,
         role: roles[index]!,
@@ -200,7 +206,18 @@ describe("attribute mapping", () => {
     expect(state.players.every((entry) => entry.sentOff === false)).toBe(true);
   });
 
-  it("rejects unsupported formations and mismatched sheet roles", () => {
+  it("maps every shared formation into the simulation", () => {
+    for (const name of FORMATION_NAMES) {
+      const formation = formationForName(name);
+      expect(formation.name).toBe(name);
+      expect(formation.slots).toHaveLength(11);
+      expect(formation.slots.filter((slot) => slot.role === "GK")).toHaveLength(
+        1,
+      );
+    }
+  });
+
+  it("rejects mismatched sheet roles", () => {
     const dataTeam = team();
     const players = new Map(
       roles.map((role, index) => {
@@ -208,15 +225,6 @@ describe("attribute mapping", () => {
         return [entry.id, entry] as const;
       }),
     );
-    expect(() =>
-      createTeamFromData({
-        side: "away",
-        pitch: createPitch(),
-        team: { ...dataTeam, defaultSheet: { ...dataTeam.defaultSheet, formation: "4-4-2" } },
-        players,
-      }),
-    ).toThrow(/supports 4-3-3/);
-
     const swapped = {
       ...dataTeam,
       defaultSheet: {

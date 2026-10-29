@@ -1,6 +1,9 @@
 // packages/server/src/rooms/match-stream.ts
 import { randomBytes, randomUUID } from "node:crypto";
 import {
+  type PlayerData,
+  type TeamData,
+  type TeamSheet,
   type MatchSetupWire,
   type SnapshotFrame,
   type WirePitch,
@@ -9,7 +12,7 @@ import {
   TUNING,
 } from "@fb/shared";
 import {
-  createMatch,
+  createMatchFromTeams,
   type MatchState,
   type Pitch,
   type TeamState,
@@ -20,25 +23,45 @@ export interface ServerMatch {
   readonly state: MatchState;
 }
 
+export interface ServerMatchTeam {
+  readonly team: TeamData;
+  readonly sheet: TeamSheet;
+  readonly players: readonly PlayerData[];
+}
+
 export interface CreateServerMatchOptions {
   readonly seed?: number;
-  readonly homeName?: string;
-  readonly awayName?: string;
+  readonly home: ServerMatchTeam;
+  readonly away: ServerMatchTeam;
 }
 
 export function createServerMatch(
-  options: CreateServerMatchOptions = {},
+  options: CreateServerMatchOptions,
 ): ServerMatch {
   const seed = options.seed ?? randomBytes(4).readUInt32LE(0);
-  const state = createMatch({
+  const state = createMatchFromTeams({
     seed,
-    home: { name: options.homeName ?? "Host XI" },
-    away: { name: options.awayName ?? "Guest XI" },
+    home: {
+      team: options.home.team,
+      sheet: options.home.sheet,
+      players: toPlayerMap(options.home.players),
+    },
+    away: {
+      team: options.away.team,
+      sheet: options.away.sheet,
+      players: toPlayerMap(options.away.players),
+    },
   });
   return {
     state,
     setup: buildMatchSetup(state, randomUUID()),
   };
+}
+
+function toPlayerMap(
+  players: readonly PlayerData[],
+): ReadonlyMap<string, PlayerData> {
+  return new Map(players.map((player) => [player.id, player]));
 }
 
 export function buildMatchSetup(

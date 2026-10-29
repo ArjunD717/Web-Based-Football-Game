@@ -519,7 +519,7 @@ code {
 }
 
 .room-card {
-  width: min(760px, 100%);
+  width: min(1180px, 100%);
   margin: 0 auto;
   padding: clamp(1.2rem, 3vw, 1.8rem);
 }
@@ -1012,6 +1012,699 @@ kbd {
   color: var(--text);
   font-size: 0.78rem;
   text-align: center;
+}
+
+/* Team editor ------------------------------------------------------------ */
+
+.team-editor {
+  margin-top: 1.3rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border);
+}
+
+.editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.editor-head h2 {
+  margin: 0.18rem 0 0;
+  font-size: clamp(1.25rem, 2.5vw, 1.65rem);
+}
+
+.editor-sync[data-state="ok"] {
+  color: var(--ok);
+  border-color: rgba(98, 224, 139, 0.3);
+}
+
+.editor-sync[data-state="pending"] {
+  color: var(--warn);
+  border-color: rgba(241, 196, 92, 0.3);
+}
+
+.editor-status {
+  margin: 1rem 0 0;
+  padding: 0.8rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(7, 19, 13, 0.55);
+}
+
+.editor-select,
+.inline-select {
+  display: grid;
+  gap: 0.22rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.editor-select select,
+.inline-select select,
+.squad-filters input,
+.squad-filters select {
+  min-height: 2rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: rgba(14, 33, 23, 0.94);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.editor-toolbar > .editor-select:nth-child(2) select {
+  min-width: 13rem;
+}
+
+.editor-toolbar > .editor-select:first-child select {
+  min-width: 9.5rem;
+}
+
+.editor-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.club-preview {
+  display: grid;
+  grid-template-columns: 3rem 3.4rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--team-primary, var(--accent)) 12%, transparent), transparent 55%),
+    rgba(7, 19, 13, 0.55);
+}
+
+.club-crest {
+  width: 2.55rem;
+  height: 2.55rem;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+}
+
+.club-kit {
+  width: 3.1rem;
+  height: 2.55rem;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
+}
+
+.club-identity {
+  display: grid;
+  min-width: 0;
+}
+
+.club-identity strong {
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.club-identity .panel-hint {
+  overflow: hidden;
+  margin: 0.1rem 0 0 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kit-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+.kit-swatch {
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22);
+}
+
+.editor-rules {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(19rem, 0.75fr);
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: start;
+}
+
+.editor-pitch-column,
+.editor-panel {
+  min-width: 0;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.panel-head h3,
+.editor-panel h3,
+.subheading {
+  margin: 0;
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.subheading {
+  margin-top: 0.9rem;
+  margin-bottom: 0.45rem;
+}
+
+.formation-pitch {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 105 / 68;
+  border: 1px solid rgba(150, 205, 171, 0.32);
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent 49.7%, rgba(200, 235, 210, 0.22) 49.7%, rgba(200, 235, 210, 0.22) 50.3%, transparent 50.3%),
+    radial-gradient(circle at 50% 50%, transparent 0 11.8%, rgba(200, 235, 210, 0.22) 12%, transparent 12.4%),
+    repeating-linear-gradient(90deg, rgba(31, 95, 58, 0.36) 0 10%, rgba(25, 80, 49, 0.36) 10% 20%),
+    #123d25;
+}
+
+.formation-pitch::before,
+.formation-pitch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 15.5%;
+  height: 45%;
+  transform: translateY(-50%);
+  border: 1px solid rgba(200, 235, 210, 0.2);
+  pointer-events: none;
+}
+
+.formation-pitch::before {
+  left: 0;
+  border-left: 0;
+}
+
+.formation-pitch::after {
+  right: 0;
+  border-right: 0;
+}
+
+.pitch-slot {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  display: grid;
+  gap: 0.02rem;
+  width: 13%;
+  min-width: 56px;
+  max-width: 98px;
+  padding: 0.22rem 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--team-primary, var(--accent)) 58%, rgba(150, 205, 171, 0.25));
+  border-radius: 6px;
+  background: rgba(6, 17, 11, 0.9);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.24);
+}
+
+.pitch-slot[draggable="true"] {
+  cursor: grab;
+}
+
+.pitch-slot.dragging,
+.squad-row.dragging {
+  opacity: 0.45;
+}
+
+.pitch-slot.drag-over,
+.squad-row.drag-over {
+  border-color: var(--accent-strong);
+  outline: 2px dashed rgba(127, 227, 161, 0.55);
+}
+
+.pitch-slot:hover,
+.pitch-slot[data-selected="true"] {
+  border-color: var(--accent-strong);
+  background: rgba(20, 53, 35, 0.98);
+  outline: 2px solid rgba(127, 227, 161, 0.28);
+}
+
+.pitch-slot-role {
+  color: var(--accent);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.5rem;
+  font-weight: 700;
+}
+
+.pitch-slot-name {
+  overflow: hidden;
+  font-size: clamp(0.48rem, 0.78vw, 0.62rem);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pitch-slot-meta {
+  color: var(--muted);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.47rem;
+}
+
+.pitch-slot[data-role-fit="warning"] {
+  border-color: rgba(241, 196, 92, 0.75);
+}
+
+.pitch-slot[data-role-fit="warning"] .pitch-slot-role {
+  color: var(--warn);
+}
+
+.pitch-slot[data-role-fit="accomplished"] .pitch-slot-role {
+  color: var(--accent-strong);
+}
+
+.bench-block {
+  margin-top: 0.8rem;
+}
+
+.inline-select {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  letter-spacing: 0.05em;
+}
+
+.inline-select select {
+  min-height: 1.5rem;
+  padding: 0.1rem 0.25rem;
+}
+
+.squad-list {
+  display: grid;
+  gap: 0.3rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.squad-row {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr) 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.34rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(7, 19, 13, 0.58);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.squad-row {
+  border-left: 2px solid color-mix(in srgb, var(--team-primary, var(--accent)) 62%, transparent);
+}
+
+.squad-row[draggable="true"] {
+  cursor: grab;
+}
+
+.squad-row:hover,
+.squad-row[data-selected="true"] {
+  border-color: rgba(127, 227, 161, 0.55);
+  background: rgba(20, 53, 35, 0.75);
+}
+
+.squad-number {
+  color: var(--muted);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.62rem;
+  text-align: right;
+}
+
+.squad-identity {
+  display: grid;
+  min-width: 0;
+}
+
+.squad-identity strong {
+  overflow: hidden;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.56rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-overall {
+  color: var(--accent);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.editor-side {
+  display: grid;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.editor-panel {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(7, 19, 13, 0.52);
+}
+
+.player-detail-head {
+  display: grid;
+  grid-template-columns: 2.8rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.player-portrait {
+  position: relative;
+  width: 2.8rem;
+  height: 2.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: rgba(20, 53, 35, 0.7);
+  overflow: hidden;
+}
+
+.player-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-shirt {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  display: grid;
+  place-items: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.15rem;
+  border: 1px solid rgba(6, 17, 11, 0.7);
+  border-radius: 4px;
+  background: rgba(6, 17, 11, 0.86);
+  color: var(--accent);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.52rem;
+}
+
+.player-detail-head h3 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 0.86rem;
+  letter-spacing: normal;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.player-detail-head .panel-hint {
+  margin: 0.12rem 0 0 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-overall {
+  color: var(--accent);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 1.2rem;
+}
+
+.face-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.25rem;
+  margin-top: 0.65rem;
+}
+
+.face-stats div {
+  display: grid;
+  place-items: center;
+  padding: 0.3rem 0.1rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgba(14, 33, 23, 0.7);
+}
+
+.face-stats span {
+  color: var(--muted);
+  font-size: 0.5rem;
+  letter-spacing: 0.06em;
+}
+
+.face-stats strong {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.bio-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.bio-grid div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  border-bottom: 1px dotted rgba(150, 205, 171, 0.12);
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.bio-grid strong {
+  color: var(--text);
+  font-family: "Cascadia Code", Consolas, monospace;
+  text-transform: capitalize;
+}
+
+.attribute-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem 0.65rem;
+  margin-top: 0.55rem;
+}
+
+.attribute-grid div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.12rem 0;
+  border-bottom: 1px dotted rgba(150, 205, 171, 0.12);
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.attribute-grid strong {
+  color: var(--text);
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+.attribute-details {
+  margin-top: 0.5rem;
+  border-top: 1px dotted rgba(150, 205, 171, 0.16);
+  padding-top: 0.4rem;
+}
+
+.attribute-details summary {
+  color: var(--muted);
+  font-size: 0.62rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.attribute-details summary:hover {
+  color: var(--text);
+}
+
+.playstyle-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
+}
+
+.squad-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.range-row {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.55rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.range-row span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.range-row output {
+  color: var(--text);
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+.range-row input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.tactics-grid,
+.taker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.taker-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.opponent-team {
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.opponent-panel .chip {
+  margin-top: 0.55rem;
+}
+
+.empty-message {
+  margin: 0.2rem 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+@media (max-width: 900px) {
+  .editor-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editor-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .editor-side > .opponent-panel,
+  .editor-side > .editor-panel:nth-child(2) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .editor-side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editor-toolbar-actions {
+    margin-left: 0;
+  }
+
+  .editor-toolbar > .editor-select:first-child select {
+    min-width: 9rem;
+  }
+
+  .formation-pitch {
+    aspect-ratio: 4 / 3;
+  }
+
+  .club-preview {
+    grid-template-columns: 2.4rem 2.8rem minmax(0, 1fr);
+  }
+
+  .kit-swatches {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .editor-toolbar > .editor-select:first-child select,
+  .editor-toolbar > .editor-select:nth-child(2) select {
+    min-width: 9rem;
+  }
+
+  .pitch-slot {
+    width: 16%;
+    min-width: 52px;
+  }
+
+  .pitch-slot-name {
+    font-size: 0.52rem;
+  }
 }
 
 [hidden] {

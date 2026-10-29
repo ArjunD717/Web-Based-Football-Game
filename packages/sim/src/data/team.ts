@@ -1,6 +1,10 @@
 // packages/sim/src/data/team.ts
-import type { PlayerData, TeamData } from "@fb/shared";
-import { baseFormationPosition, FORMATION_433, validateFormation } from "../formations";
+import type { PlayerData, TeamData, TeamSheet } from "@fb/shared";
+import {
+  baseFormationPosition,
+  formationForName,
+  validateFormation,
+} from "../formations";
 import type {
   Pitch,
   PlayerState,
@@ -16,6 +20,8 @@ export interface CreateTeamFromDataOptions {
   readonly team: TeamData;
   /** Full player records indexed by ID; only the starting XI is placed. */
   readonly players: ReadonlyMap<string, PlayerData>;
+  /** Server-authoritative draft; defaults to the generated team sheet. */
+  readonly sheet?: TeamSheet;
 }
 
 function simRole(role: string): PlayerRole {
@@ -52,20 +58,17 @@ export function createTeamFromData(
   options: CreateTeamFromDataOptions,
 ): TeamState {
   const { side, pitch, team, players } = options;
-  if (team.defaultSheet.formation !== "4-3-3") {
-    throw new Error(
-      `simulation team factory currently supports 4-3-3, got ${team.defaultSheet.formation}`,
-    );
-  }
-  validateFormation(FORMATION_433);
+  const sheet = options.sheet ?? team.defaultSheet;
+  const formation = formationForName(sheet.formation);
+  validateFormation(formation);
 
-  const starters = team.defaultSheet.startingXI;
+  const starters = sheet.startingXI;
   if (starters.length !== 11) {
     throw new Error(`${team.id} must name exactly eleven starters`);
   }
   const seen = new Set<string>();
   const playerStates: PlayerState[] = starters.map((slot, index) => {
-    const formationSlot = FORMATION_433.slots[index];
+    const formationSlot = formation.slots[index];
     if (formationSlot === undefined) {
       throw new Error(`${team.id}: missing formation slot ${index}`);
     }
@@ -123,11 +126,17 @@ export function createTeamFromData(
     side,
     name: team.name,
     colors: {
-      primary: team.colours.home,
-      secondary: team.colours.away,
+      primary:
+        sheet.kit === "away"
+          ? team.colours.away
+          : sheet.kit === "third"
+            ? team.colours.third
+            : team.colours.home,
+      secondary:
+        sheet.kit === "away" ? team.colours.home : team.colours.away,
       keeper: team.colours.goalkeeper,
     },
-    formation: FORMATION_433,
+    formation,
     attackDirection: side === "home" ? 1 : -1,
     players: playerStates,
   };

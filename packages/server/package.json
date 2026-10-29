@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@fb/data-tools": "workspace:*",
     "@fb/shared": "workspace:*",
     "@fb/sim": "workspace:*",
     "qrcode-terminal": "0.12.0",

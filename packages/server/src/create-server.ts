@@ -45,6 +45,7 @@ export interface GameServerOptions {
   readonly host: string;
   readonly port: number;
   readonly staticDir: string;
+  readonly dataDir?: string;
   readonly tls?: TlsMaterial;
   readonly logger?: Logger;
   readonly handlers?: GameServerHandlers;
@@ -100,6 +101,7 @@ export async function startGameServer(
 
   const requestHandler: RequestHandler = createRequestHandler({
     staticDir: options.staticDir,
+    ...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }),
     startedAtMs: Date.now(),
     secure: options.tls !== undefined,
     getConnectedClients: countConnected,

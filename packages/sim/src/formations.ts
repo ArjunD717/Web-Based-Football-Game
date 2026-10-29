@@ -1,5 +1,12 @@
 // packages/sim/src/formations.ts
-import { TUNING, clamp } from "@fb/shared";
+import {
+  FORMATION_DEFINITIONS,
+  TUNING,
+  clamp,
+  formationDefinition,
+  type FormationName,
+  type PlayerPosition,
+} from "@fb/shared";
 import type {
   Formation,
   FormationSlot,
@@ -9,28 +16,59 @@ import type {
 } from "./types";
 
 /**
- * M1 placeholder shape. Slot coordinates are normalized: x = 0 at the own goal
- * line, x = 1 at the opponent goal line; y = 0 at one touchline, 1 at the other.
- * Real formation editing arrives in M7.
+ * Shared normalized geometry: x = 0 at the own goal line, x = 1 at the opponent
+ * goal line; y = 0 at one touchline, 1 at the other. The client editor, data
+ * pipeline and simulation all consume the same slot order.
  */
 export const PLAYERS_PER_TEAM = 11;
 
-export const FORMATION_433: Formation = {
-  name: "4-3-3",
-  slots: [
-    { role: "GK", x: 0.04, y: 0.5 },
-    { role: "RB", x: 0.22, y: 0.84 },
-    { role: "CB", x: 0.18, y: 0.62 },
-    { role: "CB", x: 0.18, y: 0.38 },
-    { role: "LB", x: 0.22, y: 0.16 },
-    { role: "CDM", x: 0.34, y: 0.5 },
-    { role: "CM", x: 0.44, y: 0.68 },
-    { role: "CM", x: 0.44, y: 0.32 },
-    { role: "RW", x: 0.6, y: 0.84 },
-    { role: "ST", x: 0.66, y: 0.5 },
-    { role: "LW", x: 0.6, y: 0.16 },
-  ],
-};
+function toSimRole(role: PlayerPosition): PlayerRole {
+  switch (role) {
+    case "RWB":
+      return "RB";
+    case "LWB":
+      return "LB";
+    default:
+      if (role === "GK" || role === "RB" || role === "CB" || role === "LB" ||
+        role === "CDM" || role === "CM" || role === "CAM" || role === "RM" ||
+        role === "LM" || role === "RW" || role === "LW" || role === "CF" ||
+        role === "ST") {
+        return role;
+      }
+      throw new Error(`unsupported formation role "${String(role)}"`);
+  }
+}
+
+function toSimFormation(name: FormationName): Formation {
+  const definition = formationDefinition(name);
+  return {
+    name,
+    slots: definition.slots.map((slot) => ({
+      role: toSimRole(slot.role),
+      x: slot.x,
+      y: slot.y,
+    })),
+  };
+}
+
+/** Every shared formation, converted to the simulation's role vocabulary. */
+export const FORMATIONS: Readonly<Record<FormationName, Formation>> =
+  Object.fromEntries(
+    Object.keys(FORMATION_DEFINITIONS).map((name) => [
+      name,
+      toSimFormation(name as FormationName),
+    ]),
+  ) as Readonly<Record<FormationName, Formation>>;
+
+export const FORMATION_433: Formation = FORMATIONS["4-3-3"];
+
+export function formationForName(name: FormationName): Formation {
+  const formation = FORMATIONS[name];
+  if (formation === undefined) {
+    throw new RangeError(`Unknown formation "${name}"`);
+  }
+  return formation;
+}
 
 export interface Point {
   readonly x: number;

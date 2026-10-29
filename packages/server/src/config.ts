@@ -14,6 +14,7 @@ export interface ServerConfig {
   readonly certPath: string;
   readonly keyPath: string;
   readonly staticDir: string;
+  readonly dataDir: string;
 }
 
 /**
@@ -22,6 +23,7 @@ export interface ServerConfig {
  * - FB_PORT: HTTPS port, default 8443.
  * - FB_CERT_DIR: directory containing dev-cert.pem + dev-key.pem.
  * - FB_STATIC_DIR: built client directory.
+ * - FB_DATA_DIR: generated public football data (default repo/data).
  */
 export function loadServerConfig(
   env: NodeJS.ProcessEnv = process.env,
@@ -34,6 +36,9 @@ export function loadServerConfig(
   const staticDir = env.FB_STATIC_DIR
     ? path.resolve(env.FB_STATIC_DIR)
     : path.join(REPO_ROOT, "packages", "client", "dist");
+  const dataDir = env.FB_DATA_DIR
+    ? path.resolve(env.FB_DATA_DIR)
+    : path.join(REPO_ROOT, "data");
 
   return {
     host,
@@ -42,6 +47,7 @@ export function loadServerConfig(
     certPath: path.join(certDir, "dev-cert.pem"),
     keyPath: path.join(certDir, "dev-key.pem"),
     staticDir,
+    dataDir,
   };
 }
 

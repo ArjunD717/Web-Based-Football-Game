@@ -1,8 +1,9 @@
 // packages/sim/src/match.ts
-import { TUNING } from "@fb/shared";
+import { TUNING, type PlayerData, type TeamData, type TeamSheet } from "@fb/shared";
 import { updatePlaceholderAi } from "./ai/brain";
 import { createPitch } from "./pitch";
 import { createPlaceholderTeam } from "./placeholder";
+import { createTeamFromData } from "./data/team";
 import { stepBall } from "./physics/ball";
 import {
   resolvePlayerCollisions,
@@ -22,8 +23,10 @@ import {
 import type {
   MatchRules,
   MatchState,
+  Pitch,
   PitchConfig,
   TeamSetup,
+  TeamState,
 } from "./types";
 
 const DEFAULT_MATCH_SEED = 1;
@@ -64,8 +67,64 @@ export function createMatch(
     options.away,
   );
 
+  return initialiseMatch(seed >>> 0, pitch, rules, home, away);
+}
+
+export interface DataTeamSetup {
+  readonly team: TeamData;
+  readonly sheet: TeamSheet;
+  readonly players: ReadonlyMap<string, PlayerData>;
+}
+
+export interface CreateMatchFromTeamsOptions {
+  /** uint32 seed; all stochastic decisions derive from it. */
+  readonly seed?: number;
+  readonly pitch?: Partial<PitchConfig>;
+  readonly rules?: Partial<MatchRules>;
+  readonly home: DataTeamSetup;
+  readonly away: DataTeamSetup;
+}
+
+/**
+ * Build a match from authored teams and their server-approved sheets. The
+ * sheet controls both the XI and the shape; absent data still uses the
+ * deterministic placeholder path in `createMatch`.
+ */
+export function createMatchFromTeams(
+  options: CreateMatchFromTeamsOptions,
+): MatchState {
+  const seed = options.seed ?? DEFAULT_MATCH_SEED;
+  if (!Number.isInteger(seed)) {
+    throw new RangeError(`match seed must be an integer, got ${seed}`);
+  }
+  const pitch = createPitch(options.pitch);
+  const rules = createMatchRules(options.rules);
+  const home = createTeamFromData({
+    side: "home",
+    pitch,
+    team: options.home.team,
+    sheet: options.home.sheet,
+    players: options.home.players,
+  });
+  const away = createTeamFromData({
+    side: "away",
+    pitch,
+    team: options.away.team,
+    sheet: options.away.sheet,
+    players: options.away.players,
+  });
+  return initialiseMatch(seed >>> 0, pitch, rules, home, away);
+}
+
+function initialiseMatch(
+  seed: number,
+  pitch: Pitch,
+  rules: MatchRules,
+  home: TeamState,
+  away: TeamState,
+): MatchState {
   const state: MatchState = {
-    seed: seed >>> 0,
+    seed,
     pitch,
     rules,
     home,

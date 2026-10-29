@@ -1,0 +1,1318 @@
+// packages/client/src/lobby/team-editor.ts
+
+import {
+  FORMATION_NAMES,
+  buildDefaultSheet,
+  cloneTeamSheet,
+  formationDefinition,
+  parseTeamSheet,
+  validateTeamSheetAgainstData,
+  type FormationName,
+  type LobbyPlayerWire,
+  type LobbyRoomWire,
+  type PlayerData,
+  type PlayerPosition,
+  type TeamSheet,
+} from "@fb/shared";
+import { loadCatalog, type Catalog, type TeamCatalogEntry } from "../data/catalog";
+
+type SelectionKind = "starter" | "bench" | "reserve";
+
+interface Selection {
+  readonly kind: SelectionKind;
+  readonly index: number;
+}
+
+interface EditorCallbacks {
+  readonly onSetTeam: (teamId: string) => void;
+  readonly onUpdateSheet: (sheet: TeamSheet) => void;
+  readonly onToast: (message: string) => void;
+  readonly onAvailabilityChange: () => void;
+}
+
+const SAVE_PREFIX = "fb.team-sheet.";
+const POSITION_GROUPS = {
+  GK: ["GK"],
+  DEF: ["RB", "RWB", "CB", "LB", "LWB"],
+  MID: ["CDM", "CM", "CAM", "RM", "LM"],
+  ATT: ["RW", "LW", "CF", "ST"],
+} as const;
+
+const ATTRIBUTE_LABELS: Readonly<Record<string, string>> = {
+  acceleration: "Acceleration",
+  sprintSpeed: "Sprint speed",
+  finishing: "Finishing",
+  shotPower: "Shot power",
+  longShots: "Long shots",
+  volleys: "Volleys",
+  penalties: "Penalties",
+  attPosition: "Att. position",
+  shortPassing: "Short passing",
+  vision: "Vision",
+  crossing: "Crossing",
+  longPassing: "Long passing",
+  fkAccuracy: "FK accuracy",
+  curve: "Curve",
+  dribbling: "Dribbling",
+  agility: "Agility",
+  balance: "Balance",
+  reactions: "Reactions",
+  ballControl: "Ball control",
+  composure: "Composure",
+  interceptions: "Interceptions",
+  headingAccuracy: "Heading",
+  defAwareness: "Def. awareness",
+  standingTackle: "Standing tackle",
+  slidingTackle: "Sliding tackle",
+  jumping: "Jumping",
+  stamina: "Stamina",
+  strength: "Strength",
+  aggression: "Aggression",
+};
+
+/**
+ * Owns the draft-team DOM only. Every accepted change is sent to the host and
+ * rendered back from the authoritative lobby state, so both devices observe the
+ * same sheet without a second local source of truth.
+ */
+export class TeamEditor {
+  private readonly root = byId<HTMLElement>("team-editor");
+  private readonly status = byId<HTMLElement>("editor-status");
+  private readonly body = byId<HTMLElement>("editor-body");
+  private readonly leagueFilter = byId<HTMLSelectElement>("league-filter");
+  private readonly teamSelect = byId<HTMLSelectElement>("team-select");
+  private readonly formationSelect =
+    byId<HTMLSelectElement>("formation-select");
+  private readonly kitSelect = byId<HTMLSelectElement>("kit-select");
+  private readonly clubPreview = byId<HTMLElement>("club-preview");
+  private readonly syncChip = byId<HTMLElement>("editor-sync");
+  private readonly pitch = byId<HTMLElement>("formation-pitch");
+  private readonly benchSize = byId<HTMLSelectElement>("bench-size");
+  private readonly benchList = byId<HTMLElement>("bench-list");
+  private readonly reserveList = byId<HTMLElement>("reserve-list");
+  private readonly reserveCount = byId<HTMLElement>("reserve-count");
+  private readonly playerSearch = byId<HTMLInputElement>("player-search");
+  private readonly positionFilter =
+    byId<HTMLSelectElement>("position-filter");
+  private readonly playerDetail = byId<HTMLElement>("player-detail");
+  private readonly opponentPanel = byId<HTMLElement>("opponent-panel");
+  private readonly captainSelect = byId<HTMLSelectElement>("captain-select");
+  private readonly penaltySelect = byId<HTMLSelectElement>("penalty-select");
+  private readonly freeKickSelect =
+    byId<HTMLSelectElement>("freekick-select");
+  private readonly cornerLeftSelect =
+    byId<HTMLSelectElement>("corner-left-select");
+  private readonly cornerRightSelect =
+    byId<HTMLSelectElement>("corner-right-select");
+  private readonly depthRange = byId<HTMLInputElement>("tactics-depth");
+  private readonly depthValue = byId<HTMLElement>("tactics-depth-value");
+  private readonly widthRange = byId<HTMLInputElement>("tactics-width");
+  private readonly widthValue = byId<HTMLElement>("tactics-width-value");
+  private readonly pressSelect = byId<HTMLSelectElement>("tactics-press");
+  private readonly buildUpSelect =
+    byId<HTMLSelectElement>("tactics-build-up");
+  private readonly importFile = byId<HTMLInputElement>("import-file");
+
+  private catalog: Catalog | null = null;
+  private catalogError: string | null = null;
+  private room: LobbyRoomWire | null = null;
+  private selfSeat: number | null = null;
+  private self: LobbyPlayerWire | null = null;
+  private opponent: LobbyPlayerWire | null = null;
+  private entry: TeamCatalogEntry | null = null;
+  private sheet: TeamSheet | null = null;
+  private selection: Selection | null = null;
+  private lastTeamId: string | null = null;
+  private dragged: Selection | null = null;
+  private suppressClickUntil = 0;
+
+  constructor(private readonly callbacks: EditorCallbacks) {
+    this.teamSelect.addEventListener("change", () => {
+      const teamId = this.teamSelect.value;
+      if (teamId === "") {
+        return;
+      }
+      this.selection = null;
+      this.callbacks.onSetTeam(teamId);
+    });
+
+    this.leagueFilter.addEventListener("change", () => {
+      this.renderToolbar();
+    });
+
+    this.kitSelect.addEventListener("change", () => {
+      const sheet = this.sheet;
+      const kit = this.kitSelect.value;
+      if (
+        sheet === null ||
+        (kit !== "home" && kit !== "away" && kit !== "third")
+      ) {
+        return;
+      }
+      this.commit({ ...sheet, kit });
+    });
+
+    this.formationSelect.addEventListener("change", () => {
+      const entry = this.entry;
+      const sheet = this.sheet;
+      const name = this.formationSelect.value as FormationName;
+      if (entry === null || sheet === null || !FORMATION_NAMES.includes(name)) {
+        return;
+      }
+      const built = buildDefaultSheet(
+        entry.players,
+        name,
+        sheet.bench.length,
+      );
+      this.commit({
+        ...built.sheet,
+        kit: sheet.kit,
+        tactics: { ...sheet.tactics },
+      });
+    });
+
+    this.benchSize.addEventListener("change", () => {
+      this.changeBenchSize(Number(this.benchSize.value));
+    });
+
+    byId<HTMLButtonElement>("auto-pick").addEventListener("click", () => {
+      const entry = this.entry;
+      const sheet = this.sheet;
+      if (entry === null || sheet === null) {
+        return;
+      }
+      const built = buildDefaultSheet(
+        entry.players,
+        sheet.formation,
+        sheet.bench.length,
+      );
+      this.selection = null;
+      this.commit({
+        ...built.sheet,
+        kit: sheet.kit,
+        tactics: { ...sheet.tactics },
+      });
+    });
+
+    byId<HTMLButtonElement>("reset-sheet").addEventListener("click", () => {
+      if (this.entry === null) {
+        return;
+      }
+      this.selection = null;
+      this.commit(cloneTeamSheet(this.entry.team.defaultSheet));
+    });
+
+    byId<HTMLButtonElement>("save-sheet").addEventListener("click", () => {
+      this.saveSheet();
+    });
+
+    byId<HTMLButtonElement>("load-sheet").addEventListener("click", () => {
+      this.loadSheet();
+    });
+
+    byId<HTMLButtonElement>("export-sheet").addEventListener("click", () => {
+      this.exportSheet();
+    });
+
+    byId<HTMLButtonElement>("import-sheet").addEventListener("click", () => {
+      this.importFile.click();
+    });
+
+    this.importFile.addEventListener("change", () => {
+      void this.importSheet();
+    });
+
+    this.playerSearch.addEventListener("input", () => {
+      this.renderSquadLists();
+    });
+    this.positionFilter.addEventListener("change", () => {
+      this.renderSquadLists();
+    });
+
+    this.bindTactics();
+    this.bindTakerSelects();
+
+    void this.loadCatalog();
+  }
+
+  render(room: LobbyRoomWire | null, selfSeat: number | null): void {
+    this.room = room;
+    this.selfSeat = selfSeat;
+    if (room === null || selfSeat === null) {
+      this.root.hidden = true;
+      return;
+    }
+    const visible = room.phase === "waiting" || room.phase === "ready";
+    this.root.hidden = !visible;
+    if (!visible) {
+      return;
+    }
+
+    this.self = room.players.find((player) => player.seat === selfSeat) ?? null;
+    this.opponent =
+      room.players.find((player) => player.seat !== selfSeat) ?? null;
+    const teamId = this.self?.teamId ?? null;
+    if (teamId !== this.lastTeamId) {
+      this.lastTeamId = teamId;
+      this.selection = null;
+    }
+    this.entry =
+      teamId === null ? null : this.catalog?.teamEntries.get(teamId) ?? null;
+    this.sheet = this.self?.sheet ?? null;
+    this.syncChip.textContent = "Synced with host";
+    this.syncChip.dataset.state = "ok";
+
+    if (this.catalogError !== null) {
+      this.body.hidden = true;
+      this.status.hidden = false;
+      this.status.textContent = this.catalogError;
+      return;
+    }
+    if (this.catalog === null) {
+      this.body.hidden = true;
+      this.status.hidden = false;
+      this.status.textContent = "Loading generated squads…";
+      return;
+    }
+    if (this.entry === null || this.sheet === null) {
+      this.body.hidden = true;
+      this.status.hidden = false;
+      this.status.textContent =
+        this.self === null
+          ? "Join a room to edit a team."
+          : "Waiting for the host to assign a team.";
+      return;
+    }
+
+    this.status.hidden = true;
+    this.body.hidden = false;
+    this.renderToolbar();
+    this.renderPitch();
+    this.renderSquadLists();
+    this.renderPlayerDetail();
+    this.renderTactics();
+    this.renderOpponent();
+  }
+
+  /** Used by the ready button to avoid a predictable server rejection. */
+  canReady(): boolean {
+    if (this.entry === null || this.sheet === null) {
+      return false;
+    }
+    return (
+      validateTeamSheetAgainstData(
+        this.entry.team,
+        this.sheet,
+        this.entry.playersById,
+      ).length === 0
+    );
+  }
+
+  private async loadCatalog(): Promise<void> {
+    try {
+      this.catalog = await loadCatalog();
+      this.catalogError = null;
+    } catch (error) {
+      this.catalogError =
+        error instanceof Error
+          ? `Could not load team data: ${error.message}`
+          : "Could not load team data";
+    }
+    this.render(this.room, this.selfSeat);
+    this.callbacks.onAvailabilityChange();
+  }
+
+  private renderToolbar(): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null || this.catalog === null) {
+      return;
+    }
+    const opponentTeamId = this.opponent?.teamId ?? null;
+    const currentLeague = this.leagueFilter.value || "all";
+    this.leagueFilter.replaceChildren();
+    const allLeagues = document.createElement("option");
+    allLeagues.value = "all";
+    allLeagues.textContent = "All leagues";
+    this.leagueFilter.append(allLeagues);
+    for (const league of [...this.catalog.leagues].sort((a, b) =>
+      a.country.localeCompare(b.country),
+    )) {
+      const option = document.createElement("option");
+      option.value = league.id;
+      option.textContent = `${league.country} · ${league.name}`;
+      this.leagueFilter.append(option);
+    }
+    this.leagueFilter.value =
+      currentLeague === "all" ||
+      this.catalog.leagues.some((league) => league.id === currentLeague)
+        ? currentLeague
+        : "all";
+    const leagueId = this.leagueFilter.value;
+
+    this.teamSelect.replaceChildren();
+    const teams = [...this.catalog.teamEntries.values()]
+      .filter(
+        (teamEntry) =>
+          leagueId === "all" ||
+          teamEntry.team.leagueId === leagueId ||
+          teamEntry.team.id === entry.team.id,
+      )
+      .sort((a, b) => a.team.name.localeCompare(b.team.name));
+    for (const teamEntry of teams) {
+      const option = document.createElement("option");
+      option.value = teamEntry.team.id;
+      option.textContent = teamEntry.team.sample
+        ? `${teamEntry.team.name} (sample)`
+        : teamEntry.team.name;
+      option.disabled =
+        teamEntry.team.id === opponentTeamId &&
+        teamEntry.team.id !== entry.team.id;
+      this.teamSelect.append(option);
+    }
+    this.teamSelect.value = entry.team.id;
+    this.root.style.setProperty("--team-primary", kitColor(entry, sheet.kit));
+
+    this.formationSelect.replaceChildren();
+    for (const formation of FORMATION_NAMES) {
+      const option = document.createElement("option");
+      option.value = formation;
+      option.textContent = formation;
+      this.formationSelect.append(option);
+    }
+    this.formationSelect.value = sheet.formation;
+
+    this.kitSelect.value = sheet.kit;
+
+    this.benchSize.replaceChildren();
+    for (let size = 5; size <= 9; size += 1) {
+      const option = document.createElement("option");
+      option.value = String(size);
+      option.textContent = String(size);
+      this.benchSize.append(option);
+    }
+    this.benchSize.value = String(sheet.bench.length);
+    this.renderClubPreview();
+  }
+
+  private renderClubPreview(): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null) {
+      return;
+    }
+    this.clubPreview.replaceChildren();
+    const crest = document.createElement("img");
+    crest.className = "club-crest";
+    crest.src = `/data/${entry.team.crest}`;
+    crest.alt = `${entry.team.name} crest`;
+    const kit = document.createElement("img");
+    kit.className = "club-kit";
+    kit.src = `/data/${entry.team.kits[sheet.kit]}`;
+    kit.alt = `${entry.team.name} ${sheet.kit} kit`;
+
+    const identity = document.createElement("div");
+    identity.className = "club-identity";
+    const name = document.createElement("strong");
+    name.textContent = entry.team.name;
+    const league = this.catalog?.leagues.find(
+      (item) => item.id === entry.team.leagueId,
+    );
+    const meta = document.createElement("p");
+    meta.className = "panel-hint";
+    meta.textContent = `${league?.name ?? entry.team.leagueId} · ${
+      entry.team.stadium
+    } · ${entry.team.managerName}`;
+    identity.append(name, meta);
+
+    const swatches = document.createElement("div");
+    swatches.className = "kit-swatches";
+    for (const [label, colour] of [
+      ["Home", entry.team.colours.home],
+      ["Away", entry.team.colours.away],
+      ["Third", entry.team.colours.third],
+      ["GK", entry.team.colours.goalkeeper],
+    ] as const) {
+      const swatch = document.createElement("span");
+      swatch.className = "kit-swatch";
+      swatch.style.backgroundColor = colour;
+      swatch.title = `${label} ${colour}`;
+      swatches.append(swatch);
+    }
+    const sample = document.createElement("span");
+    sample.className = "chip";
+    sample.textContent = entry.team.sample ? "Sample club" : "Club";
+    swatches.append(sample);
+
+    this.clubPreview.append(crest, kit, identity, swatches);
+  }
+
+  private renderPitch(): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null) {
+      return;
+    }
+    const definition = formationDefinition(sheet.formation);
+    this.pitch.replaceChildren();
+    this.pitch.style.setProperty(
+      "--team-primary",
+      kitColor(entry, sheet.kit),
+    );
+
+    for (const [index, slot] of sheet.startingXI.entries()) {
+      const geometry = definition.slots[index];
+      const player = entry.playersById.get(slot.playerId);
+      const selected =
+        this.selection?.kind === "starter" && this.selection.index === index;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "pitch-slot";
+      button.dataset.selected = String(selected);
+      if (player !== undefined) {
+        const fit = roleFit(player, slot.role);
+        button.dataset.roleFit = fit;
+        button.title = `${fit} fit for ${slot.role}`;
+      }
+      // The shared geometry stops around x=0.72; spread it across the editor
+      // pitch and keep edge cards inside the touchlines.
+      const normalizedX = Math.min(0.72, Math.max(0, geometry?.x ?? 0.5));
+      const displayX = 0.06 + (normalizedX / 0.72) * 0.88;
+      const displayY = 0.08 + Math.min(1, Math.max(0, geometry?.y ?? 0.5)) * 0.84;
+      button.style.left = `${displayX * 100}%`;
+      button.style.top = `${displayY * 100}%`;
+      button.setAttribute(
+        "aria-label",
+        `${slot.role} ${player?.name ?? slot.playerId}, click to swap`,
+      );
+      button.addEventListener("click", () => {
+        if (performance.now() < this.suppressClickUntil) {
+          return;
+        }
+        this.select({ kind: "starter", index });
+      });
+      this.makeDraggable(button, { kind: "starter", index });
+
+      const role = document.createElement("span");
+      role.className = "pitch-slot-role";
+      role.textContent = slot.role;
+      const name = document.createElement("strong");
+      name.className = "pitch-slot-name";
+      name.textContent = player?.name ?? slot.playerId;
+      const meta = document.createElement("span");
+      meta.className = "pitch-slot-meta";
+      meta.textContent =
+        player === undefined
+          ? slot.playerId
+          : `#${player.kitNumber} · ${player.overall}`;
+      button.append(role, name, meta);
+      if (player !== undefined) {
+        button.style.setProperty("--shirt", kitColor(entry, sheet.kit));
+      }
+      this.pitch.append(button);
+    }
+  }
+
+  private renderSquadLists(): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null) {
+      return;
+    }
+    const search = this.playerSearch.value.trim().toLowerCase();
+    const filter = this.positionFilter.value;
+    const matches = (playerId: string): boolean => {
+      const player = entry.playersById.get(playerId);
+      if (player === undefined) {
+        return true;
+      }
+      if (
+        search !== "" &&
+        !player.name.toLowerCase().includes(search) &&
+        !player.positions.some((position) =>
+          position.toLowerCase().includes(search),
+        )
+      ) {
+        return false;
+      }
+      if (filter === "all") {
+        return true;
+      }
+      const group: readonly PlayerPosition[] =
+        POSITION_GROUPS[filter as keyof typeof POSITION_GROUPS];
+      return player.positions.some((position) => group.includes(position));
+    };
+
+    this.benchList.replaceChildren();
+    for (const [index, playerId] of sheet.bench.entries()) {
+      const player = entry.playersById.get(playerId);
+      if (player !== undefined && !matches(playerId)) {
+        continue;
+      }
+      this.benchList.append(
+        this.buildPlayerRow(playerId, player, {
+          kind: "bench",
+          index,
+        }),
+      );
+    }
+    if (this.benchList.childElementCount === 0) {
+      this.benchList.append(emptyMessage("No substitutes match this filter"));
+    }
+
+    this.reserveList.replaceChildren();
+    let visibleReserves = 0;
+    for (const [index, playerId] of sheet.reserves.entries()) {
+      const player = entry.playersById.get(playerId);
+      if (player !== undefined && !matches(playerId)) {
+        continue;
+      }
+      visibleReserves += 1;
+      this.reserveList.append(
+        this.buildPlayerRow(playerId, player, {
+          kind: "reserve",
+          index,
+        }),
+      );
+    }
+    if (visibleReserves === 0) {
+      this.reserveList.append(emptyMessage("No reserves match this filter"));
+    }
+    this.reserveCount.textContent = `${sheet.reserves.length} players`;
+  }
+
+  private buildPlayerRow(
+    playerId: string,
+    player: PlayerData | undefined,
+    selection: Selection,
+  ): HTMLElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "squad-row";
+    button.dataset.selected = String(this.isSelected(selection));
+    button.addEventListener("click", () => {
+      if (performance.now() < this.suppressClickUntil) {
+        return;
+      }
+      this.select(selection);
+    });
+    this.makeDraggable(button, selection);
+
+    const number = document.createElement("span");
+    number.className = "squad-number";
+    number.textContent =
+      player === undefined ? "—" : String(player.kitNumber).padStart(2, "0");
+    const identity = document.createElement("span");
+    identity.className = "squad-identity";
+    const name = document.createElement("strong");
+    name.textContent = player?.name ?? playerId;
+    const meta = document.createElement("span");
+    meta.className = "squad-meta";
+    meta.textContent =
+      player === undefined
+        ? playerId
+        : `${player.preferredPosition} · ${player.positions.slice(0, 3).join("/")}`;
+    identity.append(name, meta);
+    const overall = document.createElement("span");
+    overall.className = "squad-overall";
+    overall.textContent = player === undefined ? "—" : String(player.overall);
+    button.append(number, identity, overall);
+    return button;
+  }
+
+  private makeDraggable(element: HTMLElement, selection: Selection): void {
+    element.draggable = true;
+    element.addEventListener("dragstart", (event) => {
+      this.dragged = selection;
+      element.classList.add("dragging");
+      if (event.dataTransfer !== null) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData(
+          "application/x-fb-sheet-selection",
+          JSON.stringify(selection),
+        );
+      }
+    });
+    element.addEventListener("dragend", () => {
+      element.classList.remove("dragging");
+      this.dragged = null;
+      this.suppressClickUntil = performance.now() + 150;
+    });
+    element.addEventListener("dragover", (event) => {
+      if (this.dragged === null) {
+        return;
+      }
+      event.preventDefault();
+      if (event.dataTransfer !== null) {
+        event.dataTransfer.dropEffect = "move";
+      }
+      element.classList.add("drag-over");
+    });
+    element.addEventListener("dragleave", () => {
+      element.classList.remove("drag-over");
+    });
+    element.addEventListener("drop", (event) => {
+      event.preventDefault();
+      element.classList.remove("drag-over");
+      const target = this.dragged;
+      this.dragged = null;
+      this.suppressClickUntil = performance.now() + 150;
+      if (
+        target === null ||
+        (target.kind === selection.kind && target.index === selection.index)
+      ) {
+        return;
+      }
+      this.selection = null;
+      this.swap(target, selection);
+    });
+  }
+
+  private select(selection: Selection): void {
+    if (
+      this.selection !== null &&
+      this.selection.kind === selection.kind &&
+      this.selection.index === selection.index
+    ) {
+      this.selection = null;
+      this.renderPitch();
+      this.renderSquadLists();
+      this.renderPlayerDetail();
+      return;
+    }
+    if (this.selection === null) {
+      this.selection = selection;
+      this.renderPitch();
+      this.renderSquadLists();
+      this.renderPlayerDetail();
+      return;
+    }
+    const from = this.selection;
+    this.selection = null;
+    this.swap(from, selection);
+  }
+
+  private swap(from: Selection, to: Selection): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null) {
+      return;
+    }
+    const starterIds = sheet.startingXI.map((slot) => slot.playerId);
+    const benchIds = [...sheet.bench];
+    const reserveIds = [...sheet.reserves];
+    const read = (selection: Selection): string | undefined => {
+      if (selection.kind === "starter") {
+        return starterIds[selection.index];
+      }
+      if (selection.kind === "bench") {
+        return benchIds[selection.index];
+      }
+      return reserveIds[selection.index];
+    };
+    const write = (selection: Selection, value: string): void => {
+      if (selection.kind === "starter") {
+        starterIds[selection.index] = value;
+      } else if (selection.kind === "bench") {
+        benchIds[selection.index] = value;
+      } else {
+        reserveIds[selection.index] = value;
+      }
+    };
+    const fromId = read(from);
+    const toId = read(to);
+    if (fromId === undefined || toId === undefined) {
+      return;
+    }
+    write(from, toId);
+    write(to, fromId);
+
+    const next: TeamSheet = {
+      ...sheet,
+      startingXI: sheet.startingXI.map((slot, index) => ({
+        ...slot,
+        playerId: starterIds[index] ?? slot.playerId,
+      })),
+      bench: benchIds,
+      reserves: reserveIds,
+    };
+    const repaired = repairTakers(next, entry.playersById);
+    const errors = validateTeamSheetAgainstData(
+      entry.team,
+      repaired,
+      entry.playersById,
+    );
+    if (errors.length > 0) {
+      this.callbacks.onToast(errors.slice(0, 2).join(" "));
+      this.renderPitch();
+      this.renderSquadLists();
+      this.renderPlayerDetail();
+      return;
+    }
+    this.commit(repaired);
+  }
+
+  private changeBenchSize(size: number): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null || size < 5 || size > 9) {
+      return;
+    }
+    const pool = [...sheet.bench, ...sheet.reserves]
+      .map((id) => entry.playersById.get(id))
+      .filter((player): player is PlayerData => player !== undefined);
+    const keeper = pool
+      .filter((player) => player.positions.includes("GK"))
+      .sort((a, b) => b.overall - a.overall)[0];
+    const chosen: PlayerData[] = [];
+    if (keeper !== undefined) {
+      chosen.push(keeper);
+    }
+    const outfielders = pool
+      .filter((player) => player.id !== keeper?.id && !player.positions.includes("GK"))
+      .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id));
+    for (const player of outfielders) {
+      if (chosen.length >= size) {
+        break;
+      }
+      chosen.push(player);
+    }
+    if (chosen.length !== size) {
+      this.callbacks.onToast("Not enough available players for that bench size");
+      return;
+    }
+    const bench = chosen.map((player) => player.id);
+    const benchSet = new Set(bench);
+    const reserves = [...sheet.bench, ...sheet.reserves]
+      .filter((id) => !benchSet.has(id))
+      .sort();
+    const next: TeamSheet = { ...sheet, bench, reserves };
+    const errors = validateTeamSheetAgainstData(
+      entry.team,
+      next,
+      entry.playersById,
+    );
+    if (errors.length > 0) {
+      this.callbacks.onToast(errors.slice(0, 2).join(" "));
+      return;
+    }
+    this.commit(next);
+  }
+
+  private commit(sheet: TeamSheet): void {
+    const entry = this.entry;
+    if (entry === null) {
+      return;
+    }
+    const errors = validateTeamSheetAgainstData(
+      entry.team,
+      sheet,
+      entry.playersById,
+    );
+    if (errors.length > 0) {
+      this.callbacks.onToast(errors.slice(0, 2).join(" "));
+      return;
+    }
+    this.sheet = sheet;
+    this.syncChip.textContent = "Sending to host…";
+    this.syncChip.dataset.state = "pending";
+    this.renderPitch();
+    this.renderSquadLists();
+    this.renderTactics();
+    this.renderPlayerDetail();
+    this.callbacks.onUpdateSheet(sheet);
+  }
+
+  private renderPlayerDetail(): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null) {
+      return;
+    }
+    let playerId: string | undefined;
+    if (this.selection?.kind === "starter") {
+      playerId = sheet.startingXI[this.selection.index]?.playerId;
+    } else if (this.selection?.kind === "bench") {
+      playerId = sheet.bench[this.selection.index];
+    } else if (this.selection?.kind === "reserve") {
+      playerId = sheet.reserves[this.selection.index];
+    }
+    const player =
+      playerId === undefined ? undefined : entry.playersById.get(playerId);
+    this.playerDetail.replaceChildren();
+    if (player === undefined) {
+      const hint = document.createElement("p");
+      hint.className = "panel-hint";
+      hint.textContent =
+        "Select any player on the pitch or bench to see face stats and attributes.";
+      this.playerDetail.append(
+        heading("Player card"),
+        hint,
+      );
+      return;
+    }
+
+    const head = document.createElement("div");
+    head.className = "player-detail-head";
+    const portrait = document.createElement("div");
+    portrait.className = "player-portrait";
+    const headshot = document.createElement("img");
+    headshot.src = `/data/${player.face}`;
+    headshot.alt = player.name;
+    headshot.loading = "lazy";
+    const shirt = document.createElement("span");
+    shirt.className = "player-shirt";
+    shirt.textContent = String(player.kitNumber).padStart(2, "0");
+    portrait.append(headshot, shirt);
+    const identity = document.createElement("div");
+    const name = document.createElement("h3");
+    name.textContent = player.name;
+    const meta = document.createElement("p");
+    meta.className = "panel-hint";
+    const nation = this.catalog?.nationsById.get(player.nationId);
+    const selectedRole: PlayerPosition | null =
+      this.selection?.kind === "starter"
+        ? sheet.startingXI[this.selection.index]?.role ?? null
+        : null;
+    const fit =
+      selectedRole !== null
+        ? ` · ${roleFit(player, selectedRole)} fit at ${selectedRole}`
+        : "";
+    meta.textContent = `${player.preferredPosition} · ${player.positions.join(
+      " / ",
+    )} · ${player.foot}-footed · ${nation?.name ?? player.nationId} · age ${
+      player.age
+    }${fit}`;
+    identity.append(name, meta);
+    const overall = document.createElement("strong");
+    overall.className = "player-overall";
+    overall.textContent = String(player.overall);
+    head.append(portrait, identity, overall);
+
+    const face = document.createElement("div");
+    face.className = "face-stats";
+    for (const [label, value] of Object.entries(player.faceStats)) {
+      const cell = document.createElement("div");
+      const key = document.createElement("span");
+      key.textContent = label;
+      const score = document.createElement("strong");
+      score.textContent = String(value);
+      cell.append(key, score);
+      face.append(cell);
+    }
+
+    const attributes = document.createElement("div");
+    attributes.className = "attribute-grid";
+    const entries = Object.entries(player.attributes)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+    for (const [key, value] of entries) {
+      const row = document.createElement("div");
+      const label = document.createElement("span");
+      label.textContent = ATTRIBUTE_LABELS[key] ?? key;
+      const score = document.createElement("strong");
+      score.textContent = String(value);
+      row.append(label, score);
+      attributes.append(row);
+    }
+
+    const allAttributes = document.createElement("details");
+    allAttributes.className = "attribute-details";
+    const summary = document.createElement("summary");
+    summary.textContent = "All attributes";
+    const fullGrid = document.createElement("div");
+    fullGrid.className = "attribute-grid";
+    for (const [key, value] of Object.entries(player.attributes) as [
+      string,
+      number,
+    ][]) {
+      fullGrid.append(attributeRow(ATTRIBUTE_LABELS[key] ?? key, value));
+    }
+    if (player.goalkeeper !== null) {
+      for (const [key, value] of Object.entries(player.goalkeeper) as [
+        string,
+        number,
+      ][]) {
+        fullGrid.append(
+          attributeRow(`GK ${key.replace(/([A-Z])/g, " $1").toLowerCase()}`, value),
+        );
+      }
+    }
+    allAttributes.append(summary, fullGrid);
+
+    const bio = document.createElement("div");
+    bio.className = "bio-grid";
+    const bioFields: readonly [string, string][] = [
+      ["Weak foot", `${player.weakFoot}★`],
+      ["Skill moves", `${player.skillMoves}★`],
+      ["Work rate", `${player.workRate.att}/${player.workRate.def}`],
+      ["Height", `${player.heightCm} cm`],
+      ["Weight", `${player.weightKg} kg`],
+      ["Body", player.bodyType],
+    ];
+    for (const [label, value] of bioFields) {
+      const row = document.createElement("div");
+      const key = document.createElement("span");
+      key.textContent = label;
+      const score = document.createElement("strong");
+      score.textContent = value;
+      row.append(key, score);
+      bio.append(row);
+    }
+
+    const styles = document.createElement("div");
+    styles.className = "playstyle-list";
+    for (const style of player.playStyles.slice(0, 6)) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = style;
+      styles.append(chip);
+    }
+    if (styles.childElementCount === 0) {
+      styles.append(emptyMessage("No PlayStyles"));
+    }
+
+    this.playerDetail.append(
+      head,
+      face,
+      bio,
+      attributes,
+      allAttributes,
+      styles,
+    );
+  }
+
+  private renderTactics(): void {
+    const sheet = this.sheet;
+    if (sheet === null) {
+      return;
+    }
+    this.depthRange.value = String(sheet.tactics.defensiveDepth);
+    this.depthValue.textContent = String(sheet.tactics.defensiveDepth);
+    this.widthRange.value = String(sheet.tactics.width);
+    this.widthValue.textContent = String(sheet.tactics.width);
+    this.pressSelect.value = sheet.tactics.pressIntensity;
+    this.buildUpSelect.value = sheet.tactics.buildUpStyle;
+
+    const starters = sheet.startingXI
+      .map((slot) => this.entry?.playersById.get(slot.playerId))
+      .filter((player): player is PlayerData => player !== undefined);
+    for (const select of [
+      this.captainSelect,
+      this.penaltySelect,
+      this.freeKickSelect,
+      this.cornerLeftSelect,
+      this.cornerRightSelect,
+    ]) {
+      select.replaceChildren();
+      for (const player of starters) {
+        const option = document.createElement("option");
+        option.value = player.id;
+        option.textContent = `${player.name} (${player.overall})`;
+        select.append(option);
+      }
+    }
+    this.captainSelect.value = sheet.captain;
+    this.penaltySelect.value = sheet.penaltyTaker;
+    this.freeKickSelect.value = sheet.freeKickTaker;
+    this.cornerLeftSelect.value = sheet.cornerLeft;
+    this.cornerRightSelect.value = sheet.cornerRight;
+  }
+
+  private renderOpponent(): void {
+    const opponent = this.opponent;
+    const opponentEntry =
+      opponent?.teamId === null || opponent?.teamId === undefined
+        ? null
+        : this.catalog?.teamEntries.get(opponent.teamId) ?? null;
+    this.opponentPanel.replaceChildren();
+    this.opponentPanel.append(heading("Opponent live"));
+    if (opponent === null) {
+      this.opponentPanel.append(
+        emptyMessage("Waiting for the second device"),
+      );
+      return;
+    }
+    if (opponentEntry === null || opponent.sheet === null) {
+      this.opponentPanel.append(emptyMessage("Choosing a team"));
+      return;
+    }
+    const teamLine = document.createElement("p");
+    teamLine.className = "opponent-team";
+    teamLine.textContent = opponentEntry.team.name;
+    const meta = document.createElement("p");
+    meta.className = "panel-hint";
+    meta.textContent = `${opponent.sheet.formation} · bench ${opponent.sheet.bench.length} · press ${opponent.sheet.tactics.pressIntensity}`;
+    const ready = document.createElement("span");
+    ready.className = "chip";
+    ready.textContent = opponent.ready ? "Ready" : "Editing";
+    this.opponentPanel.append(teamLine, meta, ready);
+  }
+
+  private bindTactics(): void {
+    this.depthRange.addEventListener("input", () => {
+      this.depthValue.textContent = this.depthRange.value;
+    });
+    this.widthRange.addEventListener("input", () => {
+      this.widthValue.textContent = this.widthRange.value;
+    });
+    const apply = (): void => {
+      const sheet = this.sheet;
+      if (sheet === null) {
+        return;
+      }
+      this.commit({
+        ...sheet,
+        tactics: {
+          ...sheet.tactics,
+          defensiveDepth: Number(this.depthRange.value),
+          width: Number(this.widthRange.value),
+          pressIntensity:
+            this.pressSelect.value as TeamSheet["tactics"]["pressIntensity"],
+          buildUpStyle:
+            this.buildUpSelect.value as TeamSheet["tactics"]["buildUpStyle"],
+        },
+      });
+    };
+    this.depthRange.addEventListener("change", apply);
+    this.widthRange.addEventListener("change", apply);
+    this.pressSelect.addEventListener("change", apply);
+    this.buildUpSelect.addEventListener("change", apply);
+  }
+
+  private bindTakerSelects(): void {
+    const apply = (): void => {
+      const sheet = this.sheet;
+      if (sheet === null) {
+        return;
+      }
+      this.commit({
+        ...sheet,
+        captain: this.captainSelect.value,
+        penaltyTaker: this.penaltySelect.value,
+        freeKickTaker: this.freeKickSelect.value,
+        cornerLeft: this.cornerLeftSelect.value,
+        cornerRight: this.cornerRightSelect.value,
+      });
+    };
+    for (const select of [
+      this.captainSelect,
+      this.penaltySelect,
+      this.freeKickSelect,
+      this.cornerLeftSelect,
+      this.cornerRightSelect,
+    ]) {
+      select.addEventListener("change", apply);
+    }
+  }
+
+  private saveSheet(): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        `${SAVE_PREFIX}${entry.team.id}`,
+        JSON.stringify(sheet),
+      );
+      this.callbacks.onToast("Team sheet saved in this browser");
+    } catch {
+      this.callbacks.onToast("This browser blocked local storage");
+    }
+  }
+
+  private loadSheet(): void {
+    const entry = this.entry;
+    if (entry === null) {
+      return;
+    }
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem(`${SAVE_PREFIX}${entry.team.id}`);
+    } catch {
+      this.callbacks.onToast("This browser blocked local storage");
+      return;
+    }
+    if (saved === null) {
+      this.callbacks.onToast("No saved sheet for this team");
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(saved) as unknown;
+    } catch {
+      this.callbacks.onToast("The saved sheet is not valid JSON");
+      return;
+    }
+    const sheet = parseTeamSheet(raw);
+    if (sheet === null) {
+      this.callbacks.onToast("The saved sheet failed validation");
+      return;
+    }
+    const errors = validateTeamSheetAgainstData(
+      entry.team,
+      sheet,
+      entry.playersById,
+    );
+    if (errors.length > 0) {
+      this.callbacks.onToast(errors.slice(0, 2).join(" "));
+      return;
+    }
+    this.commit(sheet);
+  }
+
+  private exportSheet(): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null) {
+      return;
+    }
+    const blob = new Blob([JSON.stringify(sheet, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${entry.team.id}-sheet.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  private async importSheet(): Promise<void> {
+    const entry = this.entry;
+    const file = this.importFile.files?.[0];
+    this.importFile.value = "";
+    if (entry === null || file === undefined) {
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await file.text()) as unknown;
+    } catch {
+      this.callbacks.onToast("Could not parse the selected JSON file");
+      return;
+    }
+    const sheet = parseTeamSheet(raw);
+    if (sheet === null) {
+      this.callbacks.onToast("That JSON is not a valid team sheet");
+      return;
+    }
+    const errors = validateTeamSheetAgainstData(
+      entry.team,
+      sheet,
+      entry.playersById,
+    );
+    if (errors.length > 0) {
+      this.callbacks.onToast(errors.slice(0, 2).join(" "));
+      return;
+    }
+    this.commit(sheet);
+  }
+
+  private isSelected(selection: Selection): boolean {
+    return (
+      this.selection !== null &&
+      this.selection.kind === selection.kind &&
+      this.selection.index === selection.index
+    );
+  }
+}
+
+function attributeRow(label: string, value: number): HTMLElement {
+  const row = document.createElement("div");
+  const key = document.createElement("span");
+  key.textContent = label;
+  const score = document.createElement("strong");
+  score.textContent = String(value);
+  row.append(key, score);
+  return row;
+}
+
+function kitColor(entry: TeamCatalogEntry, kit: TeamSheet["kit"]): string {
+  if (kit === "away") {
+    return entry.team.colours.away;
+  }
+  if (kit === "third") {
+    return entry.team.colours.third;
+  }
+  return entry.team.colours.home;
+}
+
+function roleFit(
+  player: PlayerData,
+  role: PlayerPosition,
+): "natural" | "accomplished" | "warning" {
+  if (player.preferredPosition === role) {
+    return "natural";
+  }
+  if (player.positions.includes(role)) {
+    return "accomplished";
+  }
+  return "warning";
+}
+
+function repairTakers(
+  sheet: TeamSheet,
+  players: ReadonlyMap<string, PlayerData>,
+): TeamSheet {
+  const starters = sheet.startingXI
+    .map((slot) => players.get(slot.playerId))
+    .filter((player): player is PlayerData => player !== undefined);
+  if (starters.length === 0) {
+    return sheet;
+  }
+  const startersSet = new Set(starters.map((player) => player.id));
+  const best = (rating: (player: PlayerData) => number): string => {
+    const ranked = [...starters].sort(
+      (a, b) => rating(b) - rating(a) || a.id.localeCompare(b.id),
+    );
+    return ranked[0]?.id ?? starters[0]!.id;
+  };
+  return {
+    ...sheet,
+    captain: startersSet.has(sheet.captain)
+      ? sheet.captain
+      : best((player) => player.overall),
+    penaltyTaker: startersSet.has(sheet.penaltyTaker)
+      ? sheet.penaltyTaker
+      : best((player) => player.attributes.penalties),
+    freeKickTaker: startersSet.has(sheet.freeKickTaker)
+      ? sheet.freeKickTaker
+      : best((player) => player.attributes.fkAccuracy),
+    cornerLeft: startersSet.has(sheet.cornerLeft)
+      ? sheet.cornerLeft
+      : best((player) => player.attributes.crossing),
+    cornerRight: startersSet.has(sheet.cornerRight)
+      ? sheet.cornerRight
+      : best(
+          (player) =>
+            player.attributes.crossing + player.attributes.curve * 0.25,
+        ),
+  };
+}
+
+function heading(text: string): HTMLElement {
+  const element = document.createElement("h3");
+  element.className = "panel-title";
+  element.textContent = text;
+  return element;
+}
+
+function emptyMessage(text: string): HTMLElement {
+  const element = document.createElement("p");
+  element.className = "empty-message";
+  element.textContent = text;
+  return element;
+}
+
+function byId<T extends HTMLElement>(id: string): T {
+  const element = document.getElementById(id);
+  if (element === null) {
+    throw new Error(`Missing required element #${id}`);
+  }
+  return element as T;
+}

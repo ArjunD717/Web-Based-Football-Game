@@ -4,6 +4,7 @@
 // wall-clock behavior owned by the server.
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket, type RawData } from "ws";
@@ -293,6 +294,33 @@ describe("game server", () => {
     } finally {
       await rm(workDir, { recursive: true, force: true });
     }
+  });
+
+  it("serves only whitelisted generated data files", async () => {
+    const dataDir = fileURLToPath(new URL("../../../data/", import.meta.url));
+    const server = await startTestServer({ dataDir });
+    const base = baseUrl(server);
+
+    const manifest = await fetch(`${base}/data/manifest.json`);
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get("content-type")).toContain("application/json");
+    const manifestBody = (await manifest.json()) as { teams: number };
+    expect(manifestBody.teams).toBeGreaterThan(0);
+
+    const teams = await fetch(`${base}/data/teams.json`);
+    expect(teams.status).toBe(200);
+
+    for (const hidden of [
+      "/data/reports/build-summary.json",
+      "/data/input/sample/README.md",
+      "/data/../package.json",
+    ]) {
+      const response = await fetch(`${base}${hidden}`);
+      expect(response.status).toBe(404);
+    }
+
+    const noData = await startTestServer();
+    expect((await fetch(`${baseUrl(noData)}/data/teams.json`)).status).toBe(404);
   });
 
   it("shows setup guidance when the client build is absent", async () => {

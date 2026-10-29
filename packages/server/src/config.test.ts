@@ -16,6 +16,7 @@ describe("loadServerConfig", () => {
     expect(config.certPath).toBe(path.join(config.certDir, "dev-cert.pem"));
     expect(config.keyPath).toBe(path.join(config.certDir, "dev-key.pem"));
     expect(config.staticDir).toMatch(/packages[\\/]client[\\/]dist$/);
+    expect(path.basename(config.dataDir)).toBe("data");
   });
 
   it("honours environment overrides", () => {
@@ -24,11 +25,13 @@ describe("loadServerConfig", () => {
       FB_PORT: "9443",
       FB_CERT_DIR: "tmp/certs",
       FB_STATIC_DIR: "tmp/client",
+      FB_DATA_DIR: "tmp/data",
     });
     expect(config.host).toBe("127.0.0.1");
     expect(config.port).toBe(9443);
     expect(config.certDir).toBe(path.resolve("tmp/certs"));
     expect(config.staticDir).toBe(path.resolve("tmp/client"));
+    expect(config.dataDir).toBe(path.resolve("tmp/data"));
   });
 
   it("defaults blank host and port values", () => {

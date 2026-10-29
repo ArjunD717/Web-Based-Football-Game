@@ -10,3 +10,6 @@ export * from "./net/input";
 export * from "./net/messages";
 export * from "./tuning";
 export * from "./version";
+export * from "./domain/formations";
+export * from "./domain/team-sheet";
+export * from "./domain/guards";
