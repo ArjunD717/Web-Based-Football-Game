@@ -1,0 +1,6 @@
+nation_id,name,short,primary_color,secondary_color,third_color,goalkeeper_color
+sampleland,Sampleland,SMP,#2f6bff,#dce7ff,#f2c94c,#9be564
+northland,Northland,NTH,#0f766e,#ccfbf1,#f59e0b,#fde68a
+southland,Southland,STH,#9d174d,#fce7f3,#2563eb,#bfdbfe
+eastmark,Eastmark,EST,#7c3aed,#ede9fe,#16a34a,#bbf7d0
+westvale,Westvale,WST,#b45309,#fef3c7,#0369a1,#bae6fd

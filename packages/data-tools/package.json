@@ -1,0 +1,25 @@
+{
+  "name": "@fb/data-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsx src/build.ts",
+    "validate": "tsx src/validate.ts",
+    "preview": "tsx src/preview.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fb/shared": "workspace:*",
+    "@fb/sim": "workspace:*",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.16",
+    "tsx": "4.19.2"
+  }
+}

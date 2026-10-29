@@ -20,7 +20,7 @@ import type {
 
 /**
  * Clearly labelled placeholder squads for M1. No real player or club data is
- * used; the data pipeline in M6 supplies real squads.
+ * used; the M6 pipeline imports generated squads, and selection arrives in M9.
  */
 const DEFAULT_COLORS: Record<TeamSide, TeamColors> = {
   home: {

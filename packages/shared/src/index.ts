@@ -1,4 +1,5 @@
 // packages/shared/src/index.ts
+export * from "./domain/football-data";
 export * from "./domain/player-state";
 export * from "./math/angle";
 export * from "./math/scalar";

@@ -1,0 +1,4 @@
+club_id,name,short,league_id,primary_color,secondary_color,third_color,goalkeeper_color,stadium,manager_name,formation
+northbridge-athletic,Northbridge Athletic,NBR,sample-league,#1f4fd1,#f2f5ff,#ffd166,#f4c542,Alder Park,Morgan Vail,4-3-3
+riverside-rovers,Riverside Rovers,RVR,sample-league,#c0392b,#fff1e6,#2d6a4f,#f1c40f,Millbank Ground,Tessa Brook,4-3-3
+kingsport-united,Kingsport United,KPU,sample-league,#f0a202,#1b1b1b,#2a9d8f,#e76f51,Crown Field,Orin Gale,4-3-3

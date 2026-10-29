@@ -2,11 +2,12 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 5**:
+both devices are thin clients. This repository is at **Milestone 6**:
 server-authoritative matches with the referee-owned clock, score, half-time ends
 swap, goal/out-of-play restarts, fouls and cards, advantage, offside, free kicks
-with a wall, penalties and handball — layered on the M3 input, binary snapshot,
-interpolation, latency HUD and token reconnect stack.
+with a wall, penalties and handball, plus the data pipeline that ingests CSV,
+mutates names, validates a registry and maps full player attributes into the
+simulation.
 
 ## Requirements
 
@@ -91,6 +92,9 @@ pnpm preview
 | `pnpm preview` | Preview built lobby over local HTTP |
 | `pnpm start` | Serve built pages + WSS from Node over HTTPS |
 | `pnpm certs` | Generate mkcert certificate for localhost + LAN |
+| `pnpm data:build` | Ingest sample CSV, mutate names, generate JSON/assets |
+| `pnpm data:validate` | Validate generated JSON + cross-file references |
+| `pnpm data:preview` | Map the sample XI into sim ratings and print it |
 | `pnpm lint` | ESLint flat config, type-aware |
 | `pnpm typecheck` | Root + every workspace package |
 | `pnpm test` | Vitest unit/integration tests |
@@ -106,6 +110,89 @@ Useful environment overrides:
 | `FB_CERT_DIR` | `certs` | Certificate directory |
 | `FB_STATIC_DIR` | `packages/client/dist` | Built client directory |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
+
+## Milestone 6 scope
+
+Implemented:
+
+- `packages/data-tools`: strict CSV ingestion, normalisation, cross-file
+  validation, generated JSON, deterministic name mutation and an audit report
+- `pnpm data:build` writes `data/leagues.json`, `teams.json`, `players.json`,
+  `nations.json`, `manifest.json`, placeholder SVG crests/kits/faces and
+  `reports/name-mutations.csv`
+- Zod schemas reject unknown fields, out-of-range ratings, duplicate squad
+  players, malformed sheets and inconsistent cross-file references; `realRef`
+  cannot leak into generated JSON
+- One **fake** sample league: three fictional clubs, 60 fictional players, five
+  fictional nations, clearly marked in every generated record and in
+  `data/input/sample/README.md`
+- Deterministic, ID-seeded name mutation using phonetic confusion, vowel
+  shifts, consonant-cluster tweaks and a small curated pun list; it preserves
+  the first name where possible, rejects source names/offensive candidates,
+  enforces pronounceability and global uniqueness, preserves diacritics,
+  supports `name_overrides.csv`, and logs every mutation
+- All-documented-formation role tables auto-build a starting XI, seven-player
+  bench with a backup keeper, reserves, captain and penalty/free-kick/corner
+  takers; the sample clubs use 4-3-3
+- Full imported attributes are retained in JSON; `mapPlayerAttributes` blends
+  related attributes into the compact simulation ratings, and
+  `createTeamFromData` creates a playable XI from a generated sheet
+- Optional `--rename-clubs` generates deterministic substitute club names and
+  regenerates their crests
+
+### Input CSV schema
+
+All CSV columns below are required unless marked optional. Pipe-separated lists
+use `|`. IDs are lowercase kebab-case. `real_ref` is build-time only and is
+never written to generated JSON.
+
+**`players.csv`**
+
+| Group | Columns |
+| --- | --- |
+| Identity | `player_id`, `real_name`, `real_ref`, `age`, `dob`, `nation_id`, `club_id`, `positions`, `preferred_position`, `overall`, `potential` |
+| Profile | `foot`, `height_cm`, `weight_kg`, `body_type`, `skill_moves`, `weak_foot`, `injury_proneness`, `kit_number`, `work_rate_att`, `work_rate_def`, `play_styles` |
+| Face ratings (may be empty) | `face_pac`, `face_sho`, `face_pas`, `face_dri`, `face_def`, `face_phy` |
+| Outfield attributes | `acceleration`, `sprint_speed`, `finishing`, `shot_power`, `long_shots`, `volleys`, `penalties`, `att_position`, `short_passing`, `vision`, `crossing`, `long_passing`, `fk_accuracy`, `curve`, `dribbling`, `agility`, `balance`, `reactions`, `ball_control`, `composure`, `interceptions`, `heading_accuracy`, `def_awareness`, `standing_tackle`, `sliding_tackle`, `jumping`, `stamina`, `strength`, `aggression` |
+| Goalkeeper attributes | `gk_diving`, `gk_handling`, `gk_kicking`, `gk_positioning`, `gk_reflexes`, `gk_speed` |
+
+Goalkeeper columns are required for players who list `GK` and must be empty for
+everyone else. `real_ref` may be empty. Face-rating cells may be empty; missing
+ratings are derived from the detailed attributes, while provided ratings are
+copied unchanged. Detailed stats are never rescaled.
+
+**`clubs.csv`**: `club_id`, `name`, `short`, `league_id`, `primary_color`,
+`secondary_color`, `third_color`, `goalkeeper_color`, `stadium`,
+`manager_name`, `formation`.
+
+**`leagues.csv`**: `league_id`, `country`, `name`, `tier`, `season`. Tier must
+be `1`; club IDs are derived from the clubs' `league_id`.
+
+**`nations.csv`**: `nation_id`, `name`, `short`, `primary_color`,
+`secondary_color`, `third_color`, `goalkeeper_color`. M6 derives national
+squads from the player nation IDs; M9 replaces this with the supplied call-up
+registry.
+
+**`name_overrides.csv`**: `player_id`, `override_name` (optional file, required
+header when present).
+
+**`dataset.json`**: `{ "sample": boolean, "label": string, "description"?: string }`.
+When `sample` is true, every generated league, team, player and nation is
+marked `sample: true`.
+
+Build options:
+
+```bash
+pnpm data:build -- --input data/input/sample --out data --reference-date 2026-07-01
+pnpm data:build -- --no-assets --rename-clubs
+pnpm data:validate -- --data data
+```
+
+Known M6 boundary: the data builder generates every documented formation name;
+the simulation/team factory consumes **4-3-3** until M7 adds the editor
+geometries for the others. The full attribute-to-sim map covers the
+movement/contact ratings used today; passing/shooting/AI consumption follows in
+M8.
 
 ## Milestone 5 scope
 
@@ -184,13 +271,18 @@ Implemented:
 Not implemented yet (by milestone design):
 
 - Substitutions, added time, the "next natural pause" half-end law, injuries,
-  extra time and penalty shootouts (M6/M10)
+  extra time and penalty shootouts (M10)
 - VAR-lite, competitions, suspensions carried across matches and referee
   strictness exposed in the lobby UI (the sim API accepts it)
 - Skill moves, charged/driven passes, first-time pass modifiers, manual pause
   and controller vibration
 - Gamepad rebinding; only the standard mapping is wired
-- Real data pipeline, club/nation selection, team editor, tactics (M6/M7/M9)
+- Club/nation selection, team editor and tactics (M7/M9); M6 produces and
+  validates the registry/sample league but no selection screen consumes it yet
+- Real CSV registry and national call-ups (M9); M6 ships only clearly marked
+  fake sample data
+- Sim team factory intake for formations other than 4-3-3 (M7; the data
+  pipeline already generates all documented formations)
 - M8 AI layers, difficulty, set-piece routines beyond the defensive wall
 - Three.js, animation, replays, audio (M11)
 - Local prediction/reconciliation; controls feel the RTT on a LAN
@@ -248,9 +340,24 @@ referee clock/half-time/full-time transitions, deterministic headless match
 soak, human pass/shot/tackle, room lifecycle, snapshot streaming and acks,
 transport token resume/replacement, binary handler forwarding, client
 interpolation, HTTP/TLS/static serving, and server/client reconnect
-pause/resume.
+pause/resume. M6 adds CSV quoting/header errors, deterministic mutation
+strategies/overrides/uniqueness/diacritics, normalisation and stat-copy checks,
+sheet construction, schema/cross-file rejection, asset/report generation,
+byte-deterministic rebuilds, fuzzy club renaming, and sim attribute/team mapping.
 
-The two-minute check:
+The two-minute data check:
+
+```bash
+pnpm data:build
+pnpm data:validate
+pnpm data:preview
+```
+
+Expect one league, three teams, 60 players, five nations, 72 generated SVG
+assets and 60 audit rows; every record must report the sample marker. The
+preview must print a `Kingsport United` 4-3-3 XI with mapped sim ratings.
+
+The two-minute match check:
 
 1. `pnpm certs`, `pnpm build`, `pnpm start`.
 2. Open the printed LAN URL on the host; trust the certificate.
@@ -279,18 +386,21 @@ The two-minute check:
 10. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 11. Guest **Leave**: host returns to the room lobby with the code intact.
-12. `pnpm check`: expect 30 test files and 380+ tests passing.
+12. `pnpm check`: expect 36 test files and 413 tests passing.
 
 ## Layout
 
 ```text
-packages/shared      math, RNG, tuning, protocol messages, input/snapshot codecs
-packages/sim         pure fixed-step football simulation and human actions
+packages/shared      math, RNG, tuning, data contracts, protocol, input/snapshot codecs
+packages/sim         pure fixed-step football simulation, data mapping and human actions
+packages/data-tools  CSV ingest, normalise, validate, name mutation, sheets, assets
 packages/server      HTTPS/WSS, sessions, rooms, input routing, match runner, QR
 packages/client      LAN lobby, match client/interpolation, 2D renderer
   ├── controller     phone controller page (virtual stick + action buttons)
   ├── practice.html  offline M1 simulation
   └── link.html      M0 transport diagnostics
+data                 generated JSON registry, placeholder assets and reports
+  └── input/sample   clearly marked fake 3-club sample CSV
 scripts              mkcert setup
 certs                generated locally; ignored by git
 ```

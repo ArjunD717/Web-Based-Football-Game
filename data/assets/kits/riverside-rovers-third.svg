@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" role="img" aria-label="Riverside Rovers placeholder shirt">
+  <path d="M34 18 48 10c5 7 19 7 24 0l14 8 22 17-15 21-11-8v72H38V48l-11 8L12 35Z" fill="#2d6a4f" stroke="#c0392b" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M48 10c5 7 19 7 24 0" fill="none" stroke="#2d6a4f" stroke-width="5"/>
+  <text x="60" y="94" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="700" fill="#c0392b">RVR</text>
+</svg>

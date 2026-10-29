@@ -1,0 +1,383 @@
+[
+  {
+    "id": "kingsport-united",
+    "name": "Kingsport United",
+    "short": "KPU",
+    "leagueId": "sample-league",
+    "colours": {
+      "home": "#f0a202",
+      "away": "#1b1b1b",
+      "third": "#2a9d8f",
+      "goalkeeper": "#e76f51"
+    },
+    "stadium": "Crown Field",
+    "managerName": "Orin Gale",
+    "crest": "assets/crests/kingsport-united.svg",
+    "kits": {
+      "home": "assets/kits/kingsport-united-home.svg",
+      "away": "assets/kits/kingsport-united-away.svg",
+      "third": "assets/kits/kingsport-united-third.svg"
+    },
+    "squad": [
+      "kpu-p01",
+      "kpu-p02",
+      "kpu-p03",
+      "kpu-p04",
+      "kpu-p05",
+      "kpu-p06",
+      "kpu-p07",
+      "kpu-p08",
+      "kpu-p09",
+      "kpu-p10",
+      "kpu-p11",
+      "kpu-p12",
+      "kpu-p13",
+      "kpu-p14",
+      "kpu-p15",
+      "kpu-p16",
+      "kpu-p17",
+      "kpu-p18",
+      "kpu-p19",
+      "kpu-p20"
+    ],
+    "defaultSheet": {
+      "formation": "4-3-3",
+      "startingXI": [
+        {
+          "slot": 0,
+          "role": "GK",
+          "playerId": "kpu-p03"
+        },
+        {
+          "slot": 1,
+          "role": "RB",
+          "playerId": "kpu-p04"
+        },
+        {
+          "slot": 2,
+          "role": "CB",
+          "playerId": "kpu-p08"
+        },
+        {
+          "slot": 3,
+          "role": "CB",
+          "playerId": "kpu-p06"
+        },
+        {
+          "slot": 4,
+          "role": "LB",
+          "playerId": "kpu-p07"
+        },
+        {
+          "slot": 5,
+          "role": "CDM",
+          "playerId": "kpu-p16"
+        },
+        {
+          "slot": 6,
+          "role": "CM",
+          "playerId": "kpu-p11"
+        },
+        {
+          "slot": 7,
+          "role": "CM",
+          "playerId": "kpu-p13"
+        },
+        {
+          "slot": 8,
+          "role": "RW",
+          "playerId": "kpu-p17"
+        },
+        {
+          "slot": 9,
+          "role": "ST",
+          "playerId": "kpu-p19"
+        },
+        {
+          "slot": 10,
+          "role": "LW",
+          "playerId": "kpu-p18"
+        }
+      ],
+      "bench": [
+        "kpu-p02",
+        "kpu-p12",
+        "kpu-p20",
+        "kpu-p15",
+        "kpu-p10",
+        "kpu-p14",
+        "kpu-p05"
+      ],
+      "reserves": [
+        "kpu-p01",
+        "kpu-p09"
+      ],
+      "captain": "kpu-p19",
+      "penaltyTaker": "kpu-p18",
+      "freeKickTaker": "kpu-p13",
+      "cornerLeft": "kpu-p13",
+      "cornerRight": "kpu-p13",
+      "tactics": {
+        "defensiveDepth": 50,
+        "width": 55,
+        "pressIntensity": "medium",
+        "buildUpStyle": "balanced"
+      }
+    },
+    "sample": true
+  },
+  {
+    "id": "northbridge-athletic",
+    "name": "Northbridge Athletic",
+    "short": "NBR",
+    "leagueId": "sample-league",
+    "colours": {
+      "home": "#1f4fd1",
+      "away": "#f2f5ff",
+      "third": "#ffd166",
+      "goalkeeper": "#f4c542"
+    },
+    "stadium": "Alder Park",
+    "managerName": "Morgan Vail",
+    "crest": "assets/crests/northbridge-athletic.svg",
+    "kits": {
+      "home": "assets/kits/northbridge-athletic-home.svg",
+      "away": "assets/kits/northbridge-athletic-away.svg",
+      "third": "assets/kits/northbridge-athletic-third.svg"
+    },
+    "squad": [
+      "nbr-p01",
+      "nbr-p02",
+      "nbr-p03",
+      "nbr-p04",
+      "nbr-p05",
+      "nbr-p06",
+      "nbr-p07",
+      "nbr-p08",
+      "nbr-p09",
+      "nbr-p10",
+      "nbr-p11",
+      "nbr-p12",
+      "nbr-p13",
+      "nbr-p14",
+      "nbr-p15",
+      "nbr-p16",
+      "nbr-p17",
+      "nbr-p18",
+      "nbr-p19",
+      "nbr-p20"
+    ],
+    "defaultSheet": {
+      "formation": "4-3-3",
+      "startingXI": [
+        {
+          "slot": 0,
+          "role": "GK",
+          "playerId": "nbr-p03"
+        },
+        {
+          "slot": 1,
+          "role": "RB",
+          "playerId": "nbr-p04"
+        },
+        {
+          "slot": 2,
+          "role": "CB",
+          "playerId": "nbr-p08"
+        },
+        {
+          "slot": 3,
+          "role": "CB",
+          "playerId": "nbr-p06"
+        },
+        {
+          "slot": 4,
+          "role": "LB",
+          "playerId": "nbr-p07"
+        },
+        {
+          "slot": 5,
+          "role": "CDM",
+          "playerId": "nbr-p16"
+        },
+        {
+          "slot": 6,
+          "role": "CM",
+          "playerId": "nbr-p11"
+        },
+        {
+          "slot": 7,
+          "role": "CM",
+          "playerId": "nbr-p13"
+        },
+        {
+          "slot": 8,
+          "role": "RW",
+          "playerId": "nbr-p17"
+        },
+        {
+          "slot": 9,
+          "role": "ST",
+          "playerId": "nbr-p19"
+        },
+        {
+          "slot": 10,
+          "role": "LW",
+          "playerId": "nbr-p18"
+        }
+      ],
+      "bench": [
+        "nbr-p02",
+        "nbr-p12",
+        "nbr-p20",
+        "nbr-p15",
+        "nbr-p10",
+        "nbr-p14",
+        "nbr-p05"
+      ],
+      "reserves": [
+        "nbr-p01",
+        "nbr-p09"
+      ],
+      "captain": "nbr-p19",
+      "penaltyTaker": "nbr-p17",
+      "freeKickTaker": "nbr-p11",
+      "cornerLeft": "nbr-p16",
+      "cornerRight": "nbr-p16",
+      "tactics": {
+        "defensiveDepth": 50,
+        "width": 55,
+        "pressIntensity": "medium",
+        "buildUpStyle": "balanced"
+      }
+    },
+    "sample": true
+  },
+  {
+    "id": "riverside-rovers",
+    "name": "Riverside Rovers",
+    "short": "RVR",
+    "leagueId": "sample-league",
+    "colours": {
+      "home": "#c0392b",
+      "away": "#fff1e6",
+      "third": "#2d6a4f",
+      "goalkeeper": "#f1c40f"
+    },
+    "stadium": "Millbank Ground",
+    "managerName": "Tessa Brook",
+    "crest": "assets/crests/riverside-rovers.svg",
+    "kits": {
+      "home": "assets/kits/riverside-rovers-home.svg",
+      "away": "assets/kits/riverside-rovers-away.svg",
+      "third": "assets/kits/riverside-rovers-third.svg"
+    },
+    "squad": [
+      "rvr-p01",
+      "rvr-p02",
+      "rvr-p03",
+      "rvr-p04",
+      "rvr-p05",
+      "rvr-p06",
+      "rvr-p07",
+      "rvr-p08",
+      "rvr-p09",
+      "rvr-p10",
+      "rvr-p11",
+      "rvr-p12",
+      "rvr-p13",
+      "rvr-p14",
+      "rvr-p15",
+      "rvr-p16",
+      "rvr-p17",
+      "rvr-p18",
+      "rvr-p19",
+      "rvr-p20"
+    ],
+    "defaultSheet": {
+      "formation": "4-3-3",
+      "startingXI": [
+        {
+          "slot": 0,
+          "role": "GK",
+          "playerId": "rvr-p03"
+        },
+        {
+          "slot": 1,
+          "role": "RB",
+          "playerId": "rvr-p04"
+        },
+        {
+          "slot": 2,
+          "role": "CB",
+          "playerId": "rvr-p08"
+        },
+        {
+          "slot": 3,
+          "role": "CB",
+          "playerId": "rvr-p06"
+        },
+        {
+          "slot": 4,
+          "role": "LB",
+          "playerId": "rvr-p07"
+        },
+        {
+          "slot": 5,
+          "role": "CDM",
+          "playerId": "rvr-p16"
+        },
+        {
+          "slot": 6,
+          "role": "CM",
+          "playerId": "rvr-p11"
+        },
+        {
+          "slot": 7,
+          "role": "CM",
+          "playerId": "rvr-p13"
+        },
+        {
+          "slot": 8,
+          "role": "RW",
+          "playerId": "rvr-p17"
+        },
+        {
+          "slot": 9,
+          "role": "ST",
+          "playerId": "rvr-p19"
+        },
+        {
+          "slot": 10,
+          "role": "LW",
+          "playerId": "rvr-p18"
+        }
+      ],
+      "bench": [
+        "rvr-p02",
+        "rvr-p12",
+        "rvr-p20",
+        "rvr-p15",
+        "rvr-p10",
+        "rvr-p14",
+        "rvr-p05"
+      ],
+      "reserves": [
+        "rvr-p01",
+        "rvr-p09"
+      ],
+      "captain": "rvr-p19",
+      "penaltyTaker": "rvr-p18",
+      "freeKickTaker": "rvr-p13",
+      "cornerLeft": "rvr-p13",
+      "cornerRight": "rvr-p13",
+      "tactics": {
+        "defensiveDepth": 50,
+        "width": 55,
+        "pressIntensity": "medium",
+        "buildUpStyle": "balanced"
+      }
+    },
+    "sample": true
+  }
+]

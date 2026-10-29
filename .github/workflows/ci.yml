@@ -39,5 +39,8 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Validate generated data
+        run: pnpm data:validate
+
       - name: Build client
         run: pnpm build

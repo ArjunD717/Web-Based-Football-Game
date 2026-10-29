@@ -1,0 +1,25 @@
+{
+  "dataset": "FAKE SAMPLE DATA — Sampleland Premier Division",
+  "description": "Three fictional clubs and 60 fictional players generated solely for pipeline testing. Not real football data.",
+  "sample": true,
+  "referenceDate": "2026-07-01",
+  "counts": {
+    "leagues": 1,
+    "teams": 3,
+    "players": 60,
+    "nations": 5,
+    "faceStatsDerived": 60
+  },
+  "strategies": {
+    "cluster": 11,
+    "phonetic": 25,
+    "vowel": 22,
+    "override": 2
+  },
+  "renameClubs": false,
+  "assets": {
+    "crests": 3,
+    "kits": 9,
+    "faces": 60
+  }
+}

@@ -46,6 +46,25 @@ importers:
         specifier: 6.1.0
         version: 6.1.0(@types/node@20.17.16)(tsx@4.19.2)
 
+  packages/data-tools:
+    dependencies:
+      '@fb/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@fb/sim':
+        specifier: workspace:*
+        version: link:../sim
+      zod:
+        specifier: 3.24.2
+        version: 3.24.2
+    devDependencies:
+      '@types/node':
+        specifier: 20.17.16
+        version: 20.17.16
+      tsx:
+        specifier: 4.19.2
+        version: 4.19.2
+
   packages/server:
     dependencies:
       '@fb/shared':
@@ -1244,6 +1263,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zod@3.24.2:
+    resolution: {integrity: sha512-lY7CDW43ECgW9u1TcT3IoXHflywfVqDYze4waEz812jR/bZ8FHDsl7pFQoSZTz5N+2NqRXs8GBwnAwo3ZNxqhQ==}
+
 snapshots:
 
   '@esbuild/aix-ppc64@0.23.1':
@@ -2261,3 +2283,5 @@ snapshots:
   ws@8.18.0: {}
 
   yocto-queue@0.1.0: {}
+
+  zod@3.24.2: {}

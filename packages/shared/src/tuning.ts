@@ -320,6 +320,71 @@ export const TUNING = {
     /** HUD refresh cadence, Hz. */
     hudUpdateHz: 10,
   },
+  data: {
+    /**
+     * Weights for deriving the six public face ratings from detailed
+     * attributes. Each row sums to 1; ratings are rounded and clamped 1..99.
+     */
+    faceStats: {
+      PAC: { sprintSpeed: 0.55, acceleration: 0.35, reactions: 0.1 },
+      SHO: {
+        finishing: 0.4,
+        shotPower: 0.25,
+        longShots: 0.2,
+        volleys: 0.1,
+        penalties: 0.05,
+      },
+      PAS: {
+        shortPassing: 0.3,
+        vision: 0.2,
+        crossing: 0.2,
+        longPassing: 0.15,
+        fkAccuracy: 0.1,
+        curve: 0.05,
+      },
+      DRI: {
+        dribbling: 0.3,
+        ballControl: 0.2,
+        agility: 0.15,
+        balance: 0.15,
+        reactions: 0.1,
+        composure: 0.1,
+      },
+      DEF: {
+        interceptions: 0.3,
+        headingAccuracy: 0.2,
+        defAwareness: 0.25,
+        standingTackle: 0.15,
+        slidingTackle: 0.1,
+      },
+      PHY: {
+        jumping: 0.3,
+        stamina: 0.3,
+        strength: 0.25,
+        aggression: 0.15,
+      },
+    },
+    /**
+     * Detailed attributes are blended into the compact simulation ratings so
+     * related skills still move the same physical model. Each row sums to 1.
+     */
+    simAttributes: {
+      acceleration: { acceleration: 0.8, sprintSpeed: 0.2 },
+      agility: { agility: 0.65, balance: 0.2, reactions: 0.15 },
+      ballControl: { ballControl: 0.6, dribbling: 0.25, composure: 0.15 },
+      standingTackle: {
+        standingTackle: 0.7,
+        defAwareness: 0.2,
+        interceptions: 0.1,
+      },
+      slidingTackle: {
+        slidingTackle: 0.7,
+        defAwareness: 0.2,
+        interceptions: 0.1,
+      },
+      balance: { balance: 0.7, strength: 0.2, agility: 0.1 },
+    },
+  },
 } as const;
 
 export type Tuning = typeof TUNING;

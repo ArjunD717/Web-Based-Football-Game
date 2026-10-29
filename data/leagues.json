@@ -1,0 +1,15 @@
+[
+  {
+    "id": "sample-league",
+    "country": "Sampleland",
+    "name": "Sampleland Premier Division",
+    "tier": 1,
+    "clubIds": [
+      "kingsport-united",
+      "northbridge-athletic",
+      "riverside-rovers"
+    ],
+    "season": "2026/27",
+    "sample": true
+  }
+]

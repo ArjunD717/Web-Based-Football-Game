@@ -1,5 +1,7 @@
 // packages/sim/src/index.ts
 export * from "./control/actions";
+export * from "./data/attributes";
+export * from "./data/team";
 export * from "./formations";
 export * from "./hash";
 export * from "./match";

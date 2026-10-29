@@ -1,0 +1,137 @@
+[
+  {
+    "id": "eastmark",
+    "name": "Eastmark",
+    "short": "EST",
+    "colours": {
+      "home": "#7c3aed",
+      "away": "#ede9fe",
+      "third": "#16a34a",
+      "goalkeeper": "#bbf7d0"
+    },
+    "squad": [
+      "kpu-p19",
+      "nbr-p19",
+      "rvr-p19",
+      "kpu-p04",
+      "kpu-p14",
+      "nbr-p04",
+      "nbr-p14",
+      "rvr-p04",
+      "rvr-p14",
+      "kpu-p09",
+      "nbr-p09",
+      "rvr-p09"
+    ],
+    "reserves": [],
+    "sample": true
+  },
+  {
+    "id": "northland",
+    "name": "Northland",
+    "short": "NTH",
+    "colours": {
+      "home": "#0f766e",
+      "away": "#ccfbf1",
+      "third": "#f59e0b",
+      "goalkeeper": "#fde68a"
+    },
+    "squad": [
+      "kpu-p12",
+      "nbr-p12",
+      "rvr-p12",
+      "kpu-p17",
+      "nbr-p17",
+      "rvr-p17",
+      "kpu-p07",
+      "nbr-p07",
+      "rvr-p07",
+      "kpu-p02",
+      "nbr-p02",
+      "rvr-p02"
+    ],
+    "reserves": [],
+    "sample": true
+  },
+  {
+    "id": "sampleland",
+    "name": "Sampleland",
+    "short": "SMP",
+    "colours": {
+      "home": "#2f6bff",
+      "away": "#dce7ff",
+      "third": "#f2c94c",
+      "goalkeeper": "#9be564"
+    },
+    "squad": [
+      "kpu-p11",
+      "kpu-p16",
+      "nbr-p11",
+      "nbr-p16",
+      "rvr-p11",
+      "rvr-p16",
+      "kpu-p06",
+      "nbr-p06",
+      "rvr-p06",
+      "kpu-p01",
+      "nbr-p01",
+      "rvr-p01"
+    ],
+    "reserves": [],
+    "sample": true
+  },
+  {
+    "id": "southland",
+    "name": "Southland",
+    "short": "STH",
+    "colours": {
+      "home": "#9d174d",
+      "away": "#fce7f3",
+      "third": "#2563eb",
+      "goalkeeper": "#bfdbfe"
+    },
+    "squad": [
+      "kpu-p18",
+      "nbr-p18",
+      "rvr-p18",
+      "kpu-p08",
+      "nbr-p08",
+      "rvr-p08",
+      "kpu-p13",
+      "nbr-p13",
+      "rvr-p13",
+      "kpu-p03",
+      "nbr-p03",
+      "rvr-p03"
+    ],
+    "reserves": [],
+    "sample": true
+  },
+  {
+    "id": "westvale",
+    "name": "Westvale",
+    "short": "WST",
+    "colours": {
+      "home": "#b45309",
+      "away": "#fef3c7",
+      "third": "#0369a1",
+      "goalkeeper": "#bae6fd"
+    },
+    "squad": [
+      "kpu-p20",
+      "nbr-p20",
+      "rvr-p20",
+      "kpu-p15",
+      "nbr-p15",
+      "rvr-p15",
+      "kpu-p10",
+      "nbr-p10",
+      "rvr-p10",
+      "kpu-p05",
+      "nbr-p05",
+      "rvr-p05"
+    ],
+    "reserves": [],
+    "sample": true
+  }
+]

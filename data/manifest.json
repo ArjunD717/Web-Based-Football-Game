@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "sample": true,
+  "leagues": 1,
+  "teams": 3,
+  "players": 60,
+  "nations": 5,
+  "leagueIds": [
+    "sample-league"
+  ],
+  "teamIds": [
+    "kingsport-united",
+    "northbridge-athletic",
+    "riverside-rovers"
+  ]
+}
