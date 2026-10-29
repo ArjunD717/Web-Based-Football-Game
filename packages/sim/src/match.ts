@@ -1,10 +1,12 @@
 // packages/sim/src/match.ts
 import { TUNING, type PlayerData, type TeamData, type TeamSheet } from "@fb/shared";
-import { updatePlaceholderAi } from "./ai/brain";
+import { updateAi } from "./ai/brain";
 import { createPitch } from "./pitch";
 import { createPlaceholderTeam } from "./placeholder";
 import { createTeamFromData } from "./data/team";
+import { createTeamMatchStats, recordPossessionTick } from "./stats";
 import { stepBall } from "./physics/ball";
+import { resolveGoalkeeperSave } from "./physics/keeper";
 import {
   resolvePlayerCollisions,
   tickPlayerTimers,
@@ -129,6 +131,10 @@ function initialiseMatch(
     rules,
     home,
     away,
+    stats: {
+      home: createTeamMatchStats(),
+      away: createTeamMatchStats(),
+    },
     ball: {
       x: pitch.centreX,
       y: pitch.centreY,
@@ -143,6 +149,7 @@ function initialiseMatch(
     tick: 0,
     elapsedSeconds: 0,
     lastTouch: null,
+    offsidePassTargetId: null,
     referee: createReferee("home"),
   };
   startKickoff(state, "home", rules.kickoffDelaySeconds);
@@ -166,7 +173,8 @@ export function stepMatch(state: MatchState): MatchState {
   tickPlayerTimers(state.home.players, dt);
   tickPlayerTimers(state.away.players, dt);
 
-  updatePlaceholderAi(state);
+  updateAi(state);
+  recordPossessionTick(state);
 
   updateTeamMovement(state.home, state.pitch, dt);
   updateTeamMovement(state.away, state.pitch, dt);
@@ -189,6 +197,7 @@ export function stepMatch(state: MatchState): MatchState {
     }
   }
 
+  resolveGoalkeeperSave(state);
   evaluateBoundary(state);
   return state;
 }

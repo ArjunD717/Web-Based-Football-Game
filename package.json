@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Private LAN football game. M6: data pipeline, schemas, name mutation and attribute mapping.",
+  "description": "Private LAN football game. M8: layered AI, difficulty, set pieces and soak-tuned match averages.",
   "packageManager": "pnpm@10.18.3",
   "engines": {
     "node": ">=20.19.0",
@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r --if-present typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "test:soak": "pnpm --filter @fb/sim soak 1000"
   },
   "devDependencies": {
     "@eslint/js": "9.19.0",

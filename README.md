@@ -2,10 +2,10 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 7**:
-server-authoritative matches, a live two-player team editor with every supported
-formation, squad/bench/reserve management, tactics and set-piece takers, plus the
-referee laws and data pipeline delivered earlier.
+both devices are thin clients. This repository is at **Milestone 8**:
+server-authoritative matches, a live two-player team editor, the referee laws,
+the data pipeline and a layered, attribute-driven AI with tactics, difficulty
+profiles, set-piece routines and soak-tuned match averages.
 
 ## Requirements
 
@@ -99,6 +99,7 @@ pnpm preview
 | `pnpm lint` | ESLint flat config, type-aware |
 | `pnpm typecheck` | Root + every workspace package |
 | `pnpm test` | Vitest unit/integration tests |
+| `pnpm test:soak` | 1,000 headless AI-vs-AI matches; fails if averages miss targets |
 | `pnpm check` | Lint + typecheck + tests |
 
 Useful environment overrides:
@@ -112,6 +113,68 @@ Useful environment overrides:
 | `FB_STATIC_DIR` | `packages/client/dist` | Built client directory |
 | `FB_DATA_DIR` | `data` | Generated public football data |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
+
+## Milestone 8 scope
+
+Implemented:
+
+- The simulation now consumes the authored attributes used by movement,
+  contact, passing, shooting, aerial ability, goalkeeping and role familiarity;
+  detailed ratings are no longer reduced to a movement-only subset. Skill
+  moves, weak foot, work rates, body type and PlayStyles remain in the data for
+  later skill/animation work
+- Four AI layers run inside the fixed tick: a team tactical plan (phase,
+  defensive line, compactness, press triggers, support/runners/overlap), role
+  templates for all 13 positions, weighted individual decisions
+  (pass/dribble/shoot/clear) and steering (seek, arrive, intercept, separate,
+  goal-side marking)
+- Formations and authored tactics feed positioning: defensive depth, width,
+  press intensity and build-up style change line height, lateral spread, second
+  presser triggers and pass selection; the offside line is the second-last
+  defender, never behind the ball
+- Passing scores lane clearance, openness, forward progress, danger, pressure,
+  offside risk and build-up style. Through balls lead the runner; a seeded
+  mistimed through-ball share deliberately tests the offside law
+- Shooting scores range, angle, pressure, finishing, shot power and long shots;
+  clearances are only considered in the defensive third; goalkeepers distribute
+  instead of taking outfield decisions
+- Set-piece routines include defensive walls, near/far-post corner runners,
+  free-kick runners, penalty taker/keeper/encroachment holds, throw-ins, goal
+  kicks and corner delivery
+- Goalkeepers claim loose balls in the area, sweep outside it when the ball is
+  loose and they are closer than any opponent, narrow the angle, and hold the
+  penalty line
+- Five difficulty profiles (`beginner`, `amateur`, `professional`,
+  `worldClass`, `legendary`) scale reaction cadence, decision noise, pass and
+  shot error, pressing aggression, tackle bias and through-ball intent
+- Every match accumulates deterministic stats (goals, shots, shots on target,
+  fouls, offsides, cards, saves, possession); no `Date.now()` or `Math.random()`
+  entered the sim
+- `pnpm test:soak` runs 1,000 headless AI-vs-AI matches and fails when the
+  deterministic averages leave the brief's bands: 2.5-3.0 goals, 8-14 shots per
+  team, 10-12 fouls per team, 2-4 offsides per team and 1.5-2.0 yellows
+- Unit tests cover role/difficulty profiles, reaction gating, attack/defence/
+  loose-ball plans, tactic influence, set-piece holds and runner targets,
+  goalkeeper sweeping, deterministic on-ball actions and stat accounting
+
+Known M8 limitations (by design):
+
+- There is no separate cross/driven-pass decision yet; long passes already use
+  lift, curve and long-passing accuracy, but dedicated crossing routines are
+  future work
+- Skill moves, weak-foot selection, work rates, PlayStyles and body-type
+  hitboxes are retained in the data but do not yet drive AI tendencies or
+  animation
+- The five difficulty profiles are accepted by the match API but are not yet
+  exposed as a lobby selector
+- Set-piece routines are positional AI, not authored plays; the user cannot yet
+  resize the defensive wall in-match
+- Substitutions, injuries, added time, extra time, shootouts and VAR remain
+  M10/M11 work; AI teams use the starting XI only
+- AI is server-authoritative and runs without local prediction; client
+  reconciliation remains a later feature flag
+- Offside active involvement is modelled with a 2.1 m ball proximity plus a
+  challenge radius; the visual assistant-referee presentation comes later
 
 ## Milestone 7 scope
 
@@ -166,7 +229,7 @@ Known M7 limitations (by design):
   the draft bench/reserves are validated now but only the starting XI enters the
   simulation
 - Tactics and set-piece taker choices are stored and synced authoritatively;
-  their AI/gameplay influence lands with the M8 tactical brain
+  their AI/gameplay influence is implemented in the M8 tactical brain
 - Formation shapes are fixed by the chosen preset; free-form slot dragging and
   custom formations are not part of M7
 - Local prediction, match history and persistent career saves still wait for
@@ -252,8 +315,8 @@ pnpm data:validate -- --data data
 M7 note: the data builder, editor and simulation now consume the same geometry
 for every documented formation name; the M6 pipeline already generated all of
 them. The full attribute-to-sim map covers the
-movement/contact ratings used today; passing/shooting/AI consumption follows in
-M8.
+movement/contact ratings used today; passing/shooting/AI consumption was
+completed in M8.
 
 ## Milestone 5 scope
 
@@ -341,7 +404,6 @@ Not implemented yet (by milestone design):
 - National-team selection and call-ups (M9); M7 consumes the club registry
 - Real CSV registry and national call-ups (M9); M6 ships only clearly marked
   fake sample data
-- M8 AI layers, difficulty, set-piece routines beyond the defensive wall
 - Three.js, animation, replays, audio (M11)
 - Local prediction/reconciliation; controls feel the RTT on a LAN
 - Authentication. The server is intended for a trusted private LAN only.

@@ -1,9 +1,20 @@
 // packages/sim/src/types.ts
 
-import type { PlayerStateName } from "@fb/shared";
+import type {
+  GoalkeeperAttributes,
+  PlayerStateName,
+  TeamTactics,
+} from "@fb/shared";
 export type { PlayerStateName } from "@fb/shared";
 
 export type TeamSide = "home" | "away";
+
+export type AiDifficulty =
+  | "beginner"
+  | "amateur"
+  | "professional"
+  | "worldClass"
+  | "legendary";
 
 /** +1 attacks toward increasing x; -1 toward decreasing x. */
 export type AttackDirection = 1 | -1;
@@ -25,7 +36,11 @@ export type PlayerRole =
 
 /** Mirrors the state vocabulary the renderer and referee will share. */
 
-/** Placeholder M1 ratings; the full FC attribute set arrives with data import. */
+/**
+ * Ratings consumed by the simulation. Physical and contact values are blended
+ * where one movement/contact model needs several source attributes; tactical
+ * ratings stay one-to-one so decisions can read the authored value directly.
+ */
 export interface PlayerAttributes {
   readonly sprintSpeed: number;
   readonly acceleration: number;
@@ -37,6 +52,26 @@ export interface PlayerAttributes {
   readonly aggression: number;
   readonly balance: number;
   readonly strength: number;
+  readonly finishing: number;
+  readonly shotPower: number;
+  readonly longShots: number;
+  readonly attPosition: number;
+  readonly shortPassing: number;
+  readonly vision: number;
+  readonly crossing: number;
+  readonly longPassing: number;
+  readonly curve: number;
+  readonly dribbling: number;
+  readonly reactions: number;
+  readonly composure: number;
+  readonly interceptions: number;
+  readonly headingAccuracy: number;
+  readonly defAwareness: number;
+  readonly jumping: number;
+  readonly skillMoves: number;
+  readonly weakFoot: number;
+  /** Present only for players authored as goalkeepers. */
+  readonly goalkeeper: GoalkeeperAttributes | null;
 }
 
 export interface PlayerState {
@@ -45,6 +80,8 @@ export interface PlayerState {
   readonly role: PlayerRole;
   readonly number: number;
   readonly attributes: PlayerAttributes;
+  /** 0..1 multiplier for technical decisions from the authored position fit. */
+  readonly roleFamiliarity: number;
   /** Normalized formation slot, x from own goal (0) to opponent goal (1). */
   readonly formationX: number;
   readonly formationY: number;
@@ -90,11 +127,22 @@ export interface Formation {
   readonly slots: readonly FormationSlot[];
 }
 
+/** Simulation IDs of the authored set-piece takers; null when not authored. */
+export interface TeamSetPieceTakers {
+  readonly penalty: string | null;
+  readonly freeKick: string | null;
+  readonly cornerLeft: string | null;
+  readonly cornerRight: string | null;
+}
+
 export interface TeamState {
   readonly side: TeamSide;
   readonly name: string;
   readonly colors: TeamColors;
   readonly formation: Formation;
+  /** Authored team instructions; all values are validated 0..100 or enums. */
+  readonly tactics: TeamTactics;
+  readonly takers: TeamSetPieceTakers;
   /** Flipped at half-time when the teams change ends. */
   attackDirection: AttackDirection;
   readonly players: PlayerState[];
@@ -167,6 +215,27 @@ export interface MatchRules {
   readonly gameSecondsPerHalf: number;
   /** Referee tolerance used by the tackle severity model. */
   readonly strictness: FoulStrictness;
+  /** Behaviour profile used by every non-user-controlled player. */
+  readonly aiDifficulty: AiDifficulty;
+}
+
+/** Cumulative, per-team match facts used by soak tests and the HUD. */
+export interface TeamMatchStats {
+  goals: number;
+  shots: number;
+  shotsOnTarget: number;
+  fouls: number;
+  offsides: number;
+  yellowCards: number;
+  redCards: number;
+  saves: number;
+  /** Simulation ticks in which this team was the nearest team to the ball. */
+  possessionTicks: number;
+}
+
+export interface MatchStats {
+  readonly home: TeamMatchStats;
+  readonly away: TeamMatchStats;
 }
 
 export interface RestartState {
@@ -287,10 +356,13 @@ export interface MatchState {
   readonly rules: MatchRules;
   readonly home: TeamState;
   readonly away: TeamState;
+  readonly stats: MatchStats;
   readonly ball: BallState;
   tick: number;
   elapsedSeconds: number;
   lastTouch: LastTouch | null;
+  /** Receiver of a deliberately played offside run, cleared on any touch. */
+  offsidePassTargetId: string | null;
   referee: RefereeState;
 }
 

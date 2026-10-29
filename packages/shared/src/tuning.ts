@@ -168,8 +168,11 @@ export const TUNING = {
     shapeShiftXFactor: 0.22,
     shapeShiftYFactor: 0.16,
     anchorGoalMarginM: 4,
-    supportSpeedFactor: 0.55,
+    supportSpeedFactor: 0.82,
     chaserSpeedFactor: 1,
+    receiverSpeedFactor: 0.98,
+    receiverProjectionSeconds: 1,
+    receiverMaxDistanceM: 30,
     keeperSpeedFactor: 0.75,
     keeperLineOffsetM: 0.5,
     keeperMaxAdvanceM: 14,
@@ -185,7 +188,7 @@ export const TUNING = {
     shotBackspinRadPerS: 28,
     shotCurveSpinRadPerS: 30,
     passCurveSpinRadPerS: 7.5,
-    dribbleTouchSpeedMps: 4.5,
+    dribbleTouchSpeedMps: 6.2,
     dribbleVelocityTransfer: 0.6,
     dribbleCooldownSeconds: 0.35,
     /** Nearest opponent this close to the ball triggers an evasive touch. */
@@ -201,14 +204,248 @@ export const TUNING = {
     passLeadSeconds: 0.25,
     pressDistanceM: 3,
     /** Per-decision chance to commit to a tackle when an opponent has the ball. */
-    tackleChance: 0.4,
+    tackleChance: 0.75,
+    /** Share of AI challenges that commit to a slide rather than a stand tackle. */
+    slideTackleChance: 0.02,
+    /** Reduced willingness to challenge a carrier from behind (dangerous). */
+    behindTackleChance: 0.05,
     /** Retry delay after declining a tackle, seconds. */
-    tackleDecisionCooldownSeconds: 0.45,
+    tackleDecisionCooldownSeconds: 0.2,
     /** Above this ball speed a defender intercepts rather than tackles. */
     tackleMaxBallSpeedMps: 8,
     keeperClearPowerMps: 24,
     keeperClearLiftMps: 6,
     keeperClearSpreadM: 18,
+    /** A team owns the ball when its nearest player is this close to it. */
+    possessionRadiusM: 2.2,
+    /** Balls faster than this are loose even when a player is nearby. */
+    possessionMaxBallSpeedMps: 9,
+    /** Radius in which the closest defender is allowed to press the carrier. */
+    pressTriggerRadiusM: 18,
+    /** Second presser joins a high press inside this radius. */
+    pressSecondTriggerRadiusM: 10,
+    /** Loose-ball pursuit radius before a team drops into its block. */
+    looseBallPursuitRadiusM: 32,
+    /** Extra runners committed to a loose ball in the team's defensive half. */
+    looseBallSecondChaserM: 12,
+    /** Tactical line-height travel from a 0..100 defensive-depth setting. */
+    depthShiftM: 12,
+    /** Vertical width multiplier at a 0..100 width setting. */
+    widthSpread: 0.28,
+    /** Share of the tactical line shift applied to the back line. */
+    lineHeightWeight: 0.7,
+    /** Distance the defensive line may be dragged from its shape by the ball. */
+    lineBallInfluenceM: 18,
+    /** Baseline speed multiplier for the first presser. */
+    pressAggressionFactor: 1,
+    /** Speed multiplier for a runner attacking the last line. */
+    runnerSpeedFactor: 1,
+    /** Maximum distance a defender may be from its anchor while marking. */
+    markingRadiusM: 9,
+    /** Defenders sit this far goal-side of the attacker they mark. */
+    markGoalSideM: 1.4,
+    /** Cover defender depth behind the presser. */
+    coverDepthM: 5,
+    /** Minimum spacing between teammates' targets to avoid clumping. */
+    teammateSeparationM: 2.2,
+    /** Width of the central lane used by role anchors, metres. */
+    centralWidthM: 18,
+    /** Role-template values used by every formation shape. */
+    roles: {
+      GK: { attackShift: 0.01, defendShift: 0, runInBehind: 0, cover: 0 },
+      RB: { attackShift: 0.045, defendShift: -0.01, runInBehind: 0.42, cover: 0.2 },
+      CB: { attackShift: -0.015, defendShift: -0.025, runInBehind: 0.02, cover: 0.75 },
+      LB: { attackShift: 0.045, defendShift: -0.01, runInBehind: 0.42, cover: 0.2 },
+      CDM: { attackShift: -0.005, defendShift: -0.02, runInBehind: 0.12, cover: 0.95 },
+      CM: { attackShift: 0.025, defendShift: -0.015, runInBehind: 0.26, cover: 0.5 },
+      CAM: { attackShift: 0.06, defendShift: 0.005, runInBehind: 0.5, cover: 0.2 },
+      RM: { attackShift: 0.045, defendShift: -0.005, runInBehind: 0.5, cover: 0.25 },
+      LM: { attackShift: 0.045, defendShift: -0.005, runInBehind: 0.5, cover: 0.25 },
+      RW: { attackShift: 0.055, defendShift: 0, runInBehind: 0.72, cover: 0.15 },
+      LW: { attackShift: 0.055, defendShift: 0, runInBehind: 0.72, cover: 0.15 },
+      CF: { attackShift: 0.05, defendShift: 0.005, runInBehind: 0.62, cover: 0.1 },
+      ST: { attackShift: 0.04, defendShift: 0.01, runInBehind: 0.88, cover: 0.05 },
+    },
+    /** Attack support and off-ball movement. */
+    supportDistanceM: 11,
+    supportForwardM: 5,
+    supportBackwardM: 7,
+    supportLateralM: 8,
+    overlapRunM: 7,
+    thirdManRunM: 9,
+    channelRunM: 5,
+    runnerLeadM: 2.5,
+    /** Attacking runners may stray this far beyond the offside line. */
+    offsideRunToleranceM: 4,
+    /** Only deep/central carriers consider clearing. */
+    clearZoneDepthM: 30,
+    clearPressureM: 3,
+    /** Decision scores are normalised to this range before noise. */
+    decisionNoiseRange: 1,
+    /** Pass geometry. */
+    passShortRangeM: 25,
+    passLongRangeM: 45,
+    passThroughRangeM: 38,
+    passSpeedPerMetre: 1.05,
+    passMinSpeedMps: 8,
+    passMaxSpeedMps: 27,
+    throughPassSpeedPerMetre: 1.2,
+    crossLiftMps: 6.4,
+    crossSpeedPerMetre: 0.9,
+    passAimErrorDivisor: 1.6,
+    passMinFlightSeconds: 0.08,
+    passMaxFlightSeconds: 1.2,
+    /** Shots. */
+    shootMinRangeM: 7,
+    shootMaxRangeM: 34,
+    shootSweetRangeM: 16,
+    shootRangePenalty: 0.55,
+    shootPowerBaseMps: 19,
+    shootPowerRangeMps: 8,
+    shootLiftBaseMps: 2.6,
+    shootLiftRangeMps: 1.4,
+    shootAimInsetM: 0.45,
+    shotMaxAimOffsetM: 3.1,
+    shotSpreadDivisor: 1.8,
+    /** Relative weights for the on-ball decision scores. */
+    decision: {
+      shootBase: 0.2,
+      shootAccuracyWeight: 0.72,
+      shootDistanceFloor: 0.58,
+      shootAngleFloor: 0.55,
+      shootPressureWeight: 0.5,
+      shootCloseRangeM: 22,
+      shootCloseBonus: 0.1,
+      shootZoneRangeM: 30,
+      shootZoneBonus: 0.56,
+      passBase: 0.03,
+      passExecutionWeight: 0.14,
+      passLaneWeight: 0.06,
+      passOpenWeight: 0.06,
+      passForwardWeight: 0.36,
+      passDangerWeight: 0.24,
+      passStyleWeight: 0.06,
+      passPressureWeight: 0.04,
+      passBackwardPenalty: 0.18,
+      passLightBackwardPenalty: 0.07,
+      passLightBackwardM: 2,
+      passThroughBonus: 0.3,
+      passRiskWeight: 0.2,
+      dribbleBase: 0.08,
+      dribbleWeight: 0.35,
+      dribbleControlWeight: 0.15,
+      dribbleSpaceFloor: 0.4,
+      dribbleGoalWeight: 0.06,
+      dribblePressureWeight: 0.3,
+    },
+    /** Set-piece routines. */
+    cornerNearPostYOffsetM: 5.5,
+    cornerFarPostYOffsetM: 4,
+    cornerDeliveryLiftMps: 7.4,
+    cornerDeliverySpeedMps: 20,
+    cornerRunnerDepthM: 7,
+    freeKickDirectRangeM: 30,
+    freeKickWallAimInsetM: 0.4,
+    penaltyAimOffsetM: 2.6,
+    penaltyPowerMps: 24,
+    penaltyLiftMps: 1.2,
+    /** Goalkeeper sweeping and angle narrowing. */
+    keeperSweepTriggerM: 26,
+    keeperSweepMaxM: 22,
+    keeperAngleDepthM: 2.4,
+    keeperAngleDistanceFactor: 0.08,
+    keeperNearPostInsetM: 0.7,
+    keeperClaimRadiusM: 2.4,
+    keeperSweepSpeedFactor: 0.95,
+    keeperShotBlockDepthM: 1.4,
+    /** Explicit mistimed through-ball share per on-ball decision. */
+    offsideIntentChance: 0.14,
+    offsideIntentMaxBeyondM: 6,
+
+    offsideIntentLeadM: 0.5,
+    offsideIntentAccuracyFactor: 0.45,
+    /** Goalkeeper save window and catch/parry resolution. */
+    saveMinBallSpeedMps: 8,
+    saveMaxDistanceM: 6.5,
+    saveReachBaseM: 1.1,
+    saveReachRatingM: 1.6,
+    saveReactionSeconds: 0.28,
+    saveBaseChance: 0.4,
+    saveReflexWeight: 0.46,
+    savePositioningWeight: 0.18,
+    saveHandlingWeight: 0.1,
+    saveReachWeight: 0.25,
+    saveSpeedPenalty: 0.18,
+    saveReactionPenalty: 0.12,
+    saveMaxChance: 0.96,
+    saveCatchBase: 0.24,
+    saveCatchHandlingWeight: 0.52,
+    saveCatchSpeedPenalty: 0.3,
+    saveCatchMinChance: 0.08,
+    saveCatchMaxChance: 0.86,
+    saveCatchHoldSeconds: 0.72,
+    saveParrySpeedMps: 10,
+    saveParryLateralMps: 7,
+    saveParryLiftMps: 3,
+    saveParryRecoverSeconds: 0.42,
+    /** Difficulty profiles. Reaction is in simulation ticks. */
+    difficulty: {
+      beginner: {
+        reactionTicks: 24,
+        decisionNoise: 0.42,
+        passErrorM: 5.4,
+        shotAimErrorM: 6,
+        pressAggression: 0.55,
+        tackleBias: -0.12,
+        throughBias: 0.35,
+        offsideDiscipline: 0.35,
+        supportSpeedFactor: 0.86,
+      },
+      amateur: {
+        reactionTicks: 16,
+        decisionNoise: 0.3,
+        passErrorM: 4,
+        shotAimErrorM: 5,
+        pressAggression: 0.7,
+        tackleBias: -0.05,
+        throughBias: 0.65,
+        offsideDiscipline: 0.55,
+        supportSpeedFactor: 0.92,
+      },
+      professional: {
+        reactionTicks: 10,
+        decisionNoise: 0.2,
+        passErrorM: 2.8,
+        shotAimErrorM: 3.8,
+        pressAggression: 0.9,
+        tackleBias: 0,
+        throughBias: 1,
+        offsideDiscipline: 0.75,
+        supportSpeedFactor: 0.96,
+      },
+      worldClass: {
+        reactionTicks: 6,
+        decisionNoise: 0.12,
+        passErrorM: 1.9,
+        shotAimErrorM: 2.4,
+        pressAggression: 1.05,
+        tackleBias: 0.04,
+        throughBias: 1.15,
+        offsideDiscipline: 0.88,
+        supportSpeedFactor: 1,
+      },
+      legendary: {
+        reactionTicks: 3,
+        decisionNoise: 0.06,
+        passErrorM: 1.2,
+        shotAimErrorM: 1.8,
+        pressAggression: 1.18,
+        tackleBias: 0.08,
+        throughBias: 1.25,
+        offsideDiscipline: 0.96,
+        supportSpeedFactor: 1.03,
+      },
+    },
   },
   control: {
     /** No fresh input for this long means neutral controls, milliseconds. */
@@ -270,8 +507,25 @@ export const TUNING = {
     /** Severity removed when the tackler clearly wins the ball first. */
     foulBallFirstReduction: 0.3,
     foulThreshold: 0.46,
-    yellowThreshold: 0.72,
+    yellowThreshold: 0.76,
     redThreshold: 0.9,
+    /**
+     * A standing challenge from behind is usually careless/reckless rather
+     * than excessive force; only sliding or DOGSO contacts can exceed this.
+     */
+    standingBehindSeverityCap: 0.8,
+    /** Pressing duels: shoulder charges, pushes and holds. */
+    physicalDuelBaseSeverity: 0.2,
+    physicalDuelSpeedWeight: 0.2,
+    physicalDuelBehindWeight: 0.08,
+    physicalDuelForceWeight: 0.32,
+    physicalDuelAggressionWeight: 0.08,
+    physicalDuelBalanceWeight: 0.06,
+    /** Speed/force profile of an AI shoulder challenge, 0..1. */
+    physicalDuelForce: 0.42,
+    physicalDuelRangeM: 1.35,
+    physicalDuelChance: 0.2,
+    physicalDuelCooldownSeconds: 2.4,
     lenientOffset: -0.08,
     strictOffset: 0.08,
     /** Tackler-to-victim distance that can generate a contact event, metres. */
@@ -289,7 +543,7 @@ export const TUNING = {
     /** Victim fall duration after a foul, seconds. */
     fallSeconds: 1.2,
     /** Active offside involvement: touching or challenging near the ball. */
-    offsideInvolvementRadiusM: 0.9,
+    offsideInvolvementRadiusM: 2.1,
     offsideChallengeRadiusM: 1.2,
     offsideChallengeBallRadiusM: 5,
     /** Ball heights that can strike the hand/arm rather than the head. */

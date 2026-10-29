@@ -35,6 +35,16 @@ export interface FoulAssessment {
   readonly reason: "none" | "careless" | "reckless" | "excessive" | "dogso";
 }
 
+/** Shoulder-to-shoulder pushes/holds while pressing, separate from a tackle. */
+export interface PhysicalDuelContact {
+  readonly relativeSpeedMps: number;
+  readonly fromBehind: boolean;
+  readonly force01: number;
+  readonly aggression: number;
+  readonly victimBalance: number;
+  readonly dogso: boolean;
+}
+
 const RULES = TUNING.referee;
 
 export function assessTackle(
@@ -83,6 +93,14 @@ export function assessTackle(
         ? RULES.foulThreshold + RULES.foulSlideWeight
         : RULES.foulThreshold,
     );
+  } else if (
+    contact.fromBehind &&
+    !contact.sliding &&
+    !contact.dogso
+  ) {
+    // A standing clip from behind is a foul and usually a yellow, but it is
+    // not automatically excessive-force red. Sliding/DOGSO bypass this cap.
+    severity = Math.min(severity, RULES.standingBehindSeverityCap);
   }
 
   severity += strictnessOffset(strictness);
@@ -106,6 +124,48 @@ export function assessTackle(
           : "careless";
 
   return { severity, foul, card, reason };
+}
+
+/**
+ * Lower-force physical contact while pressing. It is deliberately separate
+ * from the tackle model: a nudge or hold can be a foul without a ball contact
+ * and should not inherit slide-tackle severity.
+ */
+export function assessPhysicalDuel(
+  contact: PhysicalDuelContact,
+  strictness: FoulStrictness,
+): FoulAssessment {
+  const speed = clamp(
+    contact.relativeSpeedMps / RULES.foulMaxRelativeSpeedMps,
+    0,
+    1,
+  );
+  const aggression = clamp(contact.aggression / 99, 0, 1);
+  const balance = clamp(contact.victimBalance / 99, 0, 1);
+  const force = clamp(contact.force01, 0, 1);
+  let severity =
+    RULES.physicalDuelBaseSeverity +
+    speed * RULES.physicalDuelSpeedWeight +
+    (contact.fromBehind ? RULES.physicalDuelBehindWeight : 0) +
+    force * RULES.physicalDuelForceWeight +
+    aggression * RULES.physicalDuelAggressionWeight +
+    (1 - balance) * RULES.physicalDuelBalanceWeight;
+  severity += strictnessOffset(strictness);
+  const foul = severity >= RULES.foulThreshold;
+  const red = foul && contact.dogso;
+  const yellow = foul && !red && severity >= RULES.yellowThreshold;
+  return {
+    severity,
+    foul,
+    card: red ? "red" : yellow ? "yellow" : null,
+    reason: !foul
+      ? "none"
+      : red
+        ? "dogso"
+        : yellow
+          ? "reckless"
+          : "careless",
+  };
 }
 
 export function tackleContactFromPlayers(

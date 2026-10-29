@@ -8,6 +8,11 @@ import {
 } from "../pitch";
 import type { BallContact } from "../physics/ball";
 import { eventRng } from "../random";
+import {
+  recordGoal,
+  recordShot,
+  statsFor,
+} from "../stats";
 import type {
   CardKind,
   MatchEvent,
@@ -23,9 +28,11 @@ import type {
   TeamSide,
 } from "../types";
 import {
+  assessPhysicalDuel,
   assessTackle,
   isDenyingGoalscoringOpportunity,
   tackleContactFromPlayers,
+  type FoulAssessment,
 } from "./fouls";
 import {
   assessHandball,
@@ -53,6 +60,7 @@ const DEFAULT_RULES: MatchRules = {
   kickoffDelaySeconds: TUNING.match.kickoffDelaySeconds,
   gameSecondsPerHalf: TUNING.match.gameMinutesPerHalf * 60,
   strictness: "standard",
+  aiDifficulty: "professional",
 };
 
 export function createMatchRules(
@@ -60,7 +68,7 @@ export function createMatchRules(
 ): MatchRules {
   const rules: MatchRules = { ...DEFAULT_RULES, ...overrides };
   for (const [key, value] of Object.entries(rules)) {
-    if (key === "strictness") {
+    if (key === "strictness" || key === "aiDifficulty") {
       continue;
     }
     if (!Number.isFinite(value) || value <= 0) {
@@ -73,6 +81,15 @@ export function createMatchRules(
     rules.strictness !== "strict"
   ) {
     throw new RangeError("invalid referee strictness");
+  }
+  if (
+    rules.aiDifficulty !== "beginner" &&
+    rules.aiDifficulty !== "amateur" &&
+    rules.aiDifficulty !== "professional" &&
+    rules.aiDifficulty !== "worldClass" &&
+    rules.aiDifficulty !== "legendary"
+  ) {
+    throw new RangeError("invalid AI difficulty");
   }
   return rules;
 }
@@ -314,7 +331,7 @@ export function evaluateBoundary(state: MatchState): void {
 export function beginKick(
   state: MatchState,
   player: PlayerState,
-  _kind: "pass" | "shot" | "clear" | "dribble",
+  kind: "pass" | "shot" | "clear" | "dribble",
 ): boolean {
   if (state.referee.phase !== "live" || player.sentOff) {
     return false;
@@ -380,7 +397,9 @@ export function beginKick(
     };
     captureOffside(state, player);
   }
-
+  if (kind === "shot") {
+    recordShot(state, player.team);
+  }
   return true;
 }
 
@@ -393,6 +412,7 @@ export function registerTouch(
   }
   const referee = state.referee;
   const player = findPlayer(state, contact.team, contact.playerId);
+  state.offsidePassTargetId = null;
 
   if (referee.offside !== null) {
     if (referee.offside.playerIds.includes(contact.playerId)) {
@@ -505,6 +525,47 @@ export function commitTackleFoul(
     dogso,
   );
   const assessment = assessTackle(contact, state.rules.strictness);
+  return applyFoulAssessment(state, tackler, victim, assessment);
+}
+
+/**
+ * A shoulder challenge while pressing. It uses the lower-force duel model so
+ * the AI can commit the pushing/holding fouls described by the laws without
+ * every contact becoming a tackle.
+ */
+export function commitPhysicalFoul(
+  state: MatchState,
+  offender: PlayerState,
+  victim: PlayerState,
+): boolean {
+  if (state.referee.phase !== "live") {
+    return false;
+  }
+  const dogso = isDenyingGoalscoringOpportunity(state, victim);
+  const contact = {
+    relativeSpeedMps: Math.hypot(
+      offender.vx - victim.vx,
+      offender.vy - victim.vy,
+    ),
+    fromBehind:
+      (offender.x - victim.x) * Math.cos(victim.facing) +
+        (offender.y - victim.y) * Math.sin(victim.facing) <
+      0,
+    force01: TUNING.referee.physicalDuelForce,
+    aggression: offender.attributes.aggression,
+    victimBalance: victim.attributes.balance,
+    dogso,
+  };
+  const assessment = assessPhysicalDuel(contact, state.rules.strictness);
+  return applyFoulAssessment(state, offender, victim, assessment);
+}
+
+function applyFoulAssessment(
+  state: MatchState,
+  offender: PlayerState,
+  victim: PlayerState,
+  assessment: FoulAssessment,
+): boolean {
   if (!assessment.foul) {
     return false;
   }
@@ -517,14 +578,14 @@ export function commitTackleFoul(
   emitEvent(
     state,
     "foul",
-    tackler.team,
-    tackler.id,
-    tackler.number,
+    offender.team,
+    offender.id,
+    offender.number,
   );
 
   const inPenaltyArea = isInsideOwnPenaltyArea(
     state.pitch,
-    tackler.team === "home"
+    offender.team === "home"
       ? state.home.attackDirection
       : state.away.attackDirection,
     victim.x,
@@ -533,8 +594,8 @@ export function commitTackleFoul(
   const restartType = inPenaltyArea ? "penalty" : "directFreeKick";
   const pending: PendingFoul = {
     side: victim.team,
-    offenderId: tackler.id,
-    offenderNumber: tackler.number,
+    offenderId: offender.id,
+    offenderNumber: offender.number,
     restartType,
     x: clamp(victim.x, 0, state.pitch.lengthM),
     y: clamp(victim.y, 0, state.pitch.widthM),
@@ -549,7 +610,7 @@ export function commitTackleFoul(
   ) {
     state.referee.pendingFoul = pending;
     if (assessment.card !== null) {
-      issueCard(state, tackler, assessment.card);
+      issueCard(state, offender, assessment.card);
     } else {
       emitEvent(state, "advantage", victim.team, victim.id, victim.number);
     }
@@ -559,7 +620,7 @@ export function commitTackleFoul(
     // penalty, while the event feed keeps the disciplinary outcome.
     restartFromPendingFoul(state, pending);
     if (assessment.card !== null) {
-      issueCard(state, tackler, assessment.card);
+      issueCard(state, offender, assessment.card);
     }
   }
   return true;
@@ -661,6 +722,9 @@ export function heldBySetPiece(
     if (setPiece.penalty.kicked) {
       return false;
     }
+    if (player.id === setPiece.penalty.goalkeeperId) {
+      return false;
+    }
     return player.id !== setPiece.penalty.takerId;
   }
   if (setPiece.firstTouchId !== null) {
@@ -691,6 +755,7 @@ function prepareRestart(
   };
   state.referee.offside = null;
   state.referee.pendingFoul = null;
+  state.offsidePassTargetId = null;
 }
 
 function applyGoal(
@@ -725,6 +790,10 @@ function applyGoal(
   } else {
     referee.scoreAway = Math.min(255, referee.scoreAway + 1);
   }
+  const ownGoal =
+    state.lastTouch !== null &&
+    state.lastTouch.team !== event.scoringSide;
+  recordGoal(state, event.scoringSide, ownGoal);
   startKickoff(
     state,
     event.scoringSide === "home" ? "away" : "home",
@@ -1051,6 +1120,24 @@ function emitEvent(
     playerNumber,
   };
   state.referee.lastEvent = event;
+
+  const stats = statsFor(state, side);
+  switch (type) {
+    case "foul":
+      stats.fouls += 1;
+      break;
+    case "offside":
+      stats.offsides += 1;
+      break;
+    case "yellowCard":
+      stats.yellowCards += 1;
+      break;
+    case "redCard":
+      stats.redCards += 1;
+      break;
+    default:
+      break;
+  }
 }
 
 function enterHalfTime(state: MatchState): void {
@@ -1087,6 +1174,7 @@ function clearTransient(state: MatchState): void {
   state.referee.setPiece = null;
   state.referee.offside = null;
   state.referee.pendingFoul = null;
+  state.offsidePassTargetId = null;
 }
 
 function freezeBall(state: MatchState): void {

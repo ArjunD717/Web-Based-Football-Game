@@ -1,5 +1,10 @@
 // packages/sim/src/placeholder.ts
-import { clamp, createRng, type Rng } from "@fb/shared";
+import {
+  clamp,
+  createDefaultTactics,
+  createRng,
+  type Rng,
+} from "@fb/shared";
 import {
   FORMATION_433,
   baseFormationPosition,
@@ -85,6 +90,13 @@ export function createPlaceholderTeam(
     name: setup.name ?? DEFAULT_NAMES[side],
     colors: setup.colors ?? DEFAULT_COLORS[side],
     formation,
+    tactics: createDefaultTactics(),
+    takers: {
+      penalty: null,
+      freeKick: null,
+      cornerLeft: null,
+      cornerRight: null,
+    },
     attackDirection: side === "home" ? 1 : -1,
     players,
   };
@@ -111,6 +123,7 @@ function createPlaceholderPlayer(args: CreatePlayerArgs): PlayerState {
     role: slot.role,
     number,
     attributes: createAttributes(rng, slot.role, base),
+    roleFamiliarity: 1,
     formationX: slot.x,
     formationY: slot.y,
     x: position.x,
@@ -138,22 +151,6 @@ function createAttributes(
 ): PlayerAttributes {
   const rating = (offset: number): number =>
     Math.round(clamp(base + offset + rng.int(-5, 6), 1, 99));
-
-  if (role === "GK") {
-    return {
-      sprintSpeed: rating(-12),
-      acceleration: rating(-7),
-      agility: rating(-4),
-      stamina: rating(-4),
-      ballControl: rating(-6),
-      standingTackle: rating(-30),
-      slidingTackle: rating(-32),
-      aggression: rating(-12),
-      balance: rating(4),
-      strength: rating(5),
-    };
-  }
-
   const defender =
     role === "CB" ||
     role === "RB" ||
@@ -164,17 +161,51 @@ function createAttributes(
     role === "LW" ||
     role === "CF" ||
     role === "ST";
+  const central =
+    role === "CB" || role === "CDM" || role === "CM" || role === "ST";
+  const keeper = role === "GK";
+  const technical = keeper ? -18 : attacker ? 4 : 0;
+  const defending = keeper ? -30 : defender ? 5 : attacker ? -9 : 0;
+  const physical = keeper ? -8 : defender ? 4 : 0;
 
   return {
-    sprintSpeed: rating(0),
-    acceleration: rating(0),
-    agility: rating(0),
-    stamina: rating(0),
-    ballControl: rating(0),
-    standingTackle: rating(defender ? 5 : attacker ? -9 : 0),
-    slidingTackle: rating(defender ? 4 : attacker ? -10 : 0),
+    sprintSpeed: rating(keeper ? -12 : 0),
+    acceleration: rating(keeper ? -7 : 0),
+    agility: rating(keeper ? -4 : 0),
+    stamina: rating(keeper ? -4 : 0),
+    ballControl: rating(keeper ? -6 : 0),
+    standingTackle: rating(defending),
+    slidingTackle: rating(keeper ? -32 : defending - 1),
     aggression: rating(defender ? 5 : attacker ? -3 : 0),
-    balance: rating(attacker ? 3 : 0),
-    strength: rating(defender ? 4 : 0),
+    balance: rating(keeper ? 4 : attacker ? 3 : 0),
+    strength: rating(physical),
+    finishing: rating(keeper ? -32 : attacker ? 6 : defender ? -12 : -3),
+    shotPower: rating(keeper ? -28 : attacker ? 6 : defender ? -8 : 0),
+    longShots: rating(keeper ? -32 : attacker ? 3 : defender ? -14 : -2),
+    attPosition: rating(keeper ? -30 : attacker ? 7 : defender ? -8 : 0),
+    shortPassing: rating(technical),
+    vision: rating(keeper ? -20 : central ? 3 : 0),
+    crossing: rating(keeper ? -24 : role === "RW" || role === "LW" ? 8 : 0),
+    longPassing: rating(keeper ? 4 : central ? 2 : 0),
+    curve: rating(keeper ? -20 : 0),
+    dribbling: rating(keeper ? -20 : attacker ? 6 : 0),
+    reactions: rating(keeper ? 4 : 0),
+    composure: rating(keeper ? 2 : attacker ? 2 : 0),
+    interceptions: rating(keeper ? -30 : defender ? 5 : attacker ? -8 : 0),
+    headingAccuracy: rating(keeper ? -30 : role === "CB" ? 7 : 0),
+    defAwareness: rating(keeper ? -24 : defender ? 6 : attacker ? -10 : 0),
+    jumping: rating(keeper ? 3 : role === "CB" ? 5 : 0),
+    skillMoves: role === "GK" ? 1 : rng.int(2, Math.max(2, Math.round(base / 25))),
+    weakFoot: rng.int(2, 5),
+    goalkeeper: keeper
+      ? {
+          diving: rating(4),
+          handling: rating(4),
+          kicking: rating(2),
+          positioning: rating(3),
+          reflexes: rating(3),
+          speed: rating(0),
+        }
+      : null,
   };
 }

@@ -1,66 +1,70 @@
 // packages/sim/src/ai/brain.ts
-import { TUNING, clamp, normalizeAngle, type Rng } from "@fb/shared";
-import { shapeAnchorNormalized } from "../formations";
-import {
-  getAttackingGoalForDirection,
-  getDefendingGoalForDirection,
-  isInsideOwnPenaltyArea,
-} from "../pitch";
-import { kickBall } from "../physics/ball";
-import { topSpeedFor } from "../physics/players";
-import { decisionRng } from "../random";
+
+import { TUNING, clamp } from "@fb/shared";
 import { playTackle } from "../control/actions";
-import { beginKick, heldBySetPiece } from "../rules/referee";
-import type {
-  GoalGeometry,
-  MatchState,
-  PlayerState,
-  TeamState,
-} from "../types";
-
-interface NearestPlayer {
-  readonly player: PlayerState;
-  readonly distance: number;
-}
+import {
+  commitPhysicalFoul,
+  heldBySetPiece,
+} from "../rules/referee";
+import { decisionRng } from "../random";
+import { isDenyingGoalscoringOpportunity } from "../rules/fouls";
+import type { MatchState, PlayerState, TeamState } from "../types";
+import {
+  analyseBall,
+  nearestOutfieldTo,
+  planTeam,
+  type BallContext,
+} from "./context";
+import { decideAndExecute } from "./decisions";
+import { assignTeamTargets } from "./positioning";
+import { difficultyProfile } from "./profiles";
 
 /**
- * Placeholder M1 brain: shape by formation anchor, one chaser per team, and a
- * single nearest-player kick decision. Role layers and decision scoring arrive
- * in M8.
+ * M8 AI entry point. Each team gets a tactical plan (phase, line, pressing and
+ * runner assignments), every body gets a steering target, then the on-ball
+ * brain chooses one weighted action. Difficulty changes reaction cadence,
+ * decision noise, pressing aggression and technical execution.
  */
-export function updatePlaceholderAi(state: MatchState): void {
-  const nearest = findNearestPlayerToBall(state);
-  assignTeamTargets(state, state.home);
-  assignTeamTargets(state, state.away);
+export function updateAi(state: MatchState): void {
+  const ball = analyseBall(state);
+  const homePlan = planTeam(state, state.home, ball);
+  const awayPlan = planTeam(state, state.away, ball);
 
-  if (
-    nearest !== null &&
-    !nearest.player.isUserControlled &&
-    !heldBySetPiece(state, nearest.player) &&
-    nearest.distance <= TUNING.ai.controlRadiusM &&
-    state.ball.z <= TUNING.ai.controlMaxBallHeightM &&
-    nearest.player.kickCooldown <= 0
-  ) {
-    if (tryTackle(state, nearest.player)) {
+  assignTeamTargets(state, state.home, homePlan);
+  assignTeamTargets(state, state.away, awayPlan);
+
+  const owner = ball.owner;
+  if (owner !== null && !owner.isUserControlled) {
+    if (tryChallenge(state, owner)) {
       return;
     }
-    if (opponentHasPossession(state, nearest.player)) {
-      return;
+    if (
+      state.referee.phase === "live" &&
+      !heldBySetPiece(state, owner) &&
+      canReact(state, owner) &&
+      owner.kickCooldown <= 0 &&
+      state.ball.z <= TUNING.ai.controlMaxBallHeightM
+    ) {
+      decideAndExecute(state, owner);
     }
-    decideKick(state, nearest.player);
+    return;
   }
+
+  if (owner !== null) {
+    return;
+  }
+  decideLooseBall(state, ball);
 }
 
-/**
- * A defender challenges only when an opponent is actually carrying the ball.
- * Loose or fast-moving balls must be intercepted, not tackled, so the contact
- * event is not generated on every nearby collision.
- */
-function tryTackle(state: MatchState, player: PlayerState): boolean {
+/** The nearest defender may commit to a tackle before the carrier reacts. */
+function tryChallenge(
+  state: MatchState,
+  owner: PlayerState,
+): boolean {
   if (
-    player.role === "GK" ||
-    state.lastTouch === null ||
-    state.lastTouch.team === player.team
+    state.referee.phase !== "live" ||
+    owner.role === "GK" ||
+    state.ball.z > TUNING.ai.controlMaxBallHeightM
   ) {
     return false;
   }
@@ -68,488 +72,114 @@ function tryTackle(state: MatchState, player: PlayerState): boolean {
   if (ballSpeed > TUNING.ai.tackleMaxBallSpeedMps) {
     return false;
   }
-  const opponent = findNearestOpponent(state, player);
+  const defenders = owner.team === "home" ? state.away : state.home;
+  const challenger = nearestOutfieldTo(
+    state,
+    defenders,
+    owner.x,
+    owner.y,
+  );
   if (
-    opponent === null ||
-    opponent.distance > TUNING.referee.tackleContactRangeM
+    challenger === null ||
+    challenger.player.isUserControlled ||
+    challenger.distance > TUNING.referee.tackleContactRangeM
   ) {
     return false;
   }
-  const carrierDistance = Math.hypot(
-    opponent.player.x - state.ball.x,
-    opponent.player.y - state.ball.y,
-  );
-  if (carrierDistance > TUNING.control.possessionRadiusM) {
+  const defender = challenger.player;
+  if (
+    defender.kickCooldown > 0 ||
+    heldBySetPiece(state, defender) ||
+    !canReact(state, defender)
+  ) {
     return false;
   }
+  const profile = difficultyProfile(state.rules.aiDifficulty);
   const rng = decisionRng(
     state.seed,
     state.tick,
-    player.team,
-    player.number + 1_000,
+    defender.team,
+    defender.number + 1_000,
   );
-  if (!rng.chance(TUNING.ai.tackleChance)) {
-    player.kickCooldown = TUNING.ai.tackleDecisionCooldownSeconds;
+  const dx = defender.x - owner.x;
+  const dy = defender.y - owner.y;
+  const distance = Math.hypot(dx, dy);
+  const behindDot =
+    distance > 1e-6
+      ? (Math.cos(owner.facing) * dx + Math.sin(owner.facing) * dy) /
+        distance
+      : 1;
+  const fromBehind = behindDot < TUNING.referee.behindDotThreshold;
+  if (
+    distance <= TUNING.referee.physicalDuelRangeM &&
+    !isDenyingGoalscoringOpportunity(state, owner) &&
+    rng.chance(TUNING.referee.physicalDuelChance)
+  ) {
+    defender.kickCooldown = TUNING.referee.physicalDuelCooldownSeconds;
+    commitPhysicalFoul(state, defender, owner);
+    return true;
+  }
+  const chance = clamp(
+    (TUNING.ai.tackleChance + profile.tackleBias) *
+      (fromBehind ? TUNING.ai.behindTackleChance : 1),
+    0,
+    1,
+  );
+  if (!rng.chance(chance)) {
+    defender.kickCooldown = TUNING.ai.tackleDecisionCooldownSeconds;
     return false;
   }
-  playTackle(state, player);
-  return true;
-}
-
-function opponentHasPossession(
-  state: MatchState,
-  player: PlayerState,
-): boolean {
-  if (state.lastTouch === null || state.lastTouch.team === player.team) {
-    return false;
-  }
-  const opponents =
-    player.team === "home" ? state.away : state.home;
-  for (const opponent of opponents.players) {
-    if (opponent.sentOff) {
-      continue;
-    }
-    if (
-      Math.hypot(opponent.x - state.ball.x, opponent.y - state.ball.y) <=
-      TUNING.control.possessionRadiusM
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function assignTeamTargets(state: MatchState, team: TeamState): void {
-  const chaser = findNearestOutfieldPlayer(
+  playTackle(
     state,
-    team,
-    state.ball.x,
-    state.ball.y,
+    defender,
+    rng.chance(TUNING.ai.slideTackleChance),
   );
-  const ball = state.ball;
-
-  for (const player of team.players) {
-    if (player.isUserControlled || player.sentOff) {
-      continue;
-    }
-    if (heldBySetPiece(state, player)) {
-      player.targetX = player.x;
-      player.targetY = player.y;
-      player.targetSpeed = 0;
-      continue;
-    }
-    if (player.role === "GK") {
-      const target = keeperTarget(state, team);
-      player.targetX = target.x;
-      player.targetY = target.y;
-      player.targetSpeed =
-        topSpeedFor(player.attributes) * TUNING.ai.keeperSpeedFactor;
-      continue;
-    }
-
-    if (player === chaser) {
-      player.targetX = clamp(
-        ball.x + ball.vx * TUNING.ai.chaseLeadSeconds,
-        TUNING.player.pitchMarginM,
-        state.pitch.lengthM - TUNING.player.pitchMarginM,
-      );
-      player.targetY = clamp(
-        ball.y + ball.vy * TUNING.ai.chaseLeadSeconds,
-        TUNING.player.pitchMarginM,
-        state.pitch.widthM - TUNING.player.pitchMarginM,
-      );
-      player.targetSpeed =
-        topSpeedFor(player.attributes) * TUNING.ai.chaserSpeedFactor;
-      continue;
-    }
-
-    const anchor = shapeAnchorNormalized(
-      state.pitch,
-      team.side,
-      player.role,
-      player.formationX,
-      player.formationY,
-      ball.x,
-      ball.y,
-      team.attackDirection,
-    );
-    player.targetX = anchor.x;
-    player.targetY = anchor.y;
-    player.targetSpeed =
-      topSpeedFor(player.attributes) * TUNING.ai.supportSpeedFactor;
-  }
+  return state.referee.phase !== "live";
 }
 
-function keeperTarget(
+function decideLooseBall(
+  state: MatchState,
+  ball: BallContext,
+): void {
+  const nearest =
+    ball.nearestHome === null
+      ? ball.nearestAway
+      : ball.nearestAway === null
+        ? ball.nearestHome
+        : ball.nearestHome.distance <= ball.nearestAway.distance
+          ? ball.nearestHome
+          : ball.nearestAway;
+  if (
+    nearest === null ||
+    nearest.distance > TUNING.ai.controlRadiusM ||
+    nearest.player.isUserControlled ||
+    nearest.player.kickCooldown > 0 ||
+    heldBySetPiece(state, nearest.player) ||
+    !canReact(state, nearest.player) ||
+    state.ball.z > TUNING.ai.controlMaxBallHeightM
+  ) {
+    return;
+  }
+  decideAndExecute(state, nearest.player);
+}
+
+/**
+ * Deterministic reaction gate: a player can only start an action on the tick
+ * cadence for its difficulty. This produces observable ball-watch delays
+ * without storing extra RNG state on every player.
+ */
+export function canReact(state: MatchState, player: PlayerState): boolean {
+  const profile = difficultyProfile(state.rules.aiDifficulty);
+  return (
+    profile.reactionTicks <= 1 ||
+    (state.tick + player.number) % profile.reactionTicks === 0
+  );
+}
+
+export function teamPlanFor(
   state: MatchState,
   team: TeamState,
-): { readonly x: number; readonly y: number } {
-  const goal = getDefendingGoalForDirection(
-    state.pitch,
-    team.attackDirection,
-  );
-  const inward = team.attackDirection;
-  const yMin = goal.centreY - goal.widthM / 2 + TUNING.ai.keeperTrackInsetM;
-  const yMax = goal.centreY + goal.widthM / 2 - TUNING.ai.keeperTrackInsetM;
-  const y = clamp(state.ball.y, yMin, yMax);
-  const lineX = goal.lineX + inward * TUNING.ai.keeperLineOffsetM;
-
-  if (
-    isInsideOwnPenaltyArea(
-      state.pitch,
-      team.attackDirection,
-      state.ball.x,
-      state.ball.y,
-    )
-  ) {
-    const advanceX =
-      goal.lineX + inward * TUNING.ai.keeperMaxAdvanceM;
-    return {
-      x: clamp(state.ball.x, Math.min(lineX, advanceX), Math.max(lineX, advanceX)),
-      y: clamp(state.ball.y, yMin, yMax),
-    };
-  }
-
-  return { x: lineX, y };
-}
-
-function decideKick(state: MatchState, player: PlayerState): void {
-  if (player.sentOff || heldBySetPiece(state, player)) {
-    return;
-  }
-  const team = player.team === "home" ? state.home : state.away;
-  const attackGoal = getAttackingGoalForDirection(
-    state.pitch,
-    team.attackDirection,
-  );
-  const rng = decisionRng(
-    state.seed,
-    state.tick,
-    player.team,
-    player.number,
-  );
-
-  if (player.role === "GK") {
-    keeperClear(state, player, attackGoal, rng);
-    return;
-  }
-
-  const distanceToGoal = Math.hypot(
-    attackGoal.lineX - player.x,
-    attackGoal.centreY - player.y,
-  );
-  const nearestOpponent = findNearestOpponent(state, player);
-  const pressure = nearestOpponent?.distance ?? Infinity;
-  const passTarget = selectPassTarget(state, player, team.attackDirection);
-
-  if (
-    distanceToGoal <= TUNING.ai.shootRangeM &&
-    rng.chance(TUNING.ai.shootChance)
-  ) {
-    shoot(state, player, attackGoal, rng);
-    return;
-  }
-
-  if (
-    passTarget !== null &&
-    pressure <= TUNING.ai.pressDistanceM &&
-    rng.chance(TUNING.ai.passChance)
-  ) {
-    pass(state, player, passTarget, rng);
-    return;
-  }
-
-  dribble(state, player, attackGoal, nearestOpponent);
-}
-
-function shoot(
-  state: MatchState,
-  player: PlayerState,
-  goal: GoalGeometry,
-  rng: Rng,
-): void {
-  const inset = TUNING.ball.radiusM * 2;
-  const yMin = goal.centreY - goal.widthM / 2 + inset;
-  const yMax = goal.centreY + goal.widthM / 2 - inset;
-  const aimY = clamp(
-    goal.centreY + rng.range(-TUNING.ai.shootAimSpreadM, TUNING.ai.shootAimSpreadM),
-    yMin,
-    yMax,
-  );
-  const aimX = goal.lineX + goal.netDirection * TUNING.ai.shootAimDepthM;
-
-  if (!beginKick(state, player, "shot")) {
-    return;
-  }
-  kickBall(state.ball, player, {
-    targetX: aimX,
-    targetY: aimY,
-    speed: TUNING.ai.shootPowerMps,
-    lift: TUNING.ai.shootLiftMps,
-    spinY: -TUNING.ai.shotBackspinRadPerS,
-    spinZ: rng.range(
-      -TUNING.ai.shotCurveSpinRadPerS,
-      TUNING.ai.shotCurveSpinRadPerS,
-    ),
-    velocityTransfer: TUNING.ai.shootVelocityTransfer,
-  });
-  markAction(state, player, "shoot", TUNING.player.kickCooldownSeconds);
-}
-
-function pass(
-  state: MatchState,
-  player: PlayerState,
-  target: PlayerState,
-  rng: Rng,
-): void {
-  const leadX =
-    target.x + target.vx * TUNING.ai.passLeadSeconds;
-  const leadY =
-    target.y + target.vy * TUNING.ai.passLeadSeconds;
-
-  if (!beginKick(state, player, "pass")) {
-    return;
-  }
-  kickBall(state.ball, player, {
-    targetX: clamp(leadX, TUNING.player.pitchMarginM, state.pitch.lengthM - TUNING.player.pitchMarginM),
-    targetY: clamp(leadY, TUNING.player.pitchMarginM, state.pitch.widthM - TUNING.player.pitchMarginM),
-    speed: TUNING.ai.passPowerMps,
-    lift: TUNING.ai.passLiftMps,
-    spinZ: rng.range(
-      -TUNING.ai.passCurveSpinRadPerS,
-      TUNING.ai.passCurveSpinRadPerS,
-    ),
-    velocityTransfer: TUNING.ai.passVelocityTransfer,
-  });
-  markAction(state, player, "pass", TUNING.player.kickCooldownSeconds);
-}
-
-function dribble(
-  state: MatchState,
-  player: PlayerState,
-  goal: GoalGeometry,
-  nearestOpponent: NearestPlayer | null,
-): void {
-  let targetX = goal.lineX;
-  let targetY = goal.centreY;
-
-  if (
-    nearestOpponent !== null &&
-    Math.hypot(
-      nearestOpponent.player.x - state.ball.x,
-      nearestOpponent.player.y - state.ball.y,
-    ) <= TUNING.ai.dribbleEvadeDistanceM
-  ) {
-    const goalAngle = Math.atan2(
-      goal.centreY - state.ball.y,
-      goal.lineX - state.ball.x,
-    );
-    const opponentAngle = Math.atan2(
-      nearestOpponent.player.y - state.ball.y,
-      nearestOpponent.player.x - state.ball.x,
-    );
-    const side =
-      normalizeAngle(opponentAngle - goalAngle) >= 0 ? -1 : 1;
-    const evadeAngle =
-      goalAngle + side * TUNING.ai.dribbleEvadeTurnRad;
-    targetX =
-      state.ball.x +
-      Math.cos(evadeAngle) * TUNING.ai.dribbleEvadeTargetM;
-    targetY =
-      state.ball.y +
-      Math.sin(evadeAngle) * TUNING.ai.dribbleEvadeTargetM;
-  }
-
-  if (!beginKick(state, player, "dribble")) {
-    return;
-  }
-  kickBall(state.ball, player, {
-    targetX: clamp(
-      targetX,
-      TUNING.player.pitchMarginM,
-      state.pitch.lengthM - TUNING.player.pitchMarginM,
-    ),
-    targetY: clamp(
-      targetY,
-      TUNING.player.pitchMarginM,
-      state.pitch.widthM - TUNING.player.pitchMarginM,
-    ),
-    speed: TUNING.ai.dribbleTouchSpeedMps,
-    lift: 0,
-    velocityTransfer: TUNING.ai.dribbleVelocityTransfer,
-  });
-  markAction(state, player, "dribble", TUNING.ai.dribbleCooldownSeconds);
-}
-
-function keeperClear(
-  state: MatchState,
-  player: PlayerState,
-  goal: GoalGeometry,
-  rng: Rng,
-): void {
-  const aimY = clamp(
-    goal.centreY +
-      rng.range(-TUNING.ai.keeperClearSpreadM, TUNING.ai.keeperClearSpreadM),
-    TUNING.player.pitchMarginM,
-    state.pitch.widthM - TUNING.player.pitchMarginM,
-  );
-
-  if (!beginKick(state, player, "clear")) {
-    return;
-  }
-  kickBall(state.ball, player, {
-    targetX: goal.lineX,
-    targetY: aimY,
-    speed: TUNING.ai.keeperClearPowerMps,
-    lift: TUNING.ai.keeperClearLiftMps,
-    spinY: -TUNING.ai.shotBackspinRadPerS,
-    velocityTransfer: TUNING.ai.passVelocityTransfer,
-  });
-  markAction(state, player, "pass", TUNING.player.kickCooldownSeconds);
-}
-
-function markAction(
-  state: MatchState,
-  player: PlayerState,
-  action: "dribble" | "pass" | "shoot",
-  cooldownSeconds: number,
-): void {
-  player.state = action;
-  player.actionTimer = TUNING.player.actionStateSeconds;
-  player.kickCooldown = cooldownSeconds;
-  state.lastTouch = {
-    team: player.team,
-    playerId: player.id,
-    playerNumber: player.number,
-  };
-}
-
-function selectPassTarget(
-  state: MatchState,
-  player: PlayerState,
-  attackDirection: 1 | -1,
-): PlayerState | null {
-  const teammates =
-    player.team === "home" ? state.home.players : state.away.players;
-  let best: PlayerState | null = null;
-  let bestProgress = -Infinity;
-
-  for (const teammate of teammates) {
-    if (
-      teammate === player ||
-      teammate.role === "GK" ||
-      teammate.sentOff
-    ) {
-      continue;
-    }
-    const distance = Math.hypot(teammate.x - player.x, teammate.y - player.y);
-    if (
-      distance < TUNING.ai.minPassDistanceM ||
-      distance > TUNING.ai.passRangeM
-    ) {
-      continue;
-    }
-    const progress = (teammate.x - player.x) * attackDirection;
-    if (progress > bestProgress) {
-      bestProgress = progress;
-      best = teammate;
-    }
-  }
-
-  return best;
-}
-
-function findNearestOpponent(
-  state: MatchState,
-  player: PlayerState,
-): NearestPlayer | null {
-  const opponents =
-    player.team === "home" ? state.away.players : state.home.players;
-  let best: NearestPlayer | null = null;
-
-  for (const opponent of opponents) {
-    if (opponent.sentOff) {
-      continue;
-    }
-    const distance = Math.hypot(opponent.x - player.x, opponent.y - player.y);
-    if (best === null || distance < best.distance) {
-      best = { player: opponent, distance };
-    }
-  }
-
-  return best;
-}
-
-function findNearestPlayerToBall(state: MatchState): NearestPlayer | null {
-  const homeNearest = findNearestInTeam(
-    state,
-    state.home,
-    state.ball.x,
-    state.ball.y,
-  );
-  const awayNearest = findNearestInTeam(
-    state,
-    state.away,
-    state.ball.x,
-    state.ball.y,
-  );
-
-  if (homeNearest === null) {
-    return awayNearest;
-  }
-  if (awayNearest === null) {
-    return homeNearest;
-  }
-  return awayNearest.distance < homeNearest.distance
-    ? awayNearest
-    : homeNearest;
-}
-
-function findNearestInTeam(
-  state: MatchState,
-  team: TeamState,
-  x: number,
-  y: number,
-): NearestPlayer | null {
-  let best: NearestPlayer | null = null;
-
-  for (const player of team.players) {
-    if (player.sentOff || heldBySetPiece(state, player)) {
-      continue;
-    }
-    const distance = Math.hypot(player.x - x, player.y - y);
-    if (best === null || distance < best.distance) {
-      best = { player, distance };
-    }
-  }
-
-  return best;
-}
-
-function findNearestOutfieldPlayer(
-  state: MatchState,
-  team: TeamState,
-  x: number,
-  y: number,
-): PlayerState | null {
-  let best: PlayerState | null = null;
-  let bestDistance = Infinity;
-
-  for (const player of team.players) {
-    if (
-      player.role === "GK" ||
-      player.isUserControlled ||
-      player.sentOff ||
-      heldBySetPiece(state, player)
-    ) {
-      continue;
-    }
-    const distance = Math.hypot(player.x - x, player.y - y);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = player;
-    }
-  }
-
-  return best;
+  ball: BallContext,
+): ReturnType<typeof planTeam> {
+  return planTeam(state, team, ball);
 }

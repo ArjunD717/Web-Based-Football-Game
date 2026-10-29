@@ -178,6 +178,7 @@ export function playShot(
 export function playTackle(
   state: MatchState,
   player: PlayerState,
+  slide = true,
 ): boolean {
   if (player.kickCooldown > 0 || player.sentOff) {
     return false;
@@ -194,7 +195,7 @@ export function playTackle(
     player.team === "home" ? state.away : state.home;
   const victim = findTackleVictim(opponents.players, player);
 
-  player.state = "slide";
+  player.state = slide ? "slide" : "tackle";
   player.actionTimer = TUNING.player.actionStateSeconds;
   player.kickCooldown = TUNING.control.tackleCooldownSeconds;
 

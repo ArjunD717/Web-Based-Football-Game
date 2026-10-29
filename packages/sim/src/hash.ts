@@ -53,6 +53,19 @@ export function hashMatchState(state: MatchState): number {
   mixInt(state.referee.scoreHome);
   mixInt(state.referee.scoreAway);
   mixNumber(state.referee.timerSeconds);
+  mixString(state.rules.aiDifficulty);
+  for (const side of ["home", "away"] as const) {
+    const stats = side === "home" ? state.stats.home : state.stats.away;
+    mixInt(stats.goals);
+    mixInt(stats.shots);
+    mixInt(stats.shotsOnTarget);
+    mixInt(stats.fouls);
+    mixInt(stats.offsides);
+    mixInt(stats.yellowCards);
+    mixInt(stats.redCards);
+    mixInt(stats.saves);
+    mixInt(stats.possessionTicks);
+  }
   if (state.referee.restart !== null) {
     mixString(state.referee.restart.type);
     mixString(state.referee.restart.side);
@@ -118,6 +131,7 @@ export function hashMatchState(state: MatchState): number {
     mixPlayer(player);
   }
 
+  mixString(state.offsidePassTargetId ?? "");
   if (state.lastTouch !== null) {
     mixString(state.lastTouch.team);
     mixString(state.lastTouch.playerId);

@@ -68,12 +68,20 @@ export function cloneTeamSheet(sheet: TeamSheet): TeamSheet {
   };
 }
 
-function positionFit(player: PlayerData, role: PlayerPosition): number {
+/**
+ * How naturally a player fills a role. Selection uses the 1.05 ceiling to
+ * prefer the preferred position; the simulation treats it as a 0..1 multiplier
+ * on technical decisions.
+ */
+export function positionFamiliarity(
+  player: Pick<PlayerData, "positions" | "preferredPosition">,
+  role: PlayerPosition,
+): number {
   if (player.preferredPosition === role) {
-    return 1.05;
+    return 1;
   }
   if (player.positions.includes(role)) {
-    return 1;
+    return 0.96;
   }
   if (
     player.positions.some((position) => RELATED_POSITIONS[role].includes(position))
@@ -82,6 +90,13 @@ function positionFit(player: PlayerData, role: PlayerPosition): number {
   }
   // Keepers are never converted in the automatic sheet.
   return role === "GK" || player.positions.includes("GK") ? 0 : 0.35;
+}
+
+function positionFit(player: PlayerData, role: PlayerPosition): number {
+  return (
+    positionFamiliarity(player, role) *
+    (player.preferredPosition === role ? 1.05 : 1)
+  );
 }
 
 function rankedForRole(

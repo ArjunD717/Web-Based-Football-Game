@@ -104,7 +104,15 @@ describe("placeholder teams", () => {
 
     for (const player of home.players) {
       expect(player.stamina).toBe(1);
-      for (const rating of Object.values(player.attributes)) {
+      for (const [key, rating] of Object.entries(player.attributes)) {
+        if (key === "goalkeeper") {
+          if (player.role === "GK") {
+            expect(rating).not.toBeNull();
+          } else {
+            expect(rating).toBeNull();
+          }
+          continue;
+        }
         expect(Number.isInteger(rating)).toBe(true);
         expect(rating).toBeGreaterThanOrEqual(1);
         expect(rating).toBeLessThanOrEqual(99);

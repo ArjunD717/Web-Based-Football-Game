@@ -1,5 +1,10 @@
 // packages/sim/src/data/team.ts
-import type { PlayerData, TeamData, TeamSheet } from "@fb/shared";
+import {
+  positionFamiliarity,
+  type PlayerData,
+  type TeamData,
+  type TeamSheet,
+} from "@fb/shared";
 import {
   baseFormationPosition,
   formationForName,
@@ -8,6 +13,7 @@ import {
 import type {
   Pitch,
   PlayerState,
+  TeamSetPieceTakers,
   TeamSide,
   TeamState,
 } from "../types";
@@ -102,6 +108,7 @@ export function createTeamFromData(
       role: formationSlot.role,
       number: player.kitNumber,
       attributes: mapPlayerAttributes(player),
+      roleFamiliarity: positionFamiliarity(player, slot.role),
       formationX: formationSlot.x,
       formationY: formationSlot.y,
       x: position.x,
@@ -122,6 +129,15 @@ export function createTeamFromData(
     };
   });
 
+  const taker = (id: string): string | null =>
+    seen.has(id) ? `${side}:${id}` : null;
+  const takers: TeamSetPieceTakers = {
+    penalty: taker(sheet.penaltyTaker),
+    freeKick: taker(sheet.freeKickTaker),
+    cornerLeft: taker(sheet.cornerLeft),
+    cornerRight: taker(sheet.cornerRight),
+  };
+
   return {
     side,
     name: team.name,
@@ -137,6 +153,8 @@ export function createTeamFromData(
       keeper: team.colours.goalkeeper,
     },
     formation,
+    tactics: { ...sheet.tactics },
+    takers,
     attackDirection: side === "home" ? 1 : -1,
     players: playerStates,
   };

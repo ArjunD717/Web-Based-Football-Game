@@ -206,7 +206,15 @@ export function setupCorner(
   const inward = -goal.netDirection;
   const spotX = cornerX <= state.pitch.centreX ? 0 : state.pitch.lengthM;
   const spotY = cornerY <= state.pitch.centreY ? 0 : state.pitch.widthM;
-  const taker = nearestOutfield(team, spotX, spotY) ?? team.players[0] ?? null;
+  const authored = authoredTaker(
+    team,
+    spotY <= state.pitch.centreY ? team.takers.cornerLeft : team.takers.cornerRight,
+  );
+  const taker =
+    authored ??
+    nearestOutfield(team, spotX, spotY) ??
+    team.players[0] ??
+    null;
   const inset = TUNING.match.cornerTakerInsetM;
 
   if (taker !== null) {
@@ -279,7 +287,11 @@ export function setupFreeKick(
   const fwdLength = Math.hypot(fwdX, fwdY);
   const dirX = fwdLength > 1e-6 ? fwdX / fwdLength : team.attackDirection;
   const dirY = fwdLength > 1e-6 ? fwdY / fwdLength : 0;
-  const taker = nearestOutfield(team, spotX, spotY) ?? team.players[0] ?? null;
+  const taker =
+    authoredTaker(team, team.takers.freeKick) ??
+    nearestOutfield(team, spotX, spotY) ??
+    team.players[0] ??
+    null;
 
   if (taker !== null) {
     placePlayer(
@@ -384,6 +396,7 @@ export function setupPenalty(
     (player) => player.role !== "GK" && !player.sentOff,
   );
   const taker =
+    authoredTaker(team, team.takers.penalty) ??
     outfield.find((player) => player.role === "ST") ??
     outfield.find((player) => player.role === "CF") ??
     outfield[0] ??
@@ -455,6 +468,19 @@ export function setupPenalty(
     takerId: taker?.id ?? null,
     goalkeeperId: goalkeeper?.id ?? null,
   };
+}
+
+function authoredTaker(
+  team: TeamState,
+  id: string | null,
+): PlayerState | null {
+  if (id === null) {
+    return null;
+  }
+  const player = team.players.find((candidate) => candidate.id === id);
+  return player !== undefined && player.role !== "GK" && !player.sentOff
+    ? player
+    : null;
 }
 
 function nearestOutfield(
