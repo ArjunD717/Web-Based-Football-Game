@@ -22,6 +22,8 @@ export interface RenderPlayer {
   readonly facing: number;
   readonly state: PlayerStateName;
   readonly stamina: number;
+  readonly sentOff: boolean;
+  readonly yellowCards: number;
   /** True for the player currently selected by this client's control input. */
   readonly controlled: boolean;
 }
@@ -71,6 +73,8 @@ export function matchStateToView(state: MatchState): MatchView {
         facing: player.facing,
         state: player.state,
         stamina: player.stamina,
+        sentOff: player.sentOff,
+        yellowCards: player.yellowCards,
         controlled: false,
       })),
     },
@@ -87,6 +91,8 @@ export function matchStateToView(state: MatchState): MatchView {
         facing: player.facing,
         state: player.state,
         stamina: player.stamina,
+        sentOff: player.sentOff,
+        yellowCards: player.yellowCards,
         controlled: false,
       })),
     },

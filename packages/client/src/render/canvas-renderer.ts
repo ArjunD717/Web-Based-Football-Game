@@ -110,11 +110,17 @@ class CanvasMatchRenderer implements MatchRenderer {
 
     for (const team of [view.away, view.home]) {
       for (const player of team.players) {
+        if (player.sentOff) {
+          continue;
+        }
         drawPlayerShadow(ctx, player);
       }
     }
     for (const team of [view.away, view.home]) {
       for (const player of team.players) {
+        if (player.sentOff) {
+          continue;
+        }
         drawPlayer(ctx, player, team.colors);
       }
     }

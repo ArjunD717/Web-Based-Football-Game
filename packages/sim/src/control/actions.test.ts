@@ -6,6 +6,10 @@ import type { MatchState, PlayerState } from "../types";
 import { playPass, playShot, playTackle } from "./actions";
 
 function placeBallAtFeet(state: MatchState, player: PlayerState): void {
+  state.referee.phase = "live";
+  state.referee.restart = null;
+  state.referee.timerSeconds = 0;
+  state.referee.setPiece = null;
   state.ball.x = player.x + 0.3;
   state.ball.y = player.y;
   state.ball.z = TUNING.ball.radiusM;
@@ -82,6 +86,9 @@ describe("human actions", () => {
 
   it("rejects actions when the ball is out of reach", () => {
     const state = createMatch({ seed: 15 });
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.setPiece = null;
     const player = state.home.players.find((entry) => entry.role === "ST")!;
     state.ball.x = player.x + 10;
     state.ball.y = player.y;
@@ -95,6 +102,10 @@ describe("human actions", () => {
 describe("controlled-player AI suppression", () => {
   it("leaves controlled targets alone and does not auto-kick", () => {
     const state = createMatch({ seed: 16 });
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.timerSeconds = 0;
+    state.referee.setPiece = null;
     const player = state.home.players.find((entry) => entry.role === "ST")!;
     player.isUserControlled = true;
     player.targetX = 10;

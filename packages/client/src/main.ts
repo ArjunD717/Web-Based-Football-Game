@@ -6,6 +6,7 @@ import {
   type LobbyPlayerWire,
   type LobbyRoomWire,
   type ServerLobbyStateMessage,
+  type SnapshotFrame,
 } from "@fb/shared";
 import { WireViewBuilder } from "./match/view-from-wire";
 import {
@@ -24,6 +25,7 @@ import {
 } from "./net/game-client";
 import { createCanvasRenderer } from "./render/canvas-renderer";
 import type { MatchView } from "./render/view";
+import { describeMatchEvent, formatCardCounts } from "./match/event-label";
 import "./style.css";
 
 const TOAST_DURATION_MS = 2_600;
@@ -70,6 +72,8 @@ const scoreHome = byId<HTMLElement>("score-home");
 const scoreAway = byId<HTMLElement>("score-away");
 const scoreClock = byId<HTMLElement>("score-clock");
 const scorePhase = byId<HTMLElement>("score-phase");
+const matchCards = byId<HTMLElement>("match-cards");
+const matchEvent = byId<HTMLElement>("match-event");
 const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
 const bufferChip = byId<HTMLElement>("buffer-chip");
 const controlPlayerChip = byId<HTMLElement>("control-player");
@@ -106,6 +110,8 @@ let builder: WireViewBuilder | null = null;
 let latestView: MatchView | null = null;
 let autoJoinAttempted = false;
 let lastHudAt = 0;
+let lastMatchEventSeq = 0;
+let matchEventTimer: number | null = null;
 let toastTimer: number | null = null;
 let controls: DesktopControls | null = null;
 let lastSelfTeam: "home" | "away" | null = null;
@@ -337,6 +343,12 @@ function applyState(state: GameClientState): void {
   const setupId = state.setup?.matchId ?? null;
   if (setupId !== lastSetupId) {
     lastSetupId = setupId;
+    lastMatchEventSeq = 0;
+    if (matchEventTimer !== null) {
+      window.clearTimeout(matchEventTimer);
+      matchEventTimer = null;
+    }
+    matchEvent.hidden = true;
     builder =
       state.setup === null
         ? null
@@ -590,12 +602,15 @@ function updateScoreboard(): void {
     scoreAway.textContent = "0";
     scoreClock.textContent = "00:00";
     scorePhase.textContent = "Kick-off";
+    matchCards.textContent = "YC 0–0 · RC 0–0";
+    matchEvent.hidden = true;
     return;
   }
   const match = frame.match;
   scoreHome.textContent = String(match.scoreHome);
   scoreAway.textContent = String(match.scoreAway);
   scoreClock.textContent = formatMatchClock(match.clockSeconds);
+  matchCards.textContent = formatCardCounts(frame);
   scorePhase.textContent =
     match.phase === "live"
       ? match.half === 1
@@ -606,6 +621,29 @@ function updateScoreboard(): void {
         : match.phase === "fullTime"
           ? "Full time"
           : "Dead ball";
+  updateMatchEvent(match);
+}
+
+function updateMatchEvent(match: SnapshotFrame["match"]): void {
+  const event = match.lastEvent;
+  if (event === null || event.seq === lastMatchEventSeq) {
+    return;
+  }
+  lastMatchEventSeq = event.seq;
+  const setup = currentState?.setup;
+  matchEvent.textContent = describeMatchEvent(
+    event,
+    setup?.home.name ?? "Home",
+    setup?.away.name ?? "Away",
+  );
+  matchEvent.hidden = false;
+  if (matchEventTimer !== null) {
+    window.clearTimeout(matchEventTimer);
+  }
+  matchEventTimer = window.setTimeout(() => {
+    matchEvent.hidden = true;
+    matchEventTimer = null;
+  }, 3_500);
 }
 
 function formatMatchClock(seconds: number): string {
@@ -739,7 +777,13 @@ function updateOverlay(state: GameClientState): void {
           ? "Throw-in"
           : restart === "goalKick"
             ? "Goal kick"
-            : "Corner";
+            : restart === "corner"
+              ? "Corner"
+              : restart === "penalty"
+                ? "Penalty"
+                : restart === "indirectFreeKick"
+                  ? "Indirect free kick"
+                  : "Free kick";
     showOverlay(title, `${sideName} restart. ${score}.`);
     return;
   }

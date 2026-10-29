@@ -27,6 +27,8 @@ function makeFrame(seq: number, tick = seq): SnapshotFrame {
       facing: index % 4,
       state: "jog",
       stamina: 0.8,
+      sentOff: false,
+      yellowCards: 0,
     }),
   );
   return {
@@ -43,6 +45,7 @@ function makeFrame(seq: number, tick = seq): SnapshotFrame {
       scoreAway: 0,
       restartType: null,
       restartSide: null,
+      lastEvent: null,
     },
     ball: {
       x: 52.5,
@@ -110,7 +113,7 @@ describe("snapshot encoding", () => {
     const decoded = decodeSnapshot(encoded, baseline);
     expect(decoded.baseSeq).toBe(20);
     expect(decoded.players).toEqual(baseline.players);
-    expect(encoded.byteLength).toBe(39);
+    expect(encoded.byteLength).toBe(44);
   });
 
   it("round-trips score, clock and restart state", () => {
@@ -124,10 +127,51 @@ describe("snapshot encoding", () => {
         scoreAway: 1,
         restartType: "corner",
         restartSide: "away",
+        lastEvent: null,
       },
     };
     const decoded = decodeSnapshot(encodeSnapshot(frame));
     expect(decoded.match).toEqual(frame.match);
+  });
+
+  it("round-trips the latest disciplinary event", () => {
+    const types = [
+      "foul",
+      "advantage",
+      "yellowCard",
+      "redCard",
+      "offside",
+      "handball",
+      "penalty",
+    ] as const;
+    for (const [index, type] of types.entries()) {
+      const frame: SnapshotFrame = {
+        ...makeFrame(5 + index),
+        match: {
+          ...makeFrame(5 + index).match,
+          lastEvent: {
+            seq: 17 + index,
+            type,
+            side: index % 2 === 0 ? "home" : "away",
+            playerNumber: index === 0 ? null : 9,
+          },
+        },
+      };
+      const decoded = decodeSnapshot(encodeSnapshot(frame));
+      expect(decoded.match.lastEvent).toEqual(frame.match.lastEvent);
+    }
+  });
+
+  it("round-trips player cards and send-offs", () => {
+    const frame = makeFrame(6);
+    frame.players[0]!.yellowCards = 1;
+    frame.players[1]!.yellowCards = 2;
+    frame.players[1]!.sentOff = true;
+    const decoded = decodeSnapshot(encodeSnapshot(frame));
+    expect(decoded.players[0]!.yellowCards).toBe(1);
+    expect(decoded.players[0]!.sentOff).toBe(false);
+    expect(decoded.players[1]!.yellowCards).toBe(2);
+    expect(decoded.players[1]!.sentOff).toBe(true);
   });
 
   it("quantises ball velocities to centimetres per second", () => {

@@ -22,6 +22,11 @@ const defaultAttributes: PlayerAttributes = {
   agility: 80,
   stamina: 80,
   ballControl: 80,
+  standingTackle: 70,
+  slidingTackle: 70,
+  aggression: 65,
+  balance: 75,
+  strength: 75,
 };
 
 function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
@@ -42,6 +47,8 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     actionTimer: 0,
     kickCooldown: 0,
     stamina: 1,
+    yellowCards: 0,
+    sentOff: false,
     isUserControlled: false,
     targetX: 10,
     targetY: 10,

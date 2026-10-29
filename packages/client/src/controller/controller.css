@@ -303,6 +303,20 @@ input {
   font-weight: 700;
 }
 
+.play-event {
+  align-self: flex-start;
+  margin: 0.2rem 0 0;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: rgba(7, 19, 13, 0.9);
+  color: var(--text);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .controller-power {
   display: grid;
   grid-template-columns: auto 1fr auto;

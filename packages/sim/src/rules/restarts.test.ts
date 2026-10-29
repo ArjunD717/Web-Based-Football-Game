@@ -6,6 +6,12 @@ import {
   isInsidePenaltyArea,
 } from "../pitch";
 import {
+  beginKick,
+  heldBySetPiece,
+  startFreeKick,
+  startPenalty,
+} from "./referee";
+import {
   setupCorner,
   setupGoalKick,
   setupKickoff,
@@ -99,5 +105,137 @@ describe("corner law", () => {
         Math.hypot(player.x, player.y),
       ).toBeGreaterThanOrEqual(TUNING.match.cornerOpponentDistanceM - 1e-6);
     }
+  });
+});
+
+describe("free-kick law", () => {
+  it("forms a wall 9.15 m from the ball and clears every other defender", () => {
+    const state = createMatch({ seed: 15 });
+    const goal = state.pitch.awayGoal;
+    const spotX = goal.lineX - 11;
+    const spotY = state.pitch.centreY;
+    const keeper = state.away.players.find(
+      (player) => player.role === "GK",
+    )!;
+    keeper.x = goal.lineX - 0.5;
+    keeper.y = state.pitch.centreY;
+    startFreeKick(state, "home", "directFreeKick", spotX, spotY);
+
+    const setPiece = state.referee.setPiece!;
+    expect(setPiece.takerId).not.toBeNull();
+    expect(setPiece.wallPlayerIds.length).toBeGreaterThanOrEqual(
+      TUNING.referee.wallMinDefenders,
+    );
+    expect(setPiece.wallPlayerIds.length).toBeLessThanOrEqual(
+      TUNING.referee.wallMaxDefenders,
+    );
+
+    const taker = allPlayers(state).find(
+      (player) => player.id === setPiece.takerId,
+    )!;
+    expect(taker.x).toBeLessThan(spotX);
+    for (const player of allPlayers(state)) {
+      if (setPiece.wallPlayerIds.includes(player.id)) {
+        expect(Math.hypot(player.x - spotX, player.y - spotY)).toBeGreaterThanOrEqual(
+          TUNING.referee.wallDistanceM - 1e-6,
+        );
+      }
+    }
+    for (const opponent of state.away.players) {
+      if (setPiece.wallPlayerIds.includes(opponent.id)) {
+        continue;
+      }
+      expect(
+        Math.hypot(opponent.x - spotX, opponent.y - spotY),
+      ).toBeGreaterThanOrEqual(TUNING.referee.wallDistanceM - 1e-6);
+    }
+
+    const wall = state.away.players.filter((player) =>
+      setPiece.wallPlayerIds.includes(player.id),
+    );
+    const goalkeeper = state.away.players.find(
+      (player) => player.role === "GK",
+    )!;
+    expect(goalkeeper.x).toBeGreaterThan(goal.lineX - 2);
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    for (const player of wall) {
+      expect(heldBySetPiece(state, player)).toBe(true);
+    }
+    expect(heldBySetPiece(state, taker)).toBe(false);
+  });
+
+  it("does not build a wall for a free kick outside shooting range", () => {
+    const state = createMatch({ seed: 16 });
+    startFreeKick(
+      state,
+      "home",
+      "directFreeKick",
+      state.pitch.centreX,
+      state.pitch.centreY,
+    );
+    expect(state.referee.setPiece?.wallPlayerIds).toEqual([]);
+  });
+});
+
+describe("penalty-kick law", () => {
+  it("places the taker, keeper and every other player legally", () => {
+    const state = createMatch({ seed: 17 });
+    startPenalty(state, "home");
+    const setPiece = state.referee.setPiece!;
+    const penalty = setPiece.penalty!;
+    expect(penalty.takerId).toBe(setPiece.takerId);
+    expect(penalty.takerId).not.toBeNull();
+    expect(penalty.goalkeeperId).not.toBeNull();
+
+    const spotX = state.ball.x;
+    const spotY = state.ball.y;
+    expect(state.ball.y).toBeCloseTo(state.pitch.centreY, 8);
+
+    const taker = allPlayers(state).find(
+      (player) => player.id === penalty.takerId,
+    )!;
+    const goalkeeper = allPlayers(state).find(
+      (player) => player.id === penalty.goalkeeperId,
+    )!;
+    expect(taker.x).toBeLessThan(spotX);
+    expect(goalkeeper.x).toBeCloseTo(
+      state.pitch.awayGoal.lineX - TUNING.referee.penaltyGoalkeeperLineOffsetM,
+      6,
+    );
+    expect(goalkeeper.y).toBeCloseTo(spotY, 6);
+
+    for (const player of allPlayers(state)) {
+      if (player.id === penalty.takerId || player.id === penalty.goalkeeperId) {
+        continue;
+      }
+      expect(
+        isInsidePenaltyArea(state.pitch, "away", player.x, player.y),
+      ).toBe(false);
+      expect(
+        Math.hypot(player.x - spotX, player.y - spotY),
+      ).toBeGreaterThanOrEqual(state.pitch.penaltyArcRadiusM - 1e-6);
+    }
+  });
+
+  it("holds non-takers until the kick and the taker after it", () => {
+    const state = createMatch({ seed: 18 });
+    startPenalty(state, "away");
+    const penalty = state.referee.setPiece!.penalty!;
+    const taker = allPlayers(state).find(
+      (player) => player.id === penalty.takerId,
+    )!;
+    const other = state.away.players.find(
+      (player) => player.id !== penalty.takerId && player.role !== "GK",
+    )!;
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    expect(heldBySetPiece(state, other)).toBe(true);
+    expect(heldBySetPiece(state, taker)).toBe(false);
+
+    expect(beginKick(state, taker, "shot")).toBe(true);
+    expect(state.referee.setPiece?.penalty?.kicked).toBe(true);
+    expect(heldBySetPiece(state, taker)).toBe(true);
+    expect(heldBySetPiece(state, other)).toBe(false);
   });
 });

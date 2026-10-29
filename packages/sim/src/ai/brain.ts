@@ -9,6 +9,8 @@ import {
 import { kickBall } from "../physics/ball";
 import { topSpeedFor } from "../physics/players";
 import { decisionRng } from "../random";
+import { playTackle } from "../control/actions";
+import { beginKick, heldBySetPiece } from "../rules/referee";
 import type {
   GoalGeometry,
   MatchState,
@@ -34,20 +36,106 @@ export function updatePlaceholderAi(state: MatchState): void {
   if (
     nearest !== null &&
     !nearest.player.isUserControlled &&
+    !heldBySetPiece(state, nearest.player) &&
     nearest.distance <= TUNING.ai.controlRadiusM &&
     state.ball.z <= TUNING.ai.controlMaxBallHeightM &&
     nearest.player.kickCooldown <= 0
   ) {
+    if (tryTackle(state, nearest.player)) {
+      return;
+    }
+    if (opponentHasPossession(state, nearest.player)) {
+      return;
+    }
     decideKick(state, nearest.player);
   }
 }
 
+/**
+ * A defender challenges only when an opponent is actually carrying the ball.
+ * Loose or fast-moving balls must be intercepted, not tackled, so the contact
+ * event is not generated on every nearby collision.
+ */
+function tryTackle(state: MatchState, player: PlayerState): boolean {
+  if (
+    player.role === "GK" ||
+    state.lastTouch === null ||
+    state.lastTouch.team === player.team
+  ) {
+    return false;
+  }
+  const ballSpeed = Math.hypot(state.ball.vx, state.ball.vy);
+  if (ballSpeed > TUNING.ai.tackleMaxBallSpeedMps) {
+    return false;
+  }
+  const opponent = findNearestOpponent(state, player);
+  if (
+    opponent === null ||
+    opponent.distance > TUNING.referee.tackleContactRangeM
+  ) {
+    return false;
+  }
+  const carrierDistance = Math.hypot(
+    opponent.player.x - state.ball.x,
+    opponent.player.y - state.ball.y,
+  );
+  if (carrierDistance > TUNING.control.possessionRadiusM) {
+    return false;
+  }
+  const rng = decisionRng(
+    state.seed,
+    state.tick,
+    player.team,
+    player.number + 1_000,
+  );
+  if (!rng.chance(TUNING.ai.tackleChance)) {
+    player.kickCooldown = TUNING.ai.tackleDecisionCooldownSeconds;
+    return false;
+  }
+  playTackle(state, player);
+  return true;
+}
+
+function opponentHasPossession(
+  state: MatchState,
+  player: PlayerState,
+): boolean {
+  if (state.lastTouch === null || state.lastTouch.team === player.team) {
+    return false;
+  }
+  const opponents =
+    player.team === "home" ? state.away : state.home;
+  for (const opponent of opponents.players) {
+    if (opponent.sentOff) {
+      continue;
+    }
+    if (
+      Math.hypot(opponent.x - state.ball.x, opponent.y - state.ball.y) <=
+      TUNING.control.possessionRadiusM
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function assignTeamTargets(state: MatchState, team: TeamState): void {
-  const chaser = findNearestOutfieldPlayer(team, state.ball.x, state.ball.y);
+  const chaser = findNearestOutfieldPlayer(
+    state,
+    team,
+    state.ball.x,
+    state.ball.y,
+  );
   const ball = state.ball;
 
   for (const player of team.players) {
-    if (player.isUserControlled) {
+    if (player.isUserControlled || player.sentOff) {
+      continue;
+    }
+    if (heldBySetPiece(state, player)) {
+      player.targetX = player.x;
+      player.targetY = player.y;
+      player.targetSpeed = 0;
       continue;
     }
     if (player.role === "GK") {
@@ -126,6 +214,9 @@ function keeperTarget(
 }
 
 function decideKick(state: MatchState, player: PlayerState): void {
+  if (player.sentOff || heldBySetPiece(state, player)) {
+    return;
+  }
   const team = player.team === "home" ? state.home : state.away;
   const attackGoal = getAttackingGoalForDirection(
     state.pitch,
@@ -187,6 +278,9 @@ function shoot(
   );
   const aimX = goal.lineX + goal.netDirection * TUNING.ai.shootAimDepthM;
 
+  if (!beginKick(state, player, "shot")) {
+    return;
+  }
   kickBall(state.ball, player, {
     targetX: aimX,
     targetY: aimY,
@@ -213,6 +307,9 @@ function pass(
   const leadY =
     target.y + target.vy * TUNING.ai.passLeadSeconds;
 
+  if (!beginKick(state, player, "pass")) {
+    return;
+  }
   kickBall(state.ball, player, {
     targetX: clamp(leadX, TUNING.player.pitchMarginM, state.pitch.lengthM - TUNING.player.pitchMarginM),
     targetY: clamp(leadY, TUNING.player.pitchMarginM, state.pitch.widthM - TUNING.player.pitchMarginM),
@@ -263,6 +360,9 @@ function dribble(
       Math.sin(evadeAngle) * TUNING.ai.dribbleEvadeTargetM;
   }
 
+  if (!beginKick(state, player, "dribble")) {
+    return;
+  }
   kickBall(state.ball, player, {
     targetX: clamp(
       targetX,
@@ -294,6 +394,9 @@ function keeperClear(
     state.pitch.widthM - TUNING.player.pitchMarginM,
   );
 
+  if (!beginKick(state, player, "clear")) {
+    return;
+  }
   kickBall(state.ball, player, {
     targetX: goal.lineX,
     targetY: aimY,
@@ -332,7 +435,11 @@ function selectPassTarget(
   let bestProgress = -Infinity;
 
   for (const teammate of teammates) {
-    if (teammate === player || teammate.role === "GK") {
+    if (
+      teammate === player ||
+      teammate.role === "GK" ||
+      teammate.sentOff
+    ) {
       continue;
     }
     const distance = Math.hypot(teammate.x - player.x, teammate.y - player.y);
@@ -361,6 +468,9 @@ function findNearestOpponent(
   let best: NearestPlayer | null = null;
 
   for (const opponent of opponents) {
+    if (opponent.sentOff) {
+      continue;
+    }
     const distance = Math.hypot(opponent.x - player.x, opponent.y - player.y);
     if (best === null || distance < best.distance) {
       best = { player: opponent, distance };
@@ -371,8 +481,18 @@ function findNearestOpponent(
 }
 
 function findNearestPlayerToBall(state: MatchState): NearestPlayer | null {
-  const homeNearest = findNearestInTeam(state.home, state.ball.x, state.ball.y);
-  const awayNearest = findNearestInTeam(state.away, state.ball.x, state.ball.y);
+  const homeNearest = findNearestInTeam(
+    state,
+    state.home,
+    state.ball.x,
+    state.ball.y,
+  );
+  const awayNearest = findNearestInTeam(
+    state,
+    state.away,
+    state.ball.x,
+    state.ball.y,
+  );
 
   if (homeNearest === null) {
     return awayNearest;
@@ -386,6 +506,7 @@ function findNearestPlayerToBall(state: MatchState): NearestPlayer | null {
 }
 
 function findNearestInTeam(
+  state: MatchState,
   team: TeamState,
   x: number,
   y: number,
@@ -393,6 +514,9 @@ function findNearestInTeam(
   let best: NearestPlayer | null = null;
 
   for (const player of team.players) {
+    if (player.sentOff || heldBySetPiece(state, player)) {
+      continue;
+    }
     const distance = Math.hypot(player.x - x, player.y - y);
     if (best === null || distance < best.distance) {
       best = { player, distance };
@@ -403,6 +527,7 @@ function findNearestInTeam(
 }
 
 function findNearestOutfieldPlayer(
+  state: MatchState,
   team: TeamState,
   x: number,
   y: number,
@@ -411,7 +536,12 @@ function findNearestOutfieldPlayer(
   let bestDistance = Infinity;
 
   for (const player of team.players) {
-    if (player.role === "GK" || player.isUserControlled) {
+    if (
+      player.role === "GK" ||
+      player.isUserControlled ||
+      player.sentOff ||
+      heldBySetPiece(state, player)
+    ) {
       continue;
     }
     const distance = Math.hypot(player.x - x, player.y - y);

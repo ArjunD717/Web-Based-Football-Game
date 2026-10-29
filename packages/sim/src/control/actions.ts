@@ -4,6 +4,8 @@ import {
   getAttackingGoalForDirection,
 } from "../pitch";
 import { kickBall } from "../physics/ball";
+import { beginKick, commitTackleFoul } from "../rules/referee";
+import { findTackleVictim } from "../rules/fouls";
 import type { MatchState, PlayerState } from "../types";
 
 export type PassKind = "pass" | "through" | "lob";
@@ -92,6 +94,10 @@ export function playPass(
     state.pitch.widthM - TUNING.player.pitchMarginM,
   );
 
+  if (!beginKick(state, player, "pass")) {
+    return false;
+  }
+
   kickBall(state.ball, player, {
     targetX,
     targetY,
@@ -102,11 +108,6 @@ export function playPass(
   player.state = "pass";
   player.actionTimer = TUNING.player.actionStateSeconds;
   player.kickCooldown = TUNING.control.passCooldownSeconds;
-  state.lastTouch = {
-    team: player.team,
-    playerId: player.id,
-    playerNumber: player.number,
-  };
   return true;
 }
 
@@ -153,6 +154,10 @@ export function playShot(
   );
   const curveSign = offset >= 0 ? 1 : -1;
 
+  if (!beginKick(state, player, "shot")) {
+    return false;
+  }
+
   kickBall(state.ball, player, {
     targetX,
     targetY,
@@ -167,11 +172,6 @@ export function playShot(
   player.state = "shoot";
   player.actionTimer = TUNING.player.actionStateSeconds;
   player.kickCooldown = TUNING.player.kickCooldownSeconds;
-  state.lastTouch = {
-    team: player.team,
-    playerId: player.id,
-    playerNumber: player.number,
-  };
   return true;
 }
 
@@ -179,7 +179,7 @@ export function playTackle(
   state: MatchState,
   player: PlayerState,
 ): boolean {
-  if (player.kickCooldown > 0) {
+  if (player.kickCooldown > 0 || player.sentOff) {
     return false;
   }
 
@@ -190,10 +190,17 @@ export function playTackle(
   const canWin =
     distance <= TUNING.control.tackleRangeM &&
     state.ball.z <= TUNING.ai.controlMaxBallHeightM;
+  const opponents =
+    player.team === "home" ? state.away : state.home;
+  const victim = findTackleVictim(opponents.players, player);
 
   player.state = "slide";
   player.actionTimer = TUNING.player.actionStateSeconds;
   player.kickCooldown = TUNING.control.tackleCooldownSeconds;
+
+  if (victim !== null && commitTackleFoul(state, player, victim, canWin)) {
+    return true;
+  }
 
   if (!canWin) {
     return false;
@@ -226,7 +233,7 @@ function canPlayBall(
   state: MatchState,
   player: PlayerState,
 ): boolean {
-  if (player.kickCooldown > 0) {
+  if (player.kickCooldown > 0 || player.sentOff) {
     return false;
   }
   const distance = Math.hypot(

@@ -23,7 +23,6 @@ export function setupKickoff(state: MatchState, side: TeamSide): string | null {
   const away = state.away;
   settleAllPlayers(state);
   state.lastTouch = null;
-  state.referee.throwIn = null;
 
   const kickoffTeam = side === "home" ? home : away;
   const taker =
@@ -98,7 +97,6 @@ export function setupThrowIn(
   y: number,
 ): string | null {
   settleAllPlayers(state);
-  state.referee.throwIn = null;
 
   const spotX = clamp(x, 0, state.pitch.lengthM);
   const spotY = y <= 0 ? 0 : state.pitch.widthM;
@@ -136,7 +134,6 @@ export function setupGoalKick(
   side: TeamSide,
 ): string | null {
   settleAllPlayers(state);
-  state.referee.throwIn = null;
 
   const team = side === "home" ? state.home : state.away;
   const goal = getDefendingGoalForDirection(
@@ -199,7 +196,7 @@ export function setupCorner(
   cornerY: number,
 ): string | null {
   settleAllPlayers(state);
-  state.referee.throwIn = null;
+
 
   const team = side === "home" ? state.home : state.away;
   const goal = getAttackingGoalForDirection(
@@ -250,6 +247,214 @@ export function setupCorner(
 
   ballAt(state, spotX, spotY);
   return taker?.id ?? null;
+}
+
+export interface FreeKickSetup {
+  readonly takerId: string | null;
+  readonly wallPlayerIds: readonly string[];
+}
+
+export interface PenaltySetup {
+  readonly takerId: string | null;
+  readonly goalkeeperId: string | null;
+}
+
+export function setupFreeKick(
+  state: MatchState,
+  side: TeamSide,
+  x: number,
+  y: number,
+): FreeKickSetup {
+  settleAllPlayers(state);
+  const spotX = clamp(x, 0, state.pitch.lengthM);
+  const spotY = clamp(y, 0, state.pitch.widthM);
+  const team = side === "home" ? state.home : state.away;
+  const opponents = side === "home" ? state.away : state.home;
+  const goal = getAttackingGoalForDirection(
+    state.pitch,
+    team.attackDirection,
+  );
+  const fwdX = goal.lineX - spotX;
+  const fwdY = goal.centreY - spotY;
+  const fwdLength = Math.hypot(fwdX, fwdY);
+  const dirX = fwdLength > 1e-6 ? fwdX / fwdLength : team.attackDirection;
+  const dirY = fwdLength > 1e-6 ? fwdY / fwdLength : 0;
+  const taker = nearestOutfield(team, spotX, spotY) ?? team.players[0] ?? null;
+
+  if (taker !== null) {
+    placePlayer(
+      taker,
+      clamp(
+        spotX - dirX * TUNING.referee.freeKickTakerBackM,
+        TUNING.player.pitchMarginM,
+        state.pitch.lengthM - TUNING.player.pitchMarginM,
+      ),
+      clamp(
+        spotY - dirY * TUNING.referee.freeKickTakerBackM,
+        TUNING.player.pitchMarginM,
+        state.pitch.widthM - TUNING.player.pitchMarginM,
+      ),
+      Math.atan2(dirY, dirX),
+    );
+  }
+
+  const wallPlayerIds: string[] = [];
+  const wallDistance = TUNING.referee.wallDistanceM;
+  if (fwdLength <= TUNING.referee.wallMaxKickDistanceM) {
+    const centrality = clamp(
+      1 - Math.abs(spotY - state.pitch.centreY) / (state.pitch.widthM / 2),
+      0,
+      1,
+    );
+    const proximity = clamp(
+      1 - fwdLength / TUNING.referee.wallMaxKickDistanceM,
+      0,
+      1,
+    );
+    const count = Math.round(
+      TUNING.referee.wallMinDefenders +
+        (TUNING.referee.wallMaxDefenders -
+          TUNING.referee.wallMinDefenders) *
+          centrality *
+          proximity,
+    );
+    const candidates = opponents.players
+      .filter((player) => player.role !== "GK" && !player.sentOff)
+      .sort(
+        (a, b) =>
+          Math.hypot(a.x - spotX, a.y - spotY) -
+          Math.hypot(b.x - spotX, b.y - spotY),
+      )
+      .slice(0, count);
+    const perpX = -dirY;
+    const perpY = dirX;
+    const wallX = spotX + dirX * wallDistance;
+    const wallY = spotY + dirY * wallDistance;
+    candidates.forEach((player, index) => {
+      const offset =
+        (index - (candidates.length - 1) / 2) *
+        TUNING.referee.wallSpacingM;
+      placePlayer(
+        player,
+        clamp(
+          wallX + perpX * offset,
+          TUNING.player.pitchMarginM,
+          state.pitch.lengthM - TUNING.player.pitchMarginM,
+        ),
+        clamp(
+          wallY + perpY * offset,
+          TUNING.player.pitchMarginM,
+          state.pitch.widthM - TUNING.player.pitchMarginM,
+        ),
+        Math.atan2(spotY - wallY, spotX - wallX),
+      );
+      wallPlayerIds.push(player.id);
+    });
+  }
+
+  for (const player of opponents.players) {
+    if (player.role === "GK") {
+      continue;
+    }
+    if (!wallPlayerIds.includes(player.id)) {
+      pushOutOfRadius(state, player, spotX, spotY, wallDistance);
+    }
+  }
+
+  ballAt(state, spotX, spotY);
+  return { takerId: taker?.id ?? null, wallPlayerIds };
+}
+
+export function setupPenalty(
+  state: MatchState,
+  side: TeamSide,
+): PenaltySetup {
+  settleAllPlayers(state);
+  const team = side === "home" ? state.home : state.away;
+  const opponents = side === "home" ? state.away : state.home;
+  const goal = getAttackingGoalForDirection(
+    state.pitch,
+    team.attackDirection,
+  );
+  const inward = -goal.netDirection;
+  const spotX =
+    goal.lineX - goal.netDirection * state.pitch.penaltySpotDistanceM;
+  const spotY = goal.centreY;
+  const outfield = team.players.filter(
+    (player) => player.role !== "GK" && !player.sentOff,
+  );
+  const taker =
+    outfield.find((player) => player.role === "ST") ??
+    outfield.find((player) => player.role === "CF") ??
+    outfield[0] ??
+    null;
+  const goalkeeper =
+    opponents.players.find(
+      (player) => player.role === "GK" && !player.sentOff,
+    ) ?? null;
+
+  if (taker !== null) {
+    placePlayer(
+      taker,
+      spotX + inward * TUNING.referee.penaltyTakerBackM,
+      spotY,
+      Math.atan2(goal.centreY - spotY, goal.lineX - spotX),
+    );
+  }
+
+  if (goalkeeper !== null) {
+    placePlayer(
+      goalkeeper,
+      goal.lineX + inward * TUNING.referee.penaltyGoalkeeperLineOffsetM,
+      goal.centreY,
+      Math.atan2(spotY - goal.centreY, spotX - goal.lineX),
+    );
+  }
+
+  for (const player of [state.home, state.away]) {
+    for (const body of player.players) {
+      if (body === taker || body === goalkeeper || body.sentOff) {
+        continue;
+      }
+      const dy = body.y - spotY;
+      const arcHalf = Math.sqrt(
+        Math.max(
+          0,
+          state.pitch.penaltyArcRadiusM * state.pitch.penaltyArcRadiusM -
+            dy * dy,
+        ),
+      );
+      const boundaryDistance =
+        Math.max(
+          state.pitch.penaltyAreaLengthM -
+            state.pitch.penaltySpotDistanceM,
+          arcHalf,
+        ) + TUNING.referee.penaltyClearanceM;
+      const outsideX = spotX + inward * boundaryDistance;
+      if ((body.x - outsideX) * inward < 0) {
+        body.x = clamp(
+          outsideX,
+          TUNING.player.pitchMarginM,
+          state.pitch.lengthM - TUNING.player.pitchMarginM,
+        );
+      }
+      body.y = clamp(
+        body.y,
+        TUNING.player.pitchMarginM,
+        state.pitch.widthM - TUNING.player.pitchMarginM,
+      );
+      zeroMotion(body);
+      body.targetX = body.x;
+      body.targetY = body.y;
+      body.facing = Math.atan2(spotY - body.y, spotX - body.x);
+    }
+  }
+
+  ballAt(state, spotX, spotY);
+  return {
+    takerId: taker?.id ?? null,
+    goalkeeperId: goalkeeper?.id ?? null,
+  };
 }
 
 function nearestOutfield(

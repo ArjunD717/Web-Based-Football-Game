@@ -5,6 +5,7 @@ import {
   type InputFrame,
 } from "@fb/shared";
 import {
+  heldBySetPiece,
   isInsidePenaltyArea,
   playPass,
   playShot,
@@ -93,6 +94,10 @@ export function prepareTeamControl(
   const buttons = input?.buttons ?? 0;
 
   let active = findPlayer(team.players, runtime.activePlayerId);
+  if (active !== null && heldBySetPiece(state, active)) {
+    active = null;
+    runtime.autoSwitchCooldown = 0;
+  }
   if (active === null) {
     active = nearestCandidate(state, side, ballInOwnBox, null);
   }
@@ -203,6 +208,9 @@ function applyActions(
   input: InputFrame,
   dt: number,
 ): void {
+  if (heldBySetPiece(state, player)) {
+    return;
+  }
   const pressed = input.buttons & ~runtime.previousButtons;
   const aim = normalizedAim(input.moveX, input.moveY);
   const passAim = Math.hypot(input.moveX, input.moveY) >=
@@ -268,7 +276,7 @@ function findPlayer(
   if (id === null) {
     return null;
   }
-  return players.find((player) => player.id === id) ?? null;
+  return players.find((player) => player.id === id && !player.sentOff) ?? null;
 }
 
 function nearestCandidate(
@@ -282,7 +290,11 @@ function nearestCandidate(
   let bestDistance = Infinity;
 
   for (const player of team.players) {
-    if (player === exclude) {
+    if (
+      player === exclude ||
+      player.sentOff ||
+      heldBySetPiece(state, player)
+    ) {
       continue;
     }
     if (player.role === "GK" && !includeGoalkeeper) {
@@ -310,7 +322,9 @@ function nextSwitchCandidate(
   const candidates = team.players
     .filter(
       (player) =>
-        player.role !== "GK" || includeGoalkeeper,
+        !player.sentOff &&
+        !heldBySetPiece(state, player) &&
+        (player.role !== "GK" || includeGoalkeeper),
     )
     .sort(
       (a, b) =>
@@ -330,7 +344,7 @@ function chooseAutoSwitch(
   active: PlayerState | null,
   ballInOwnBox: boolean,
 ): PlayerState | null {
-  if (active === null) {
+  if (active === null || active.sentOff) {
     return nearestCandidate(state, side, ballInOwnBox, null);
   }
   if (active.role === "GK" && !ballInOwnBox) {

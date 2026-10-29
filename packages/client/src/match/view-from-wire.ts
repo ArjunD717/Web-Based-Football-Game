@@ -110,6 +110,8 @@ export class WireViewBuilder {
       facing: player.facing,
       state: player.state,
       stamina: player.stamina,
+      sentOff: player.sentOff,
+      yellowCards: player.yellowCards,
       controlled:
         team === this.selfSide &&
         (team === "home"

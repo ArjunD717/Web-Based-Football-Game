@@ -2,10 +2,11 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 4**:
-server-authoritative matches with a referee-owned clock, score, half-time ends
-swap, goal detection and throw-in, goal-kick and corner restarts — plus the M3
-input, binary snapshot, interpolation, latency HUD and token reconnect stack.
+both devices are thin clients. This repository is at **Milestone 5**:
+server-authoritative matches with the referee-owned clock, score, half-time ends
+swap, goal/out-of-play restarts, fouls and cards, advantage, offside, free kicks
+with a wall, penalties and handball — layered on the M3 input, binary snapshot,
+interpolation, latency HUD and token reconnect stack.
 
 ## Requirements
 
@@ -106,7 +107,7 @@ Useful environment overrides:
 | `FB_STATIC_DIR` | `packages/client/dist` | Built client directory |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
 
-## Milestone 4 scope
+## Milestone 5 scope
 
 Implemented:
 
@@ -115,15 +116,42 @@ Implemented:
   half length, half-time interval, ends swap and full-time freeze
 - Goal-line law: whole ball over the line, between the posts and under the bar;
   own goals and direct goals from open play, kick-offs, goal kicks and corners;
-  direct goals from a throw-in are disallowed until another player touches
+  direct goals from a throw-in or indirect free kick are disallowed until
+  another player touches
 - Out-of-play law: whole-ball touchline exits become throw-ins to the side that
   did not touch last; goal-line exits become corners or goal kicks from the
   last-touch record
 - Restart placement: kick-off own halves and centre-circle clearance, throw-in
   taker/2 m opponent clearance, goal-kick placement with opponents outside the
   penalty area, and corners with 9.15 m defender clearance
-- Score, match clock, half and restart type/side travel in every binary snapshot;
-  clients show a live scoreline, clock, phase, and restart/full-time overlays
+- Tackle contact events with a tunable severity model (approach angle, relative
+  speed, ball-won-first, tackle/balance/aggression ratings, sliding contact),
+  strictness offsets (`lenient` / `standard` / `strict`), careless/reckless/
+  excessive-force fouls, yellow/red cards, second yellow = red, DOGSO reds and
+  send-offs that remove the player from control, AI selection and rendering
+- Advantage: a direct-free-kick foul is held for three seconds and converted to
+  the free kick if the attacking side fails to gain the configured progress
+- Handball law for deliberate contact, an unnaturally bigger arm/body and an
+  arm above the shoulder, including goalkeeper handling rights, penalty awards
+  and attacker handball before a goal
+- Offside: positions snapshotted at the decisive kick, second-last-defender and
+  ball lines, opponent-half requirement, active involvement by touching or
+  challenging, and throw-in/goal-kick/corner exemptions
+- Direct and indirect free kicks with a 9.15 m AI-managed defensive wall
+  (2–6 players), taker placement and opponent clearance; free kicks inside
+  shooting range only
+- Penalty kicks: spot placement, goalkeeper on the line, all other players
+  outside the area and arc, taker/GK/non-participant hold rules, double-touch
+  offence, and encroachment retake or indirect-free-kick outcomes
+- Referee events (foul, advantage, yellow, red, offside, handball, penalty)
+  travel in snapshots; the HUD shows the latest event, card counts and the
+  free-kick/penalty restart overlay
+- AI defenders challenge ball carriers with a deterministic tackle decision;
+  AI chasers, wall players, penalty takers and sent-off players are gated by
+  the referee state
+- Score, match clock, half, restart type/side and discipline travel in every
+  binary snapshot; clients show a live scoreline, clock, phase, card counts and
+  restart/full-time overlays
 - Inputs are ignored while the referee has stopped play; the server still
   simulates one authoritative match and gates human control until `live`
 - Server freezes the simulation and keeps the final snapshot after the second
@@ -146,37 +174,40 @@ Implemented:
   LB switch, RB lob, LT sprint, L3 finesse (mapping is fixed; keyboard is
   rebindable)
 - Phone controller at `/controller.html?room=CODE`: virtual stick, touch action
-  buttons, live connection state, score/clock/phase and its own power meter
+  buttons, live connection state, score/clock/phase/card counts, rule-event
+  banner and its own power meter
 - Match HUD includes the controlled-player label, white active-player ring, a
-  shot power bar, scoreline and restart overlays; input pauses automatically
-  when the match pauses or disconnects
+  shot power bar, scoreline/card counts, rule-event banner and restart overlays;
+  input pauses automatically when the match pauses or disconnects
 - Local practice and the M0 transport check remain available as separate pages
 
 Not implemented yet (by milestone design):
 
-- Fouls, cards, offside, penalties, free kicks, substitutions, added time and
-  the "next natural pause" half-end law (M5/M6)
+- Substitutions, added time, the "next natural pause" half-end law, injuries,
+  extra time and penalty shootouts (M6/M10)
+- VAR-lite, competitions, suspensions carried across matches and referee
+  strictness exposed in the lobby UI (the sim API accepts it)
 - Skill moves, charged/driven passes, first-time pass modifiers, manual pause
   and controller vibration
 - Gamepad rebinding; only the standard mapping is wired
 - Real data pipeline, club/nation selection, team editor, tactics (M6/M7/M9)
-- M8 AI layers, difficulty, set-piece routines
-- Injuries, extra time, shootouts, stats/VAR (M10)
+- M8 AI layers, difficulty, set-piece routines beyond the defensive wall
 - Three.js, animation, replays, audio (M11)
 - Local prediction/reconciliation; controls feel the RTT on a LAN
 - Authentication. The server is intended for a trusted private LAN only.
 
 ## Protocol and reconnect notes
 
-- `PROTOCOL_VERSION = 4`. Hello accepts an optional `sessionToken`; the welcome
+- `PROTOCOL_VERSION = 5`. Hello accepts an optional `sessionToken`; the welcome
   returns the stable token as `sessionId`. The browser keeps it in
   `sessionStorage`.
 - Snapshot deltas are sent at 30 Hz. Each client acks the latest decoded
   sequence with a 5-byte binary message; the server builds the next delta from
   that ack.
-- Snapshot headers are 24 bytes and include the match clock (seconds), phase,
-  half, score and restart type/side, so the scoreline is authoritative even
-  when a delta carries no changed players.
+- Snapshot headers are 29 bytes and include the match clock (seconds), phase,
+  half, score, restart type/side and the latest rule event (seq/type/side/
+  player number), so the scoreline and card feed are authoritative even when a
+  delta carries no changed players.
 - Input frames are binary type 17, 12 bytes: type, uint32 sequence, uint16
   buttons, two int16 stick axes and a uint8 local charge. The server accepts at
   most eight queued frames per seat per tick and drains them before the match
@@ -184,8 +215,8 @@ Not implemented yet (by milestone design):
 - Shot power is measured by how long SHOOT is held on the server. The client's
   `chargePower` is display data, not authority; finesse is a separate bit.
 - Player fields are quantised to centimetres and centimetres per second. Ball,
-  facing, state, stamina and the controlled-player indices are included in each
-  changed-player record.
+  facing, state, stamina, yellow-card count, sent-off flag and the
+  controlled-player indices are included in each changed-player record.
 - If a client asks for `resync`, reconnects, or acks a sequence no longer in the
   history ring, the server sends the static setup plus a full snapshot.
 - The client renders 100 ms behind arrival to absorb 30 Hz spacing and LAN jitter.
@@ -207,13 +238,17 @@ pnpm check
 ```
 
 Coverage includes shared math/RNG, protocol parsing, binary full/delta snapshots
-and acks, input codec and gamepad mapping, pitch/formation/physics/ball/Magnus/
-collision tests, goal-line and touchline classification, all four restart
-placements, referee clock/half-time/full-time transitions, throw-in pending
-state, deterministic headless match soak, human pass/shot/tackle, room
-lifecycle, snapshot streaming and acks, transport token resume/replacement,
-binary handler forwarding, client interpolation, HTTP/TLS/static serving, and
-server/client reconnect pause/resume.
+and acks, event/card/restart round-trips, input codec and gamepad mapping,
+pitch/formation/physics/ball/Magnus/collision tests, goal-line and touchline
+classification, all restart placements, free-kick wall geometry, penalty
+placement/encroachment, 108 scripted offside positions, 16 scripted handball
+decisions, tackle severity/strictness/DOGSO, advantage expiry, offside
+involvement/exemptions, handball penalties, card/send-off consequences,
+referee clock/half-time/full-time transitions, deterministic headless match
+soak, human pass/shot/tackle, room lifecycle, snapshot streaming and acks,
+transport token resume/replacement, binary handler forwarding, client
+interpolation, HTTP/TLS/static serving, and server/client reconnect
+pause/resume.
 
 The two-minute check:
 
@@ -229,16 +264,22 @@ The two-minute check:
 5. Force a restart with a heavy pass or shot: verify the scoreline/clock update
    and the overlay names the restart and side. Goals update the score and return
    to a conceded-side kick-off.
-6. On the host, move with WASD and sprint; press **Controls** to rebind a key and
+6. Tackle repeatedly near the ball: verify fouls produce a free-kick or penalty
+   overlay, the event banner names the card, and the persistent card counter
+   matches. A red card removes that player from the pitch and from control.
+7. Play through the middle until the assistant flags a runner: verify the
+   offside event and indirect free kick; check a free-kick wall forms at least
+   9.15 m from the ball for a foul within shooting range.
+8. On the host, move with WASD and sprint; press **Controls** to rebind a key and
    confirm it survives a reload. Hold Z and verify the shot power bar rises and
    clears on release.
-7. On the phone, move with the stick, fire a charged shot (power shows) and tap
+9. On the phone, move with the stick, fire a charged shot (power shows) and tap
    **Switch**; verify the white active-player ring moves. Tap Pass/Through/Lob/
    Tackle/Sprint/Finesse to exercise the same input path.
-8. Close the guest tab: host shows **Match paused** with a reconnect countdown.
-   Reopen with the same token (or reload the guest) to resume.
-9. Guest **Leave**: host returns to the room lobby with the code intact.
-10. `pnpm check`: expect 25 test files and 215 tests passing.
+10. Close the guest tab: host shows **Match paused** with a reconnect countdown.
+    Reopen with the same token (or reload the guest) to resume.
+11. Guest **Leave**: host returns to the room lobby with the code intact.
+12. `pnpm check`: expect 30 test files and 380+ tests passing.
 
 ## Layout
 

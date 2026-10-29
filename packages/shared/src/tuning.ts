@@ -200,6 +200,12 @@ export const TUNING = {
     passVelocityTransfer: 0.2,
     passLeadSeconds: 0.25,
     pressDistanceM: 3,
+    /** Per-decision chance to commit to a tackle when an opponent has the ball. */
+    tackleChance: 0.4,
+    /** Retry delay after declining a tackle, seconds. */
+    tackleDecisionCooldownSeconds: 0.45,
+    /** Above this ball speed a defender intercepts rather than tackles. */
+    tackleMaxBallSpeedMps: 8,
     keeperClearPowerMps: 24,
     keeperClearLiftMps: 6,
     keeperClearSpreadM: 18,
@@ -244,6 +250,69 @@ export const TUNING = {
     tackleBallSpeedMps: 7,
     tackleLiftMps: 0.4,
     tackleCooldownSeconds: 0.8,
+  },
+  referee: {
+    /** Relative closing speed mapped to the top of the foul severity curve. */
+    foulMaxRelativeSpeedMps: 12,
+    /** Baseline severity before speed, angle, contact and ratings are applied. */
+    foulBaseSeverity: 0.18,
+    foulSpeedWeight: 0.28,
+    /** Extra severity when the contact comes from behind the victim. */
+    foulBehindWeight: 0.34,
+    foulSlideWeight: 0.08,
+    foulUpperBodyWeight: 0.18,
+    /** Extra severity when the tackle does not win the ball first. */
+    foulNoBallWeight: 0.18,
+    foulAggressionWeight: 0.14,
+    foulTackleWeight: 0.18,
+    foulBalanceWeight: 0.1,
+    foulAngleWeight: 0.08,
+    /** Severity removed when the tackler clearly wins the ball first. */
+    foulBallFirstReduction: 0.3,
+    foulThreshold: 0.46,
+    yellowThreshold: 0.72,
+    redThreshold: 0.9,
+    lenientOffset: -0.08,
+    strictOffset: 0.08,
+    /** Tackler-to-victim distance that can generate a contact event, metres. */
+    tackleContactRangeM: 1.35,
+    /** Victim facing dot threshold below which contact counts as from behind. */
+    behindDotThreshold: -0.17,
+    /** Straight-red denial of a goalscoring opportunity. */
+    dogsoMaxDistanceM: 32,
+    dogsoCentralHalfWidthM: 12,
+    dogsoMaxDefendersGoalSide: 1,
+    /** Advantage window and the forward progress needed to keep play alive. */
+    advantageSeconds: 3,
+    advantageGainM: 8,
+    advantagePossessionRadiusM: 2.5,
+    /** Victim fall duration after a foul, seconds. */
+    fallSeconds: 1.2,
+    /** Active offside involvement: touching or challenging near the ball. */
+    offsideInvolvementRadiusM: 0.9,
+    offsideChallengeRadiusM: 1.2,
+    offsideChallengeBallRadiusM: 5,
+    /** Ball heights that can strike the hand/arm rather than the head. */
+    handballMinHeightM: 0.72,
+    handballMaxHeightM: 1.55,
+    handballShoulderHeightM: 1.3,
+    /** Deterministic chance that a hand/arm contact is judged deliberate. */
+    handballDeliberateChance: 0.35,
+    handballMinRelativeSpeedMps: 2,
+    /** Free-kick wall geometry. */
+    wallMinDefenders: 2,
+    wallMaxDefenders: 6,
+    wallDistanceM: 9.15,
+    wallMaxKickDistanceM: 35,
+    wallSpacingM: 0.75,
+    wallClearanceM: 0.3,
+    freeKickTakerBackM: 0.8,
+    /** Penalty placement. */
+    penaltyTakerBackM: 1,
+    penaltyGoalkeeperLineOffsetM: 0.15,
+    penaltyClearanceM: 0.5,
+    /** Extra distance beyond the penalty arc for non-participants. */
+    penaltyArcClearanceM: 0.5,
   },
   presentation: {
     /** Largest animation-frame delta consumed by the client, seconds. */

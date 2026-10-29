@@ -116,6 +116,8 @@ function interpolateSnapshot(
       ),
       state: b.state,
       stamina: lerp(a.stamina, b.stamina, alpha),
+      sentOff: alpha < 0.5 ? a.sentOff : b.sentOff,
+      yellowCards: alpha < 0.5 ? a.yellowCards : b.yellowCards,
     });
   }
 

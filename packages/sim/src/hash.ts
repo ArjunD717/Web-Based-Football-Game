@@ -36,6 +36,8 @@ export function hashMatchState(state: MatchState): number {
     mixNumber(player.actionTimer);
     mixNumber(player.kickCooldown);
     mixString(player.state);
+    mixInt(player.yellowCards);
+    mixInt(player.sentOff ? 1 : 0);
     mixInt(player.isUserControlled ? 1 : 0);
   };
 
@@ -57,9 +59,46 @@ export function hashMatchState(state: MatchState): number {
     mixNumber(state.referee.restart.x);
     mixNumber(state.referee.restart.y);
   }
-  if (state.referee.throwIn !== null) {
-    mixString(state.referee.throwIn.side);
-    mixString(state.referee.throwIn.playerId);
+  if (state.referee.setPiece !== null) {
+    const setPiece = state.referee.setPiece;
+    mixString(setPiece.type);
+    mixString(setPiece.side);
+    mixString(setPiece.takerId ?? "");
+    mixString(setPiece.firstTouchId ?? "");
+    mixInt(setPiece.otherTouched ? 1 : 0);
+    for (const id of setPiece.wallPlayerIds) {
+      mixString(id);
+    }
+    if (setPiece.penalty !== null) {
+      mixString(setPiece.penalty.takerId);
+      mixString(setPiece.penalty.goalkeeperId);
+      mixInt(setPiece.penalty.kicked ? 1 : 0);
+      mixString(setPiece.penalty.encroachment);
+    }
+  }
+  if (state.referee.offside !== null) {
+    mixString(state.referee.offside.side);
+    mixInt(state.referee.offside.tick);
+    for (const id of state.referee.offside.playerIds) {
+      mixString(id);
+    }
+  }
+  if (state.referee.pendingFoul !== null) {
+    const pending = state.referee.pendingFoul;
+    mixString(pending.side);
+    mixString(pending.offenderId);
+    mixString(pending.restartType);
+    mixNumber(pending.x);
+    mixNumber(pending.y);
+    mixInt(pending.expiresTick);
+  }
+  mixInt(state.referee.eventSeq);
+  if (state.referee.lastEvent !== null) {
+    const event = state.referee.lastEvent;
+    mixInt(event.seq);
+    mixString(event.type);
+    mixString(event.side);
+    mixString(event.playerId ?? "");
   }
 
   mixNumber(state.ball.x);

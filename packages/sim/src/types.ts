@@ -32,6 +32,11 @@ export interface PlayerAttributes {
   readonly agility: number;
   readonly stamina: number;
   readonly ballControl: number;
+  readonly standingTackle: number;
+  readonly slidingTackle: number;
+  readonly aggression: number;
+  readonly balance: number;
+  readonly strength: number;
 }
 
 export interface PlayerState {
@@ -55,6 +60,10 @@ export interface PlayerState {
   actionTimer: number;
   kickCooldown: number;
   stamina: number;
+  /** Yellow cards shown to this player; a second yellow becomes a red. */
+  yellowCards: number;
+  /** Sent-off players remain in the roster for stable snapshot slots. */
+  sentOff: boolean;
   /** True while a network client owns this body; AI leaves movement/actions alone. */
   isUserControlled: boolean;
 
@@ -112,7 +121,36 @@ export interface LastTouch {
 
 export type MatchPhase = "deadBall" | "live" | "halfTime" | "fullTime";
 
-export type RestartType = "kickoff" | "throwIn" | "goalKick" | "corner";
+export type RestartType =
+  | "kickoff"
+  | "throwIn"
+  | "goalKick"
+  | "corner"
+  | "directFreeKick"
+  | "indirectFreeKick"
+  | "penalty";
+
+export type FoulStrictness = "lenient" | "standard" | "strict";
+
+export type CardKind = "yellow" | "red";
+
+export type MatchEventType =
+  | "foul"
+  | "advantage"
+  | "yellowCard"
+  | "redCard"
+  | "offside"
+  | "handball"
+  | "penalty";
+
+export interface MatchEvent {
+  readonly seq: number;
+  readonly tick: number;
+  readonly type: MatchEventType;
+  readonly side: TeamSide;
+  readonly playerId: string | null;
+  readonly playerNumber: number | null;
+}
 
 export interface MatchRules {
   /** Real seconds in one half; game clock is still scaled to 45 minutes. */
@@ -127,6 +165,8 @@ export interface MatchRules {
   readonly kickoffDelaySeconds: number;
   /** Game-clock seconds represented by one half (45 minutes). */
   readonly gameSecondsPerHalf: number;
+  /** Referee tolerance used by the tackle severity model. */
+  readonly strictness: FoulStrictness;
 }
 
 export interface RestartState {
@@ -137,9 +177,49 @@ export interface RestartState {
   readonly y: number;
 }
 
-export interface ThrowInTracker {
+export type PenaltyEncroachment =
+  | "none"
+  | "attacker"
+  | "defender"
+  | "both";
+
+export interface PenaltyRuntime {
   readonly side: TeamSide;
-  readonly playerId: string;
+  readonly takerId: string;
+  readonly goalkeeperId: string;
+  /** True once the taker has played the ball. */
+  kicked: boolean;
+  encroachment: PenaltyEncroachment;
+}
+
+export interface SetPieceRuntime {
+  readonly type: RestartType;
+  readonly side: TeamSide;
+  readonly takerId: string | null;
+  /** First player to touch the ball after the restart; null while pending. */
+  firstTouchId: string | null;
+  /** True once anyone other than the taker touches the ball. */
+  otherTouched: boolean;
+  /** Defenders instructed to hold the free-kick wall until the ball is played. */
+  readonly wallPlayerIds: readonly string[];
+  readonly penalty: PenaltyRuntime | null;
+}
+
+export interface OffsideRuntime {
+  readonly side: TeamSide;
+  /** Tick at which the decisive kick was played. */
+  readonly tick: number;
+  readonly playerIds: readonly string[];
+}
+
+export interface PendingFoul {
+  readonly side: TeamSide;
+  readonly offenderId: string;
+  readonly offenderNumber: number;
+  readonly restartType: "directFreeKick" | "penalty";
+  readonly x: number;
+  readonly y: number;
+  readonly expiresTick: number;
 }
 
 export interface RefereeState {
@@ -154,11 +234,15 @@ export interface RefereeState {
   /** Countdown while dead or at half-time. */
   timerSeconds: number;
   readonly firstKickoffSide: TeamSide;
-  /**
-   * The thrower of an active throw-in. A direct goal remains disallowed until
-   * another player touches the ball; M5 replaces this with the full foul law.
-   */
-  throwIn: ThrowInTracker | null;
+  /** Runtime for the restart currently in play, cleared on the next restart. */
+  setPiece: SetPieceRuntime | null;
+  /** Players in an offside position when their team last played the ball. */
+  offside: OffsideRuntime | null;
+  /** A foul held for the advantage window; converted to a restart on expiry. */
+  pendingFoul: PendingFoul | null;
+  /** Most recent disciplinary/rule event, mirrored into snapshots. */
+  lastEvent: MatchEvent | null;
+  eventSeq: number;
 }
 
 export interface PitchConfig {

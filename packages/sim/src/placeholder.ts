@@ -122,6 +122,8 @@ function createPlaceholderPlayer(args: CreatePlayerArgs): PlayerState {
     actionTimer: 0,
     kickCooldown: 0,
     stamina: 1,
+    yellowCards: 0,
+    sentOff: false,
     isUserControlled: false,
     targetX: position.x,
     targetY: position.y,
@@ -144,8 +146,24 @@ function createAttributes(
       agility: rating(-4),
       stamina: rating(-4),
       ballControl: rating(-6),
+      standingTackle: rating(-30),
+      slidingTackle: rating(-32),
+      aggression: rating(-12),
+      balance: rating(4),
+      strength: rating(5),
     };
   }
+
+  const defender =
+    role === "CB" ||
+    role === "RB" ||
+    role === "LB" ||
+    role === "CDM";
+  const attacker =
+    role === "RW" ||
+    role === "LW" ||
+    role === "CF" ||
+    role === "ST";
 
   return {
     sprintSpeed: rating(0),
@@ -153,5 +171,10 @@ function createAttributes(
     agility: rating(0),
     stamina: rating(0),
     ballControl: rating(0),
+    standingTackle: rating(defender ? 5 : attacker ? -9 : 0),
+    slidingTackle: rating(defender ? 4 : attacker ? -10 : 0),
+    aggression: rating(defender ? 5 : attacker ? -3 : 0),
+    balance: rating(attacker ? 3 : 0),
+    strength: rating(defender ? 4 : 0),
   };
 }

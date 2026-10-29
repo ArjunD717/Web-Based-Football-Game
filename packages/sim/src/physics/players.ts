@@ -61,6 +61,9 @@ export function tickPlayerTimers(
   dt: number,
 ): void {
   for (const player of players) {
+    if (player.sentOff) {
+      continue;
+    }
     player.kickCooldown = Math.max(0, player.kickCooldown - dt);
     player.actionTimer = Math.max(0, player.actionTimer - dt);
   }
@@ -73,6 +76,9 @@ export function updateTeamMovement(
   dt: number,
 ): void {
   for (const player of team.players) {
+    if (player.sentOff) {
+      continue;
+    }
     const staminaFactor = staminaSpeedFactor(player);
     const maxSpeed = topSpeedFor(player.attributes) * staminaFactor;
     const baseAcceleration = accelerationFor(player.attributes) * staminaFactor;
@@ -225,6 +231,9 @@ export function resolvePlayerCollisions(
 }
 
 function resolvePair(a: PlayerState, b: PlayerState): void {
+  if (a.sentOff || b.sentOff) {
+    return;
+  }
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const minDistance = TUNING.player.radiusM * 2;

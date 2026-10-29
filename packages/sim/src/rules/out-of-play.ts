@@ -5,9 +5,10 @@ import type {
   GoalGeometry,
   LastTouch,
   Pitch,
-  RestartType,
   TeamSide,
 } from "../types";
+
+export type BoundaryRestartType = "throwIn" | "goalKick" | "corner";
 
 export interface GoalEvent {
   readonly kind: "goal";
@@ -17,7 +18,7 @@ export interface GoalEvent {
 
 export interface RestartEvent {
   readonly kind: "restart";
-  readonly type: Exclude<RestartType, "kickoff">;
+  readonly type: BoundaryRestartType;
   readonly side: TeamSide;
   readonly x: number;
   readonly y: number;

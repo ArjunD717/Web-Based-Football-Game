@@ -80,6 +80,15 @@ export function buildSnapshotFrame(
       scoreAway: state.referee.scoreAway,
       restartType: state.referee.restart?.type ?? null,
       restartSide: state.referee.restart?.side ?? null,
+      lastEvent:
+        state.referee.lastEvent === null
+          ? null
+          : {
+              seq: state.referee.lastEvent.seq,
+              type: state.referee.lastEvent.type,
+              side: state.referee.lastEvent.side,
+              playerNumber: state.referee.lastEvent.playerNumber,
+            },
     },
     ball: {
       x: state.ball.x,
@@ -97,6 +106,8 @@ export function buildSnapshotFrame(
       facing: player.facing,
       state: player.state,
       stamina: player.stamina,
+      sentOff: player.sentOff,
+      yellowCards: player.yellowCards,
     })),
   };
 }

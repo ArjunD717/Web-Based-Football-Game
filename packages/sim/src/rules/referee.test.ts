@@ -3,8 +3,13 @@ import { TUNING } from "@fb/shared";
 import { describe, expect, it } from "vitest";
 import { createMatch } from "../match";
 import { stepMatch } from "../match";
-import type { MatchState } from "../types";
-import { advanceReferee, registerTouch, startThrowIn } from "./referee";
+import type { MatchState, TeamSide } from "../types";
+import {
+  advanceReferee,
+  beginKick,
+  registerTouch,
+  startThrowIn,
+} from "./referee";
 
 const dt = 1 / TUNING.sim.tickHz;
 
@@ -26,6 +31,23 @@ function makeLive(state: MatchState): void {
   state.referee.phase = "live";
   state.referee.restart = null;
   state.referee.timerSeconds = 0;
+}
+
+function touch(
+  state: MatchState,
+  team: TeamSide,
+  playerId: string,
+  playerNumber: number,
+) {
+  return {
+    team,
+    playerId,
+    playerNumber,
+    ballHeightM: TUNING.ball.radiusM,
+    relativeSpeedMps: 4,
+    contactX: state.ball.x,
+    contactY: state.ball.y,
+  };
 }
 
 describe("referee match flow", () => {
@@ -62,14 +84,14 @@ describe("referee match flow", () => {
       type: "throwIn",
       side: "away",
     });
-    expect(state.referee.throwIn?.side).toBe("away");
+    expect(state.referee.setPiece?.side).toBe("away");
   });
 
   it("turns a direct throw-in own goal into a corner", () => {
     const state = createMatch({ seed: 23 });
     startThrowIn(state, "away", state.pitch.centreX, 0);
     const thrower = state.away.players.find(
-      (player) => player.id === state.referee.throwIn?.playerId,
+      (player) => player.id === state.referee.setPiece?.takerId,
     )!;
     state.lastTouch = {
       team: "away",
@@ -87,14 +109,17 @@ describe("referee match flow", () => {
       type: "corner",
       side: "home",
     });
-    expect(state.referee.throwIn).toBeNull();
+    expect(state.referee.setPiece).toMatchObject({
+      type: "corner",
+      side: "home",
+    });
   });
 
   it("turns a direct throw-in at the opponent goal into a goal kick", () => {
     const state = createMatch({ seed: 28 });
     startThrowIn(state, "away", state.pitch.centreX, 0);
     const thrower = state.away.players.find(
-      (player) => player.id === state.referee.throwIn?.playerId,
+      (player) => player.id === state.referee.setPiece?.takerId,
     )!;
     state.lastTouch = {
       team: "away",
@@ -112,7 +137,10 @@ describe("referee match flow", () => {
       type: "goalKick",
       side: "home",
     });
-    expect(state.referee.throwIn).toBeNull();
+    expect(state.referee.setPiece).toMatchObject({
+      type: "goalKick",
+      side: "home",
+    });
   });
 
   it("enters half-time, swaps ends and starts the second half", () => {
@@ -173,30 +201,24 @@ describe("referee match flow", () => {
     const state = createMatch({ seed: 27 });
     startThrowIn(state, "away", state.pitch.centreX, 0);
     const thrower = state.away.players.find(
-      (player) => player.id === state.referee.throwIn?.playerId,
+      (player) => player.id === state.referee.setPiece?.takerId,
     )!;
 
     expect(advanceReferee(state, state.rules.restartDelaySeconds + dt)).toBe(
       true,
     );
     expect(state.referee.phase).toBe("live");
-    expect(state.referee.throwIn).toMatchObject({
+    expect(state.referee.setPiece).toMatchObject({
+      type: "throwIn",
       side: "away",
-      playerId: thrower.id,
+      takerId: thrower.id,
     });
 
-    registerTouch(state, {
-      team: "away",
-      playerId: thrower.id,
-      playerNumber: thrower.number,
-    });
-    expect(state.referee.throwIn).not.toBeNull();
+    expect(beginKick(state, thrower, "pass")).toBe(true);
+    expect(state.referee.setPiece?.firstTouchId).toBe(thrower.id);
+    expect(state.referee.setPiece?.otherTouched).toBe(false);
 
-    registerTouch(state, {
-      team: "home",
-      playerId: "home-4",
-      playerNumber: 4,
-    });
-    expect(state.referee.throwIn).toBeNull();
+    registerTouch(state, touch(state, "home", "home-4", 4));
+    expect(state.referee.setPiece).toBeNull();
   });
 });

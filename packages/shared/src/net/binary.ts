@@ -17,10 +17,10 @@ export const SNAPSHOT_ACK_MESSAGE_TYPE = 16;
 
 const TAU = Math.PI * 2;
 const SNAPSHOT_FLAG_DELTA = 1;
-const HEADER_BYTES = 24;
+const HEADER_BYTES = 29;
 const BALL_BYTES = 12;
 const MASK_BYTES = Math.ceil(MATCH_TOTAL_PLAYERS / 8);
-const PLAYER_RECORD_BYTES = 12;
+const PLAYER_RECORD_BYTES = 13;
 /** First player-record byte; useful to tests and the resync decoder. */
 export const SNAPSHOT_BODY_OFFSET = HEADER_BYTES + BALL_BYTES + MASK_BYTES;
 const BODY_OFFSET = SNAPSHOT_BODY_OFFSET;
@@ -40,7 +40,10 @@ export type SnapshotRestartType =
   | "kickoff"
   | "throwIn"
   | "goalKick"
-  | "corner";
+  | "corner"
+  | "directFreeKick"
+  | "indirectFreeKick"
+  | "penalty";
 
 export interface SnapshotMatch {
   readonly phase: SnapshotMatchPhase;
@@ -50,6 +53,24 @@ export interface SnapshotMatch {
   readonly scoreAway: number;
   readonly restartType: SnapshotRestartType | null;
   readonly restartSide: "home" | "away" | null;
+  /** Latest disciplinary/rule event; clients show it until a newer one lands. */
+  readonly lastEvent: SnapshotEvent | null;
+}
+
+export type SnapshotEventType =
+  | "foul"
+  | "advantage"
+  | "yellowCard"
+  | "redCard"
+  | "offside"
+  | "handball"
+  | "penalty";
+
+export interface SnapshotEvent {
+  readonly seq: number;
+  readonly type: SnapshotEventType;
+  readonly side: "home" | "away";
+  readonly playerNumber: number | null;
 }
 
 const PHASE_CODES: Readonly<Record<SnapshotMatchPhase, number>> = {
@@ -69,12 +90,36 @@ const RESTART_CODES: Readonly<Record<SnapshotRestartType, number>> = {
   throwIn: 2,
   goalKick: 3,
   corner: 4,
+  directFreeKick: 5,
+  indirectFreeKick: 6,
+  penalty: 7,
 };
 const RESTARTS_BY_CODE: Record<number, SnapshotRestartType> = {
   1: "kickoff",
   2: "throwIn",
   3: "goalKick",
   4: "corner",
+  5: "directFreeKick",
+  6: "indirectFreeKick",
+  7: "penalty",
+};
+const EVENT_CODES: Readonly<Record<SnapshotEventType, number>> = {
+  foul: 1,
+  advantage: 2,
+  yellowCard: 3,
+  redCard: 4,
+  offside: 5,
+  handball: 6,
+  penalty: 7,
+};
+const EVENTS_BY_CODE: Record<number, SnapshotEventType> = {
+  1: "foul",
+  2: "advantage",
+  3: "yellowCard",
+  4: "redCard",
+  5: "offside",
+  6: "handball",
+  7: "penalty",
 };
 
 export class BinaryProtocolError extends Error {
@@ -101,6 +146,8 @@ export interface SnapshotPlayer {
   facing: number;
   state: PlayerStateName;
   stamina: number;
+  sentOff: boolean;
+  yellowCards: number;
 }
 
 export interface SnapshotFrame {
@@ -144,6 +191,8 @@ interface QuantizedPlayer {
   facing: number;
   state: number;
   stamina: number;
+  sentOff: boolean;
+  yellowCards: number;
 }
 
 /**
@@ -208,6 +257,12 @@ export function encodeSnapshot(
         : 2;
   bytes[22] = frame.match.scoreHome;
   bytes[23] = frame.match.scoreAway;
+  const event = frame.match.lastEvent;
+  view.setUint16(24, Math.min(65_535, event?.seq ?? 0), true);
+  bytes[26] = event === null ? 0 : EVENT_CODES[event.type];
+  bytes[27] =
+    event === null ? 0 : event.side === "home" ? 1 : 2;
+  bytes[28] = event?.playerNumber ?? 0;
 
   let offset = HEADER_BYTES;
   writeBall(view, offset, ball);
@@ -434,6 +489,22 @@ function validateMatch(match: SnapshotMatch): void {
   ) {
     throw new BinaryProtocolError("Invalid snapshot restart state");
   }
+  const event = match.lastEvent;
+  if (event !== null) {
+    if (
+      !Number.isInteger(event.seq) ||
+      event.seq < 1 ||
+      event.seq > 65_535 ||
+      EVENT_CODES[event.type] === undefined ||
+      (event.side !== "home" && event.side !== "away") ||
+      (event.playerNumber !== null &&
+        (!Number.isInteger(event.playerNumber) ||
+          event.playerNumber < 1 ||
+          event.playerNumber > 99))
+    ) {
+      throw new BinaryProtocolError("Invalid snapshot event state");
+    }
+  }
 }
 
 function decodeMatch(bytes: Uint8Array): SnapshotMatch | null {
@@ -451,12 +522,33 @@ function decodeMatch(bytes: Uint8Array): SnapshotMatch | null {
         : restartSideCode === 2
           ? "away"
           : null;
+  const eventSeq = view.getUint16(24, true);
+  const eventCode = bytes[26]!;
+  const eventSideCode = bytes[27]!;
+  const eventType = eventCode === 0 ? null : EVENTS_BY_CODE[eventCode];
+  const eventSide =
+    eventSideCode === 1
+      ? "home"
+      : eventSideCode === 2
+        ? "away"
+        : null;
+  const eventNumber = bytes[28]!;
+  const hasEvent =
+    eventSeq !== 0 ||
+    eventCode !== 0 ||
+    eventSideCode !== 0 ||
+    eventNumber !== 0;
   if (
     phase === undefined ||
     (half !== 1 && half !== 2) ||
     (restartCode !== 0 && restartType === undefined) ||
     (restartSideCode !== 0 && restartSide === null) ||
-    (restartType === null) !== (restartSide === null)
+    (restartType === null) !== (restartSide === null) ||
+    (hasEvent &&
+      (eventSeq === 0 ||
+        eventType === undefined ||
+        eventSide === null ||
+        (eventNumber !== 0 && eventNumber > 99)))
   ) {
     return null;
   }
@@ -468,6 +560,14 @@ function decodeMatch(bytes: Uint8Array): SnapshotMatch | null {
     scoreAway: bytes[23]!,
     restartType: restartType ?? null,
     restartSide,
+    lastEvent: hasEvent
+      ? {
+          seq: eventSeq,
+          type: eventType!,
+          side: eventSide!,
+          playerNumber: eventNumber === 0 ? null : eventNumber,
+        }
+      : null,
   };
 }
 
@@ -513,6 +613,8 @@ function quantizePlayer(player: SnapshotPlayer): QuantizedPlayer {
     facing: quantizeFacing(player.facing),
     state,
     stamina: Math.round(clamp01(player.stamina) * STAMINA_SCALE),
+    sentOff: player.sentOff,
+    yellowCards: Math.min(2, Math.max(0, Math.round(player.yellowCards))),
   };
 }
 
@@ -527,7 +629,9 @@ function sameQuantizedPlayer(
     a.vy === b.vy &&
     a.facing === b.facing &&
     a.state === b.state &&
-    a.stamina === b.stamina
+    a.stamina === b.stamina &&
+    a.sentOff === b.sentOff &&
+    a.yellowCards === b.yellowCards
   );
 }
 
@@ -567,12 +671,21 @@ function writePlayer(
   view.setUint16(offset + 8, player.facing, true);
   view.setUint8(offset + 10, player.state);
   view.setUint8(offset + 11, player.stamina);
+  view.setUint8(
+    offset + 12,
+    (player.sentOff ? 1 : 0) | ((player.yellowCards & 0x03) << 1),
+  );
 }
 
 function readPlayer(view: DataView, offset: number): SnapshotPlayer {
   const stateCode = view.getUint8(offset + 10);
   if (stateCode >= PLAYER_STATE_CODES.length) {
     throw new BinaryProtocolError(`Unknown player state code ${stateCode}`);
+  }
+  const flags = view.getUint8(offset + 12);
+  const yellowCards = (flags >> 1) & 0x03;
+  if (yellowCards > 2 || (flags & ~0x07) !== 0) {
+    throw new BinaryProtocolError("Invalid player discipline flags");
   }
   return {
     x: view.getInt16(offset, true) / POSITION_SCALE,
@@ -582,6 +695,8 @@ function readPlayer(view: DataView, offset: number): SnapshotPlayer {
     facing: (view.getUint16(offset + 8, true) / FACING_SCALE) * TAU,
     state: playerStateName(stateCode),
     stamina: view.getUint8(offset + 11) / STAMINA_SCALE,
+    sentOff: (flags & 1) !== 0,
+    yellowCards,
   };
 }
 

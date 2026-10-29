@@ -1,6 +1,6 @@
 // packages/server/src/rooms/control.test.ts
 import { CONTROL_BUTTONS } from "@fb/shared";
-import { createMatch } from "@fb/sim";
+import { createMatch, startFreeKick } from "@fb/sim";
 import { describe, expect, it } from "vitest";
 import {
   controlSnapshotIndices,
@@ -13,6 +13,27 @@ import {
 const DT = 1 / 60;
 
 describe("control selection", () => {
+  it("does not hand control to a held free-kick wall player", () => {
+    const state = createMatch({ seed: 106 });
+    startFreeKick(
+      state,
+      "home",
+      "directFreeKick",
+      state.pitch.lengthM - 22,
+      state.pitch.centreY,
+    );
+    const wall = new Set(state.referee.setPiece?.wallPlayerIds ?? []);
+    expect(wall.size).toBeGreaterThan(0);
+    state.referee.phase = "live";
+    state.referee.restart = null;
+
+    const away = createTeamControlRuntime();
+    prepareTeamControl(state, "away", away, DT);
+
+    expect(away.activePlayerId).not.toBeNull();
+    expect(wall.has(away.activePlayerId!)).toBe(false);
+  });
+
   it("selects one controlled player per side and sets movement targets", () => {
     const state = createMatch({ seed: 101 });
     const home = createTeamControlRuntime();
@@ -148,6 +169,10 @@ describe("control selection", () => {
 
   it("fires a charged shot on release", () => {
     const state = createMatch({ seed: 104 });
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.setPiece = null;
+    state.referee.timerSeconds = 0;
     const home = createTeamControlRuntime();
     prepareTeamControl(state, "home", home, DT);
     const active = state.home.players.find(

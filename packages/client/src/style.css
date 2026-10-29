@@ -761,6 +761,31 @@ code {
   text-transform: uppercase;
 }
 
+.score-discipline {
+  margin-left: 0.35rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.match-event {
+  align-self: center;
+  margin: 0.45rem 0 0;
+  padding: 0.32rem 0.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: rgba(6, 17, 11, 0.9);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.play-event {
+  margin: 0.35rem 0 0;
+  font-size: 0.66rem;
+}
+
 .stage-card {
   display: flex;
   flex: 1;

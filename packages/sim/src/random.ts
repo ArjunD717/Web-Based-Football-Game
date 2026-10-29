@@ -38,3 +38,12 @@ export function decisionRng(
     ),
   );
 }
+
+/** Separate deterministic stream for referee contacts (handball, deflections). */
+export function eventRng(
+  seed: number,
+  tick: number,
+  salt: number,
+): Rng {
+  return createRng(mixSeeds(seed, tick, salt, 0x165667b1));
+}

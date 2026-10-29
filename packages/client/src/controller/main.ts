@@ -6,6 +6,7 @@ import {
   type LobbyRoomWire,
 } from "@fb/shared";
 import { TouchControls } from "../input/touch-controls";
+import { describeMatchEvent, formatCardCounts } from "../match/event-label";
 import {
   GameClient,
   type GameClientState,
@@ -42,6 +43,8 @@ const playRoom = byId<HTMLElement>("play-room");
 const playScore = byId<HTMLElement>("play-score");
 const playClock = byId<HTMLElement>("play-clock");
 const playPhase = byId<HTMLElement>("play-phase");
+const playCards = byId<HTMLElement>("play-cards");
+const playEvent = byId<HTMLElement>("play-event");
 const playPlayer = byId<HTMLElement>("play-player");
 const leavePlayButton = byId<HTMLButtonElement>("leave-play");
 const powerMeter = byId<HTMLElement>("controller-power");
@@ -69,6 +72,8 @@ let lastLoopAt = performance.now();
 let controlAccumulator = 0;
 let toastTimer: number | null = null;
 let lastHudAt = 0;
+let lastMatchEventSeq = 0;
+let matchEventTimer: number | null = null;
 
 client.subscribe((state) => {
   currentState = state;
@@ -127,6 +132,12 @@ function applyState(state: GameClientState): void {
 
   if (state.setup?.matchId !== lastSetupId) {
     lastSetupId = state.setup?.matchId ?? null;
+    lastMatchEventSeq = 0;
+    if (matchEventTimer !== null) {
+      window.clearTimeout(matchEventTimer);
+      matchEventTimer = null;
+    }
+    playEvent.hidden = true;
     if (state.setup === null) {
       controls.reset();
       controlAccumulator = 0;
@@ -298,6 +309,8 @@ function updateHud(state: GameClientState): void {
       : match.half === 1
         ? "1st half"
         : "2nd half";
+  playCards.textContent =
+    frame === null ? "YC 0–0 · RC 0–0" : formatCardCounts(frame);
 
   const paused = state.pausedReason !== null;
   const online = state.status === "online";
@@ -315,6 +328,29 @@ function updateHud(state: GameClientState): void {
               ? "Restart"
               : "Live";
   playChip.dataset.state = !online ? "offline" : paused ? "paused" : "live";
+
+  if (match === null) {
+    playEvent.hidden = true;
+    return;
+  }
+  const event = match.lastEvent;
+  if (event !== null && event.seq !== lastMatchEventSeq) {
+    lastMatchEventSeq = event.seq;
+    const setup = state.setup;
+    playEvent.textContent = describeMatchEvent(
+      event,
+      setup?.home.name ?? "Home",
+      setup?.away.name ?? "Away",
+    );
+    playEvent.hidden = false;
+    if (matchEventTimer !== null) {
+      window.clearTimeout(matchEventTimer);
+    }
+    matchEventTimer = window.setTimeout(() => {
+      playEvent.hidden = true;
+      matchEventTimer = null;
+    }, 3_500);
+  }
 }
 
 function formatMatchClock(seconds: number): string {
@@ -383,7 +419,13 @@ function updateOverlay(state: GameClientState): void {
           ? "Throw-in"
           : restart === "goalKick"
             ? "Goal kick"
-            : "Corner";
+            : restart === "corner"
+              ? "Corner"
+              : restart === "penalty"
+                ? "Penalty"
+                : restart === "indirectFreeKick"
+                  ? "Indirect free kick"
+                  : "Free kick";
     showOverlay(title, `${sideName} restart. ${score}.`);
     return;
   }

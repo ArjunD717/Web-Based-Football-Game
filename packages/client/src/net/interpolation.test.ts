@@ -20,6 +20,8 @@ function makeFrame(
       facing,
       state: "jog",
       stamina: 1,
+      sentOff: false,
+      yellowCards: 0,
     }),
   );
   return {
@@ -36,6 +38,7 @@ function makeFrame(
       scoreAway: 0,
       restartType: null,
       restartSide: null,
+      lastEvent: null,
     },
     ball: { x, y: 0, z: 0.11, vx: 0, vy: 0, vz: 0 },
     players,

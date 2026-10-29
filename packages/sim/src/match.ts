@@ -11,9 +11,11 @@ import {
 } from "./physics/players";
 import {
   advanceReferee,
+  checkOffsideInvolvement,
   createMatchRules,
   createReferee,
   evaluateBoundary,
+  evaluateHandball,
   registerTouch,
   startKickoff,
 } from "./rules/referee";
@@ -111,6 +113,10 @@ export function stepMatch(state: MatchState): MatchState {
   updateTeamMovement(state.away, state.pitch, dt);
   resolvePlayerCollisions(state.home.players, state.away.players);
 
+  if (checkOffsideInvolvement(state)) {
+    return state;
+  }
+
   const contact = stepBall(
     state.ball,
     state.home.players,
@@ -119,7 +125,9 @@ export function stepMatch(state: MatchState): MatchState {
     dt,
   );
   if (contact !== null) {
-    registerTouch(state, contact);
+    if (!evaluateHandball(state, contact)) {
+      registerTouch(state, contact);
+    }
   }
 
   evaluateBoundary(state);

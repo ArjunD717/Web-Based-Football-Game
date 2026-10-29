@@ -11,6 +11,12 @@ export interface BallContact {
   readonly playerId: string;
   readonly team: "home" | "away";
   readonly playerNumber: number;
+  /** Ball height when contact was resolved, metres. */
+  readonly ballHeightM: number;
+  /** Relative closing speed between ball and player, m/s. */
+  readonly relativeSpeedMps: number;
+  readonly contactX: number;
+  readonly contactY: number;
 }
 
 export interface KickSpec {
@@ -354,6 +360,9 @@ function resolveContactsForTeam(
   let contact: BallContact | null = null;
 
   for (const player of players) {
+    if (player.sentOff) {
+      continue;
+    }
     if (ball.z - BALL_RADIUS > TUNING.player.heightM) {
       continue;
     }
@@ -392,6 +401,10 @@ function resolveContactsForTeam(
       playerId: player.id,
       team: player.team,
       playerNumber: player.number,
+      ballHeightM: ball.z,
+      relativeSpeedMps: Math.hypot(relativeVx, relativeVy),
+      contactX: ball.x,
+      contactY: ball.y,
     };
   }
 
