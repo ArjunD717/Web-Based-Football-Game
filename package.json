@@ -1,0 +1,33 @@
+{
+  "name": "web-football",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Private LAN football game. M0: tooling, shared contracts, HTTPS/WSS link.",
+  "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=20.19.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @fb/server --filter @fb/client dev",
+    "build": "pnpm --filter @fb/client build",
+    "preview": "pnpm --filter @fb/client preview",
+    "start": "pnpm --filter @fb/server start",
+    "certs": "node scripts/setup-certs.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.19.0",
+    "@types/node": "20.17.16",
+    "eslint": "9.19.0",
+    "globals": "15.14.0",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.22.0",
+    "vitest": "3.0.5"
+  }
+}

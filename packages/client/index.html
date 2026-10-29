@@ -1,0 +1,272 @@
+<!-- packages/client/index.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="Web Football LAN lobby and server-authoritative match"
+    />
+    <title>Web Football | LAN Lobby</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p class="brand-kicker">Web Football</p>
+            <p class="brand-milestone">M4 / referee live</p>
+          </div>
+        </div>
+
+        <div class="connection-pill" aria-live="polite">
+          <span id="connection-dot" class="status-dot" data-status="connecting"></span>
+          <span id="connection-label">Connecting</span>
+          <span class="connection-sep">/</span>
+          <span id="ping-label" class="mono">— ms</span>
+        </div>
+
+        <nav class="topbar-nav" aria-label="Sections">
+          <button id="open-bindings" class="nav-button" type="button">
+            Controls
+          </button>
+          <a href="/practice.html">Practice</a>
+          <a href="/controller.html">Controller</a>
+          <a href="/link.html">Transport</a>
+        </nav>
+      </header>
+
+      <main id="lobby-view" class="lobby-shell">
+        <section id="entry-view" class="lobby-card">
+          <p class="eyebrow">LAN / one host, two devices</p>
+          <h1>Two devices.<br />One pitch.</h1>
+          <p class="lede">
+            Start the Node host, create a room here, then scan the room QR from
+            the host terminal or share the four-letter code. Both players ready
+            up and the server kicks off.
+          </p>
+
+          <div class="entry-grid">
+            <article class="entry-panel">
+              <span class="panel-index">01</span>
+              <h2>Host a match</h2>
+              <p>Create the room on this device. You take the home side.</p>
+              <button id="create-room" class="button primary wide" type="button">
+                Create room
+              </button>
+            </article>
+
+            <article class="entry-panel">
+              <span class="panel-index">02</span>
+              <h2>Join a match</h2>
+              <form id="join-form" class="join-form">
+                <label for="room-input" class="field-label">Room code</label>
+                <div class="join-row">
+                  <input
+                    id="room-input"
+                    class="room-input"
+                    name="room"
+                    type="text"
+                    maxlength="4"
+                    autocomplete="off"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                    inputmode="text"
+                    pattern="[A-Za-z]{4}"
+                    placeholder="ABCD"
+                    aria-label="Four-letter room code"
+                  />
+                  <button id="join-submit" class="button" type="submit">
+                    Join
+                  </button>
+                </div>
+              </form>
+              <p class="panel-hint">The host terminal prints a scannable join QR.</p>
+            </article>
+          </div>
+
+          <ol class="how-list">
+            <li><span>1</span> Host runs <code>pnpm start</code> with mkcert TLS.</li>
+            <li><span>2</span> Create a room, both devices open the HTTPS URL.</li>
+            <li><span>3</span> Press Ready on both devices. AI kickabout is live.</li>
+          </ol>
+        </section>
+
+        <section id="room-view" class="room-card" hidden>
+          <div class="room-head">
+            <div>
+              <p class="eyebrow">Room</p>
+              <div class="room-code-row">
+                <h2 id="room-code" class="room-code">----</h2>
+                <button id="copy-code" class="button small" type="button">
+                  Copy code
+                </button>
+              </div>
+              <p id="room-phase" class="room-phase">Waiting for opponent</p>
+            </div>
+            <span id="room-badge" class="chip live">Lobby</span>
+          </div>
+
+          <p id="join-url" class="join-url mono">—</p>
+          <p id="controller-url" class="join-url mono">—</p>
+
+          <div id="room-players" class="room-players" aria-label="Room players"></div>
+
+          <div class="room-actions">
+            <button id="ready" class="button primary" type="button">Ready</button>
+            <button id="leave-room" class="button" type="button">Leave room</button>
+          </div>
+
+          <p id="room-hint" class="room-hint">
+            The match starts automatically when both players are ready.
+          </p>
+        </section>
+
+        <footer class="lobby-footer">
+          <p>
+            Server-owned simulation. Snapshots travel at 30 Hz; clients render a
+            100 ms interpolation buffer. Keyboard, gamepad and phone controls
+            stream input frames at 60 Hz.
+          </p>
+          <p><a href="/practice.html">Open offline practice</a></p>
+        </footer>
+      </main>
+
+      <main id="match-view" class="match-shell" hidden>
+        <div class="match-bar">
+          <div class="fixture">
+            <span id="home-swatch" class="team-swatch home" aria-hidden="true"></span>
+            <strong id="home-name">Host XI</strong>
+            <span class="fixture-v">v</span>
+            <strong id="away-name">Guest XI</strong>
+            <span id="away-swatch" class="team-swatch away" aria-hidden="true"></span>
+            <span class="room-tag mono" id="match-room">----</span>
+          </div>
+          <div class="scoreline" aria-live="polite" aria-label="Match score">
+            <strong id="score-home">0</strong>
+            <span class="score-sep" aria-hidden="true">–</span>
+            <strong id="score-away">0</strong>
+            <span id="score-clock" class="score-clock mono">00:00</span>
+            <span id="score-phase" class="score-phase">1st half</span>
+          </div>
+          <div class="match-bar-actions">
+            <span id="match-chip" class="chip live" data-state="live">Live</span>
+            <a class="ghost-link" href="/practice.html">Practice</a>
+            <button id="leave-match" class="button" type="button">Leave</button>
+          </div>
+        </div>
+
+        <section class="stage-card" aria-label="Server match visualisation">
+          <div class="stage-meta">
+            <span class="chip">Server stream</span>
+            <span class="chip">30 Hz snapshots</span>
+            <span class="chip">60 Hz simulation</span>
+            <span class="chip" id="buffer-chip">100 ms interpolation</span>
+            <span class="chip" id="control-player">You: —</span>
+          </div>
+
+          <div class="pitch-stage">
+            <canvas id="pitch" aria-label="Top-down football pitch">
+              Canvas rendering is required to view the match.
+            </canvas>
+
+            <div id="power-meter" class="power-meter" hidden>
+              <div class="power-head">
+                <span>Shot power</span>
+                <strong id="power-value">0%</strong>
+              </div>
+              <div class="power-track"><i id="power-fill"></i></div>
+            </div>
+
+            <div id="match-overlay" class="match-overlay" hidden>
+              <div class="overlay-box">
+                <span class="overlay-pulse" aria-hidden="true"></span>
+                <h2 id="overlay-title">Connecting</h2>
+                <p id="overlay-detail">Waiting for the server.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="hud">
+            <div class="hud-item">
+              <span class="hud-label">Room</span>
+              <strong id="hud-room" class="hud-value mono">----</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Ping</span>
+              <strong id="hud-ping" class="hud-value">—</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Server tick</span>
+              <strong id="hud-tick" class="hud-value mono">0</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Snapshot</span>
+              <strong id="hud-snapshot" class="hud-value mono">0</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Interp</span>
+              <strong id="hud-buffer" class="hud-value">100 ms</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Ball speed</span>
+              <strong id="hud-ball" class="hud-value">0.0 m/s</strong>
+            </div>
+          </div>
+        </section>
+
+        <footer class="match-footer">
+          <div class="match-notes">
+            <p>
+              White ring: your player. The host owns the simulation; both
+              devices render interpolated server snapshots.
+            </p>
+            <p class="control-hint">
+              <kbd>WASD</kbd> move <kbd>Shift</kbd> sprint
+              <kbd>X</kbd> pass <kbd>C</kbd> through <kbd>V</kbd> lob
+              <kbd>Z</kbd> hold shoot <kbd>F</kbd> tackle
+              <kbd>Space</kbd> switch <kbd>E</kbd> finesse
+            </p>
+            <p class="control-hint">
+              Gamepad: stick move, A pass, B/RT shoot, X tackle, Y through,
+              LB switch, RB lob, LT sprint, L3 finesse.
+            </p>
+          </div>
+          <p class="shortcut-hint">
+            <a href="/">Lobby</a>
+            <span class="hint-sep">/</span>
+            <a href="/controller.html">Phone controller</a>
+            <span class="hint-sep">/</span>
+            <a href="/link.html">Transport check</a>
+          </p>
+        </footer>
+      </main>
+
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+      <dialog id="controls-dialog" class="controls-dialog">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Settings</p>
+            <h2>Keyboard bindings</h2>
+          </div>
+          <button id="close-bindings" class="button" type="button">Close</button>
+        </div>
+        <p class="dialog-copy">
+          Click a binding, then press a key. Bindings save to this browser.
+          Gamepad mapping is fixed for now.
+        </p>
+        <div id="bindings-grid" class="bindings-grid"></div>
+        <div class="dialog-actions">
+          <button id="reset-bindings" class="button" type="button">
+            Reset defaults
+          </button>
+        </div>
+      </dialog>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

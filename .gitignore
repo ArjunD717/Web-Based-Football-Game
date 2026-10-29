@@ -1,0 +1,17 @@
+# .gitignore
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+*.log
+
+.env
+.env.*
+!.env.example
+
+certs/*
+!certs/.gitkeep
+
+.DS_Store
+Thumbs.db

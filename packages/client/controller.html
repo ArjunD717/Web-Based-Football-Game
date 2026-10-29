@@ -1,0 +1,154 @@
+<!-- packages/client/controller.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="Web Football phone controller"
+    />
+    <title>Web Football | Phone Controller</title>
+  </head>
+  <body class="controller-body">
+    <div class="controller-app">
+      <header class="controller-top">
+        <div class="controller-brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p class="brand-kicker">Web Football</p>
+            <p class="brand-milestone">Phone controller</p>
+          </div>
+        </div>
+        <div class="connection-pill" aria-live="polite">
+          <span id="connection-dot" class="status-dot" data-status="connecting"></span>
+          <span id="connection-label">Connecting</span>
+          <span class="connection-sep">/</span>
+          <span id="ping-label" class="mono">— ms</span>
+        </div>
+        <span id="room-badge" class="chip">----</span>
+      </header>
+
+      <main class="controller-main">
+        <section id="entry-view" class="controller-panel">
+          <p class="eyebrow">Touch controls</p>
+          <h1>Join the room.</h1>
+          <p class="controller-lede">
+            Use this page on a phone as the away-side controller. Create the
+            room on the host device, then enter its four-letter code.
+          </p>
+          <form id="join-form" class="controller-join">
+            <label for="room-input" class="field-label">Room code</label>
+            <div class="join-row">
+              <input
+                id="room-input"
+                class="room-input"
+                type="text"
+                maxlength="4"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                inputmode="text"
+                pattern="[A-Za-z]{4}"
+                placeholder="ABCD"
+                aria-label="Four-letter room code"
+              />
+              <button id="join-submit" class="button primary" type="submit">
+                Join
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section id="room-view" class="controller-panel" hidden>
+          <p class="eyebrow">Room <span id="room-code">----</span></p>
+          <h1 id="room-phase">Waiting</h1>
+          <p id="room-status" class="controller-lede">
+            Waiting for the host.
+          </p>
+          <div class="controller-actions">
+            <button id="ready" class="button primary" type="button">Ready</button>
+            <button id="leave-room" class="button" type="button">Leave</button>
+          </div>
+          <p class="controller-note">
+            Keep this page open. The match starts when both seats are ready.
+          </p>
+        </section>
+
+        <section id="play-view" class="controller-play" hidden>
+          <div class="play-strip">
+            <span id="play-chip" class="chip live">Live</span>
+            <span class="mono" id="play-room">----</span>
+            <span class="mono play-score" id="play-score">0 – 0</span>
+            <span class="mono" id="play-clock">00:00</span>
+            <span class="mono" id="play-phase">1st half</span>
+            <span class="mono" id="play-player">—</span>
+            <button id="leave-play" class="button" type="button">Leave</button>
+          </div>
+
+          <div id="controller-power" class="controller-power" hidden>
+            <span>Shot</span>
+            <div class="power-track"><i id="power-fill"></i></div>
+            <strong id="power-value">0%</strong>
+          </div>
+
+          <div class="touch-surface">
+            <div class="touch-stick-wrap">
+              <div class="touch-stick" aria-label="Virtual movement stick">
+                <div class="touch-knob"></div>
+              </div>
+              <span class="touch-label">Move</span>
+            </div>
+
+            <div class="touch-actions" aria-label="Match actions">
+              <button class="touch-button" type="button" data-control="pass">
+                Pass
+              </button>
+              <button class="touch-button" type="button" data-control="through">
+                Through
+              </button>
+              <button class="touch-button" type="button" data-control="lob">
+                Lob
+              </button>
+              <button class="touch-button shoot" type="button" data-control="shoot">
+                Shoot
+              </button>
+              <button class="touch-button" type="button" data-control="tackle">
+                Tackle
+              </button>
+              <button class="touch-button" type="button" data-control="switch">
+                Switch
+              </button>
+              <button class="touch-button hold" type="button" data-control="sprint">
+                Sprint
+              </button>
+              <button class="touch-button hold" type="button" data-control="finesse">
+                Finesse
+              </button>
+            </div>
+          </div>
+
+          <p class="controller-note">
+            Drag the stick to move. Hold Shoot for power. Hold Sprint/Finesse
+            while acting. The white-ringed player is yours.
+          </p>
+        </section>
+
+        <div id="controller-overlay" class="controller-overlay" hidden>
+          <div class="overlay-box">
+            <span class="overlay-pulse" aria-hidden="true"></span>
+            <h2 id="overlay-title">Connecting</h2>
+            <p id="overlay-detail">Waiting for the server.</p>
+          </div>
+        </div>
+      </main>
+
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+    <script type="module" src="/src/controller/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,103 @@
+<!-- packages/client/practice.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="Web Football milestone 1 local practice simulation"
+    />
+    <title>Web Football | Practice</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p class="brand-kicker">Web Football</p>
+            <p class="brand-milestone">M1 / local simulation</p>
+          </div>
+        </div>
+
+        <div class="fixture" aria-label="Fixture">
+          <span id="home-swatch" class="team-swatch home" aria-hidden="true"></span>
+          <strong id="home-name">Home XI</strong>
+          <span class="fixture-v">v</span>
+          <strong id="away-name">Away XI</strong>
+          <span id="away-swatch" class="team-swatch away" aria-hidden="true"></span>
+        </div>
+
+        <div class="topbar-actions">
+          <a class="ghost-link" href="/link.html">Transport check</a>
+          <button id="pause" class="button primary" type="button" aria-pressed="false">
+            Pause
+          </button>
+          <button id="reset" class="button" type="button">Reset</button>
+        </div>
+      </header>
+
+      <main class="match-shell">
+        <section class="stage-card" aria-label="Match visualisation">
+          <div class="stage-meta">
+            <span id="live-chip" class="chip live" data-state="live">
+              Live
+            </span>
+            <span class="chip">60 Hz fixed step</span>
+            <span class="chip">SI units</span>
+            <span class="chip">Placeholder AI</span>
+          </div>
+
+          <div class="pitch-stage">
+            <canvas id="pitch" aria-label="Top-down football pitch">
+              Canvas rendering is required to view the match.
+            </canvas>
+          </div>
+
+          <div class="hud">
+            <div class="hud-item">
+              <span class="hud-label">Sim clock</span>
+              <strong id="clock" class="hud-value">00:00</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Tick</span>
+              <strong id="tick" class="hud-value">0</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Ball speed</span>
+              <strong id="ball-speed" class="hud-value">0.0 m/s</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Last touch</span>
+              <strong id="last-touch" class="hud-value">Kick-off</strong>
+            </div>
+            <div class="hud-item">
+              <span class="hud-label">Seed</span>
+              <strong id="seed" class="hud-value mono">0x00000000</strong>
+            </div>
+          </div>
+        </section>
+
+        <footer class="match-footer">
+          <p>
+            Headless 11v11 kickabout: deterministic physics, placeholder shape
+            and kick decisions. Referee laws, scoring and human input arrive in
+            later milestones.
+          </p>
+          <p class="shortcut-hint">
+            <kbd>Space</kbd> pause <kbd>R</kbd> restart
+            <span class="hint-sep">/</span>
+            <a href="/">LAN lobby</a>
+            <span class="hint-sep">/</span>
+            <a href="/link.html">M0 transport check</a>
+          </p>
+        </footer>
+      </main>
+
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+    <script type="module" src="/src/practice/main.ts"></script>
+  </body>
+</html>

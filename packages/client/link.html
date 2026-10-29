@@ -1,0 +1,112 @@
+<!-- packages/client/link.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="Web Football milestone 0 secure transport check"
+    />
+    <title>Web Football | Link check</title>
+  </head>
+  <body>
+    <div class="page">
+      <header class="masthead">
+        <p class="eyebrow"><span class="brand-mark"></span> Web Football / M0</p>
+        <h1>Secure link check</h1>
+        <p class="intro">
+          HTTPS and WSS transport for the server-authoritative pitch. This page
+          proves the host, handshake, presence and latency path before any
+          simulation lands. Expected wire protocol:
+          <span id="expected-protocol" class="mono">1</span>.
+        </p>
+      </header>
+
+      <main>
+        <section class="status-card" aria-live="polite">
+          <div class="status-row">
+            <span
+              id="status-dot"
+              class="status-dot"
+              data-status="idle"
+              aria-hidden="true"
+            ></span>
+            <div class="status-copy">
+              <h2 id="status">Idle</h2>
+              <p id="status-detail">Not connected</p>
+            </div>
+          </div>
+
+          <dl class="metrics">
+            <div>
+              <dt>Endpoint</dt>
+              <dd id="endpoint" class="mono break">—</dd>
+            </div>
+            <div>
+              <dt>Round trip</dt>
+              <dd id="latency" class="mono">—</dd>
+            </div>
+            <div>
+              <dt>Clients</dt>
+              <dd id="clients" class="mono">—</dd>
+            </div>
+            <div>
+              <dt>Protocol</dt>
+              <dd id="protocol" class="mono">—</dd>
+            </div>
+            <div>
+              <dt>Server</dt>
+              <dd id="server-version" class="mono">—</dd>
+            </div>
+            <div>
+              <dt>Session</dt>
+              <dd id="session" class="mono">—</dd>
+            </div>
+          </dl>
+        </section>
+
+        <div class="lower">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Transport</h2>
+              <span class="badge">WSS</span>
+            </div>
+            <p class="hint">
+              The browser opens the same-origin socket. Vite proxies it to the
+              Node host on 8443 in development; production serves both from
+              one HTTPS listener.
+            </p>
+            <div class="actions">
+              <button id="reconnect" class="button primary" type="button">
+                Reconnect
+              </button>
+              <button id="disconnect" class="button" type="button">
+                Disconnect
+              </button>
+            </div>
+            <p id="security-note" class="warning" hidden>
+              This page is not a secure context. LAN play requires HTTPS so the
+              Gamepad API and secure WebSockets remain available.
+            </p>
+          </section>
+
+          <section class="panel log-panel">
+            <div class="panel-heading">
+              <h2>Connection log</h2>
+              <span class="hint small">Newest first</span>
+            </div>
+            <ol id="log" class="log" aria-label="Connection events"></ol>
+          </section>
+        </div>
+
+        <footer class="footer">
+          <a href="/">Back to the match simulation</a>. Milestone 0 transport
+          check only: no rooms or snapshots yet.
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="/src/link/main.ts"></script>
+  </body>
+</html>
