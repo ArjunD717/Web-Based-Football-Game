@@ -46,6 +46,7 @@ import {
   buildSnapshotFrame,
   buildWireRoster,
   createServerMatch,
+  rulesFromSettings,
 } from "./match-stream";
 
 const TICK_SECONDS = 1 / TUNING.sim.tickHz;
@@ -54,6 +55,7 @@ const SNAPSHOT_EVERY_TICKS = Math.max(
   Math.round(TUNING.sim.tickHz / TUNING.network.snapshotHz),
 );
 const MATCH_PAUSE_REASON = "Opponent disconnected";
+const MANUAL_PAUSE_REASON = "Host paused the match";
 const HOST_NAME = "Host";
 const GUEST_NAME = "Guest";
 
@@ -96,6 +98,8 @@ interface Room {
   guest: Seat | null;
   match: RoomMatch | null;
   phase: LobbyPhase;
+  /** True while the host has intentionally frozen play. */
+  manualPaused: boolean;
   pauseDeadlineMs: number | null;
   settings: MatchSettingsWire;
 }
@@ -162,15 +166,30 @@ export class RoomManager {
       markControlReconnected(teamControl);
       const both = this.bothConnected(room);
       if (both) {
-        room.phase = "live";
+        room.phase = room.manualPaused ? "paused" : "live";
         room.pauseDeadlineMs = null;
       } else {
+        room.phase = "paused";
         room.pauseDeadlineMs = this.earliestReconnectDeadline(room);
       }
 
       this.sendSetupAndSnapshot(room, seat);
-      if (both && wasPaused) {
+      if (both && room.manualPaused) {
+        this.broadcast(room, {
+          t: "matchPaused",
+          reason: MANUAL_PAUSE_REASON,
+          reconnectSeconds: 0,
+          manual: true,
+        });
+      } else if (both && wasPaused) {
         this.broadcast(room, { t: "matchResumed" });
+      } else if (!both) {
+        seat.client?.send({
+          t: "matchPaused",
+          reason: MATCH_PAUSE_REASON,
+          reconnectSeconds: Math.ceil(this.reconnectGraceMs / 1_000),
+          manual: false,
+        });
       }
       this.broadcastLobby(room);
       return;
@@ -203,6 +222,12 @@ export class RoomManager {
         return;
       case "substitute":
         this.queueSubstitution(client, message.outId, message.inId);
+        return;
+      case "pauseMatch":
+        this.pauseMatch(client);
+        return;
+      case "resumeMatch":
+        this.resumeMatch(client);
         return;
       case "leaveRoom":
         this.leaveRoom(client);
@@ -267,6 +292,7 @@ export class RoomManager {
         t: "matchPaused",
         reason: MATCH_PAUSE_REASON,
         reconnectSeconds: Math.ceil(this.reconnectGraceMs / 1_000),
+        manual: false,
       });
     }
 
@@ -353,6 +379,7 @@ export class RoomManager {
       guest: null,
       match: null,
       phase: "waiting",
+      manualPaused: false,
       pauseDeadlineMs: null,
       settings: { ...DEFAULT_MATCH_SETTINGS },
     };
@@ -518,6 +545,87 @@ export class RoomManager {
     }
     this.refreshLobbyPhase(room);
     this.broadcastLobby(room);
+  }
+
+  private pauseMatch(client: ClientConnection): void {
+    const room = this.membership.get(client.token);
+    const seat = room === undefined ? null : this.findSeat(room, client.token);
+    if (room === undefined || seat === null) {
+      this.sendError(client, "not_in_room", "Join a room before pausing");
+      return;
+    }
+    if (!seat.host) {
+      this.sendError(client, "not_host", "Only the host can pause the match");
+      return;
+    }
+    if (room.match === null || room.match.finished) {
+      this.sendError(client, "match_not_live", "There is no live match to pause");
+      return;
+    }
+    if (!this.bothConnected(room)) {
+      this.sendError(
+        client,
+        "room_unavailable",
+        "Both players must be connected to pause",
+      );
+      return;
+    }
+    if (room.manualPaused) {
+      return;
+    }
+
+    room.manualPaused = true;
+    room.phase = "paused";
+    room.pauseDeadlineMs = null;
+    room.match.accumulator = 0;
+    markControlReconnected(room.match.controls.home);
+    markControlReconnected(room.match.controls.away);
+    this.broadcast(room, {
+      t: "matchPaused",
+      reason: MANUAL_PAUSE_REASON,
+      reconnectSeconds: 0,
+      manual: true,
+    });
+    this.broadcastLobby(room);
+    this.logger.info(`Room ${room.code}: host paused the match`);
+  }
+
+  private resumeMatch(client: ClientConnection): void {
+    const room = this.membership.get(client.token);
+    const seat = room === undefined ? null : this.findSeat(room, client.token);
+    if (room === undefined || seat === null) {
+      this.sendError(client, "not_in_room", "Join a room before resuming");
+      return;
+    }
+    if (!seat.host) {
+      this.sendError(client, "not_host", "Only the host can resume the match");
+      return;
+    }
+    if (room.match === null || room.match.finished || !room.manualPaused) {
+      this.sendError(
+        client,
+        "match_not_live",
+        "The host has not paused the live match",
+      );
+      return;
+    }
+    if (!this.bothConnected(room)) {
+      this.sendError(
+        client,
+        "room_unavailable",
+        "Both players must be connected to resume",
+      );
+      return;
+    }
+
+    room.manualPaused = false;
+    room.phase = "live";
+    room.pauseDeadlineMs = null;
+    markControlReconnected(room.match.controls.home);
+    markControlReconnected(room.match.controls.away);
+    this.broadcast(room, { t: "matchResumed" });
+    this.broadcastLobby(room);
+    this.logger.info(`Room ${room.code}: host resumed the match`);
   }
 
   private queueSubstitution(
@@ -823,12 +931,7 @@ export class RoomManager {
     }
     try {
       const serverMatch = createServerMatch({
-        rules: {
-          realHalfSeconds: room.settings.halfRealMinutes * 60,
-          extraTimeEnabled: room.settings.extraTime,
-          shootoutEnabled: room.settings.shootout,
-          varEnabled: room.settings.varEnabled,
-        },
+        rules: rulesFromSettings(room.settings),
         home: {
           team: hostTeam,
           sheet: host.sheet,
@@ -870,6 +973,7 @@ export class RoomManager {
       },
     };
     room.phase = "live";
+    room.manualPaused = false;
     room.pauseDeadlineMs = null;
 
     for (const seat of this.seats(room)) {
@@ -929,6 +1033,7 @@ export class RoomManager {
   private stopMatch(room: Room): void {
     room.match = null;
     room.phase = "waiting";
+    room.manualPaused = false;
     room.pauseDeadlineMs = null;
   }
 
@@ -1160,7 +1265,12 @@ export class RoomManager {
   private sendToOtherSeat(
     room: Room,
     seat: Seat,
-    message: { readonly t: "matchPaused"; readonly reason: string; readonly reconnectSeconds: number },
+    message: {
+      readonly t: "matchPaused";
+      readonly reason: string;
+      readonly reconnectSeconds: number;
+      readonly manual: boolean;
+    },
   ): void {
     for (const other of this.seats(room)) {
       if (other !== seat && other.client !== null) {

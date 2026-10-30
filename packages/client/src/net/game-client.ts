@@ -42,6 +42,8 @@ export interface GameClientState {
   readonly setup: MatchSetupWire | null;
   readonly pausedReason: string | null;
   readonly pausedUntilMs: number | null;
+  /** True when the host paused play; false for disconnect hold. */
+  readonly pausedManual: boolean;
   readonly lastSnapshotSeq: number;
   readonly lastServerTick: number;
   readonly bufferedSnapshots: number;
@@ -67,6 +69,7 @@ export class GameClient {
     setup: null,
     pausedReason: null,
     pausedUntilMs: null,
+    pausedManual: false,
     lastSnapshotSeq: 0,
     lastServerTick: 0,
     bufferedSnapshots: 0,
@@ -146,6 +149,14 @@ export class GameClient {
 
   updateSheet(sheet: TeamSheet): void {
     this.send({ t: "updateSheet", sheet });
+  }
+
+  pauseMatch(): void {
+    this.send({ t: "pauseMatch" });
+  }
+
+  resumeMatch(): void {
+    this.send({ t: "resumeMatch" });
   }
 
   leaveRoom(): void {
@@ -278,6 +289,7 @@ export class GameClient {
           detail: "Connected",
           pausedReason: null,
           pausedUntilMs: null,
+          pausedManual: false,
           notice: null,
         });
         this.startPing();
@@ -291,7 +303,11 @@ export class GameClient {
       case "matchPaused":
         this.update({
           pausedReason: message.reason,
-          pausedUntilMs: Date.now() + message.reconnectSeconds * 1_000,
+          pausedUntilMs:
+            message.manual
+              ? null
+              : Date.now() + message.reconnectSeconds * 1_000,
+          pausedManual: message.manual,
           detail: "Match paused",
         });
         break;
@@ -299,6 +315,7 @@ export class GameClient {
         this.update({
           pausedReason: null,
           pausedUntilMs: null,
+          pausedManual: false,
           detail: "Match resumed",
         });
         break;
@@ -341,6 +358,7 @@ export class GameClient {
           setup: null,
           pausedReason: null,
           pausedUntilMs: null,
+          pausedManual: false,
         });
         break;
       case "error":
@@ -411,6 +429,7 @@ export class GameClient {
         setup: null,
         pausedReason: null,
         pausedUntilMs: null,
+        pausedManual: false,
         detail: "Connected",
       });
       return;
@@ -444,6 +463,7 @@ export class GameClient {
       bufferedSnapshots: 0,
       pausedReason: null,
       pausedUntilMs: null,
+      pausedManual: false,
       detail: "Match live",
       matchStats: null,
       varReview: null,
@@ -462,6 +482,7 @@ export class GameClient {
       bufferedSnapshots: 0,
       pausedReason: null,
       pausedUntilMs: null,
+      pausedManual: false,
       matchStats: null,
       varReview: null,
       shootout: null,

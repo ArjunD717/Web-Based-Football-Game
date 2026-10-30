@@ -5,6 +5,7 @@ import {
   type TeamData,
   type TeamSheet,
   type MatchSetupWire,
+  type MatchSettingsWire,
   type SnapshotFrame,
   type WireMatchStats,
   type WirePitch,
@@ -37,6 +38,20 @@ export interface CreateServerMatchOptions {
   readonly rules?: Partial<MatchRules>;
   readonly home: ServerMatchTeam;
   readonly away: ServerMatchTeam;
+}
+
+/** Map the lobby's host-owned choices onto the pure simulation rules. */
+export function rulesFromSettings(
+  settings: MatchSettingsWire,
+): Partial<MatchRules> {
+  return {
+    realHalfSeconds: settings.halfRealMinutes * 60,
+    extraTimeEnabled: settings.extraTime,
+    shootoutEnabled: settings.shootout,
+    varEnabled: settings.varEnabled,
+    strictness: settings.refereeStrictness,
+    aiDifficulty: settings.aiDifficulty,
+  };
 }
 
 export function createServerMatch(

@@ -481,27 +481,20 @@ describe("match management", () => {
     const fixture = setupRoom();
     fixture.manager.onMessage(fixture.host, { t: "setReady", ready: true });
 
+    const hostSettings = {
+      halfRealMinutes: 8 as const,
+      extraTime: true,
+      shootout: true,
+      varEnabled: true,
+      refereeStrictness: "strict" as const,
+      aiDifficulty: "legendary" as const,
+    };
     fixture.manager.onMessage(fixture.host, {
       t: "updateSettings",
-      settings: {
-        halfRealMinutes: 8,
-        extraTime: true,
-        shootout: true,
-        varEnabled: true,
-      },
+      settings: hostSettings,
     });
-    expect(fixture.host.lastLobby().room?.settings).toEqual({
-      halfRealMinutes: 8,
-      extraTime: true,
-      shootout: true,
-      varEnabled: true,
-    });
-    expect(fixture.guest.lastLobby().room?.settings).toEqual({
-      halfRealMinutes: 8,
-      extraTime: true,
-      shootout: true,
-      varEnabled: true,
-    });
+    expect(fixture.host.lastLobby().room?.settings).toEqual(hostSettings);
+    expect(fixture.guest.lastLobby().room?.settings).toEqual(hostSettings);
     expect(
       fixture.host.lastLobby().room?.players.find(
         (player) => player.seat === 0,
@@ -515,10 +508,75 @@ describe("match management", () => {
         extraTime: false,
         shootout: false,
         varEnabled: false,
+        refereeStrictness: "lenient",
+        aiDifficulty: "beginner",
       },
     });
     expect(fixture.guest.lastMessageType("error")?.code).toBe("not_host");
     expect(fixture.host.lastLobby().room?.settings.halfRealMinutes).toBe(8);
+  });
+
+  it("lets only the host pause and resume a live match", () => {
+    const fixture = setupRoom();
+    fixture.manager.onMessage(fixture.host, { t: "pauseMatch" });
+    expect(fixture.host.lastMessageType("error")?.code).toBe("match_not_live");
+
+    startReadyMatch(fixture);
+    advanceToLive(fixture);
+    fixture.manager.tick(2 / 60);
+    const before = latestFullSnapshot(fixture).tick;
+    const snapshotsBefore = fixture.host.binary.length;
+
+    fixture.manager.onMessage(fixture.guest, { t: "pauseMatch" });
+    expect(fixture.guest.lastMessageType("error")?.code).toBe("not_host");
+
+    fixture.manager.onMessage(fixture.host, { t: "pauseMatch" });
+    const pausedForHost = fixture.host.lastMessageType("matchPaused");
+    expect(pausedForHost?.manual).toBe(true);
+    expect(pausedForHost?.reason).toContain("Host");
+    expect(fixture.guest.lastMessageType("matchPaused")?.manual).toBe(true);
+    expect(fixture.host.lastLobby().room?.phase).toBe("paused");
+    expect(fixture.host.lastLobby().room?.reconnectSeconds).toBeNull();
+
+    fixture.manager.tick(2 / 60);
+    expect(fixture.host.binary.length).toBe(snapshotsBefore);
+    expect(latestFullSnapshot(fixture).tick).toBe(before);
+
+    fixture.manager.onMessage(fixture.guest, { t: "resumeMatch" });
+    expect(fixture.guest.lastMessageType("error")?.code).toBe("not_host");
+
+    fixture.manager.onMessage(fixture.host, { t: "resumeMatch" });
+    expect(fixture.host.lastMessageType("matchResumed")).not.toBeNull();
+    expect(fixture.guest.lastMessageType("matchResumed")).not.toBeNull();
+    expect(fixture.host.lastLobby().room?.phase).toBe("live");
+
+    fixture.manager.tick(10 / 60);
+    expect(latestFullSnapshot(fixture).tick).toBeGreaterThan(before);
+  });
+
+  it("keeps a manual pause while one seat reconnects", () => {
+    const fixture = setupRoom();
+    startReadyMatch(fixture);
+    advanceToLive(fixture);
+    fixture.manager.onMessage(fixture.host, { t: "pauseMatch" });
+
+    fixture.manager.onDisconnect(fixture.guest);
+    expect(fixture.host.lastMessageType("matchPaused")?.manual).toBe(false);
+
+    fixture.manager.onMessage(fixture.host, { t: "resumeMatch" });
+    expect(fixture.host.lastMessageType("error")?.code).toBe(
+      "room_unavailable",
+    );
+
+    const resumedGuest = new FakeClient(fixture.guest.token);
+    fixture.manager.onReady(resumedGuest);
+    expect(resumedGuest.lastMessageType("matchPaused")?.manual).toBe(true);
+    expect(fixture.host.lastLobby().room?.phase).toBe("paused");
+    expect(fixture.host.lastMessageType("matchResumed")).toBeNull();
+
+    fixture.manager.onMessage(fixture.host, { t: "resumeMatch" });
+    expect(resumedGuest.lastMessageType("matchResumed")).not.toBeNull();
+    expect(fixture.host.lastLobby().room?.phase).toBe("live");
   });
 
   it("applies a queued substitution at a stoppage and updates the roster", () => {

@@ -2,14 +2,16 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 12**:
+both devices are thin clients. This repository is at **Milestone 13**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
 time, extra time, shootouts, VAR-lite and full-time statistics, an animated
-Three.js match presentation, local goal replays and procedural audio. M12 is
+Three.js match presentation, local goal replays and procedural audio. M12 was
 the release pass: one-command packaging, full-match balance validation,
-server/client performance profiling, bug fixes and final documentation.
+server/client performance profiling, bug fixes and final documentation. M13
+adds host-owned referee/AI rules, a live rules readout and a host-only manual
+pause that survives reloads and reconnects.
 
 ## Requirements
 
@@ -135,6 +137,41 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 13 scope
+
+Implemented:
+
+- The host's **Match setup** panel now owns two more room rules: referee
+  strictness (`lenient` / `standard` / `strict`) and AI difficulty (`beginner`
+  through `legendary`). Both seats see the same values; the guest controls are
+  read-only. Changing any rule still clears both ready flags
+- The rules are part of `MatchSettingsWire`. The server maps them onto the pure
+  match rules at kick-off, so strictness changes foul/card thresholds and the
+  difficulty changes AI reaction/decision quality and aggression. The live
+  feed bar shows `Ref … · AI …` next to the network state
+- The host match screen has a **Pause** action (not shown to the guest). It
+  sends a `pauseMatch` command, broadcasts an authoritative `matchPaused`
+  message with `manual: true`, stops the 60 Hz simulation and freezes the
+  clock/snapshots. The host's overlay says it paused play; the guest overlay
+  says the host paused play
+- **Resume** is sent only by the host. The command is rejected if the other seat
+  is disconnected, and both seats must be connected before play can restart.
+  The pause survives a host or guest reload: the room keeps the manual-pause
+  flag and re-broadcasts it when both seats are connected again. Automatic
+  disconnect pauses use `manual: false` and still show the reconnect countdown
+- Protocol bumped to **9**; M13 adds rule fields and a manual flag
+
+Known M13 limitations (by design):
+
+- Rules are locked at kick-off. There is no mid-match rule editing or a rules
+  rematch shortcut yet
+- Pausing is host-only. The guest and the phone controller can see the pause
+  overlay but cannot pause or resume
+- Manual pause freezes the simulation and clock; it does not add stoppage time
+  or advance any law-specific restart timer
+- The live rule chip is hidden below 1050 px to keep the feed bar compact; the
+  values remain visible in the lobby
+
 ## Milestone 12 scope
 
 Implemented:
@@ -195,7 +232,7 @@ Known M12 limitations (by design):
 - `pnpm start` still requires Node, pnpm and mkcert plus guest CA trust; it is
   not a standalone binary or container
 - The Three.js client bundle is still loaded with the lobby and exceeds Vite's
-  500 kB chunk warning threshold (about 157 kB gzip)
+  500 kB chunk warning threshold (about 171 kB gzip)
 
 ## Milestone 11 scope
 
@@ -621,18 +658,23 @@ Implemented:
 - Phone controller at `/controller.html?room=CODE`: virtual stick, touch action
   buttons, live connection state, score/clock/phase/card counts, rule-event
   banner and its own power meter
-- Match HUD includes the controlled-player label, white active-player ring, a
-  shot power bar, scoreline/card counts, rule-event banner and restart overlays;
-  input pauses automatically when the match pauses or disconnects
+- Match console: team-colour scoreboard, referee event strip, controlled-player
+  label, white active-player ring, shot power bar, replay banner, compact
+  telemetry, semantic restart/VAR/pause overlays and a responsive full-time
+  statistics board; input pauses automatically when the match pauses or
+  disconnects
 - Local practice and the M0 transport check remain available as separate pages
 
 Not implemented yet (by milestone design):
 
 - Competition structures, two-legged ties, aggregate scoring and suspensions
   carried across matches
-- Referee strictness exposed in the lobby UI (the sim API accepts it)
-- Skill moves, charged/driven passes, first-time pass modifiers, manual pause
-  and controller vibration
+- Mid-match rule changes; referee strictness and AI difficulty are locked at
+  kick-off and apply to both seats
+- A pause command on the phone controller; only the host's match screen can
+  pause or resume
+- Skill moves, charged/driven passes, first-time pass modifiers and controller
+  vibration
 - Gamepad rebinding; only the standard mapping is wired
 - Real CSV registry and further national-team competition modes; M9 ships the
   call-up pipeline and playable national teams, but the bundled dataset is
@@ -644,12 +686,19 @@ Not implemented yet (by milestone design):
 
 ## Protocol and reconnect notes
 
-- `PROTOCOL_VERSION = 8`. Hello accepts an optional `sessionToken`; the welcome
+- `PROTOCOL_VERSION = 9`. Hello accepts an optional `sessionToken`; the welcome
   returns the stable token as `sessionId`. The browser keeps it in
   `sessionStorage`.
 - Lobby JSON carries each seat's selected club and full `TeamSheet`;
   `setTeam` and `updateSheet` are client commands, and `lobbyState` is
-  re-broadcast to both seats after every accepted edit.
+  re-broadcast to both seats after every accepted edit. `updateSettings`
+  includes the host-owned half length, extra time, shootout, VAR, referee
+  strictness and AI difficulty; changing any value clears both ready flags.
+- The host's `pauseMatch` is acknowledged by a `matchPaused` broadcast. The
+  message carries `manual` so the client can distinguish a deliberate pause
+  from a disconnect countdown. In manual mode the server stops ticking and the
+  clock freezes until the host sends `resumeMatch`; the room retains the flag
+  across reloads and only allows resume when both seats are connected.
 - Snapshot deltas are sent at 30 Hz. Each client acks the latest decoded
   sequence with a 5-byte binary message; the server builds the next delta from
   that ack.
@@ -705,7 +754,8 @@ M10 adds substitution windows/limits, injury risk, shootouts, extra time, VAR,
 settings/roster/statistics protocol flow and the full-time client state. M11
 adds Three.js pose/camera/pitch tests and the client replay buffer. M12 adds
 full-time soak accounting, the safety whistle, pass completion stats and server
-tick metrics.
+tick metrics. M13 adds rule-setting parsing/mapping and host-only manual pause
+and resume, including disconnect and reconnect guards.
 
 The two-minute data check:
 
@@ -732,8 +782,11 @@ The two-minute match check:
    editor and generated national crest/kit.
 4. The guest either opens the room URL (desktop controls) or the controller URL
    (touch controls). Change the host formation and bench size; verify the guest
-   opponent summary updates. Then ready both; verify both canvases show the same room and
-   moving server tick, with ping in the HUD. Confirm the scoreline reads
+   opponent summary updates. On the host's **Match setup** tab, set referee
+   strictness to **Strict** and AI difficulty to **Legendary**; verify the guest
+   selects mirror the values and are disabled. Then ready both; verify both
+   canvases show the same room and moving server tick, with ping in the HUD.
+   Confirm the scoreline reads
    `0 – 0`, the clock starts at `00:00`, and the **Kick-off** overlay clears when
    play goes live.
 5. Force a restart with a heavy pass or shot: verify the scoreline/clock update
@@ -745,27 +798,33 @@ The two-minute match check:
 7. Play through the middle until the assistant flags a runner: verify the
    offside event and indirect free kick; check a free-kick wall forms at least
    9.15 m from the ball for a foul within shooting range.
-8. On the host, move with WASD and sprint; press **Controls** to rebind a key and
-   confirm it survives a reload. Hold Z and verify the shot power bar rises and
-   clears on release.
+8. On the host, move with WASD and sprint; open **Controls & shortcuts** →
+   **Edit bindings**, rebind a key and confirm it survives a reload. Hold Z and
+   verify the shot power bar rises and clears on release.
 9. On the phone, move with the stick, fire a charged shot (power shows) and tap
    **Switch**; verify the white active-player ring moves. Tap Pass/Through/Lob/
    Tackle/Sprint/Finesse to exercise the same input path.
-10. Close the guest tab: host shows **Match paused** with a reconnect countdown.
+10. Verify the feed bar reads `Ref strict · AI Legendary`. The host sees
+    **Pause**; the guest does not. Pause on the host: both overlays say the match
+    is paused, the clock freezes and the host button becomes **Resume**. Reload
+    the host while paused; it must reconnect into the frozen match with the
+    pause overlay and resume without losing the room. **Resume** and confirm the
+    guest overlay clears and the clock advances.
+11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
-11. Guest **Leave**: host returns to the room lobby with the code intact.
-12. `pnpm check`: expect 46 test files and 477 tests passing.
-13. Verify the 3D presentation: the match opens in 3D, the whole pitch fits
+12. Guest **Leave**: host returns to the room lobby with the code intact.
+13. `pnpm check`: expect 47 test files and 481 tests passing.
+14. Verify the 3D presentation: the match opens in 3D, the whole pitch fits
     after resizing the window, players animate and carry numbers, and the
     **2D view** button switches renderers. Reload and confirm the mode persisted.
     Append `?renderer=2d` to load the canvas renderer directly.
-14. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
+15. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
     replay banner, progress and stop control. Toggle **Sound** and confirm the
     whistle/kick/goal effects and crowd bed respect the setting. Disable WebGL
     in a test browser to verify the automatic 2D fallback toast.
-15. Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
+16. Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
     16.67 ms and `p95TickMs` stays below the budget during a live match.
-16. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish
+17. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish
     without a target miss or unfinished match.
 
 ## Layout

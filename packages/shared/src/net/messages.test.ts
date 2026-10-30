@@ -224,6 +224,8 @@ describe("M2 lobby messages", () => {
           extraTime: false,
           shootout: false,
           varEnabled: false,
+          refereeStrictness: "standard" as const,
+          aiDifficulty: "professional" as const,
         },
       },
       you: {
@@ -259,6 +261,7 @@ describe("M2 lobby messages", () => {
       t: "matchPaused" as const,
       reason: "Opponent disconnected",
       reconnectSeconds: 60,
+      manual: false,
     };
     expect(parseServerMessage(encodeServerMessage(paused))).toEqual(paused);
     expect(
@@ -309,6 +312,16 @@ describe("M2 lobby messages", () => {
           t: "matchPaused",
           reason: "x",
           reconnectSeconds: -1,
+          manual: false,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseServerMessage(
+        JSON.stringify({
+          t: "matchPaused",
+          reason: "x",
+          reconnectSeconds: 10,
         }),
       ),
     ).toBeNull();
@@ -322,6 +335,8 @@ describe("M10 match management messages", () => {
       extraTime: true,
       shootout: true,
       varEnabled: true,
+      refereeStrictness: "strict" as const,
+      aiDifficulty: "worldClass" as const,
     };
     expect(
       parseClientMessage(
@@ -336,6 +351,28 @@ describe("M10 match management messages", () => {
         }),
       ),
     ).toBeNull();
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          t: "updateSettings",
+          settings: { ...settings, refereeStrictness: "harsh" },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          t: "updateSettings",
+          settings: { ...settings, aiDifficulty: "impossible" },
+        }),
+      ),
+    ).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ t: "pauseMatch" }))).toEqual({
+      t: "pauseMatch",
+    });
+    expect(parseClientMessage(JSON.stringify({ t: "resumeMatch" }))).toEqual({
+      t: "resumeMatch",
+    });
     expect(
       parseClientMessage(
         JSON.stringify({

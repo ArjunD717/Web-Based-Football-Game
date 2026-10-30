@@ -802,7 +802,7 @@
                   <div>
                     <p class="ui-kicker">Match setup</p>
                     <h2 class="squad-section-title">Room conditions</h2>
-                    <p class="squad-lede">Both seats see the same rules. Only the host can change the match length and finish options.</p>
+                    <p class="squad-lede">Both seats see the same rules. Only the host can change the match length, discipline, difficulty and finish options.</p>
                   </div>
                   <span id="settings-owner" class="ui-badge">Host controls</span>
                 </header>
@@ -847,7 +847,28 @@
                       </div>
                     </div>
 
-                    <p class="squad-note">Knockout finish options only apply when the score is level. VAR-lite checks goals, penalties and direct red cards for three seconds.</p>
+                    <div class="squad-rule-selects">
+                      <label class="squad-field">
+                        <span class="ui-label">Referee strictness</span>
+                        <select id="match-strictness" class="ui-select">
+                          <option value="lenient">Lenient</option>
+                          <option value="standard" selected>Standard</option>
+                          <option value="strict">Strict</option>
+                        </select>
+                      </label>
+                      <label class="squad-field">
+                        <span class="ui-label">AI difficulty</span>
+                        <select id="match-ai-difficulty" class="ui-select">
+                          <option value="beginner">Beginner</option>
+                          <option value="amateur">Amateur</option>
+                          <option value="professional" selected>Professional</option>
+                          <option value="worldClass">World class</option>
+                          <option value="legendary">Legendary</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <p class="squad-note">Knockout finish options only apply when the score is level. Referee strictness changes the foul and card threshold; AI difficulty drives teammates and off-ball decisions. VAR-lite checks goals, penalties and direct red cards for three seconds.</p>
                   </section>
 
                   <section class="squad-card squad-card--padded">
@@ -885,45 +906,91 @@
       </main>
 
       <main id="match-view" class="match-shell" hidden>
-        <div class="match-bar">
-          <div class="fixture">
-            <span id="home-swatch" class="team-swatch home" aria-hidden="true"></span>
-            <strong id="home-name">Host XI</strong>
-            <span class="fixture-v">v</span>
-            <strong id="away-name">Guest XI</strong>
-            <span id="away-swatch" class="team-swatch away" aria-hidden="true"></span>
-            <span class="room-tag mono" id="match-room">----</span>
-          </div>
-          <div class="scoreline" aria-live="polite" aria-label="Match score">
-            <strong id="score-home">0</strong>
-            <span class="score-sep" aria-hidden="true">–</span>
-            <strong id="score-away">0</strong>
-            <span id="score-clock" class="score-clock mono">00:00</span>
-            <span id="score-added" class="score-added mono" hidden></span>
-            <span id="score-phase" class="score-phase">1st half</span>
-            <span id="score-pens" class="score-pens mono" hidden></span>
-            <span id="match-cards" class="score-discipline mono">YC 0–0 · RC 0–0</span>
-          </div>
-          <div class="match-bar-actions">
-            <button id="replay-button" class="button small" type="button" disabled>Replay goal</button>
-            <button id="renderer-toggle" class="button small" type="button" aria-pressed="false">2D view</button>
-            <button id="audio-toggle" class="button small" type="button" aria-pressed="false">Sound off</button>
-            <button id="open-subs" class="button small" type="button" hidden>Subs</button>
-            <span id="match-chip" class="chip live" data-state="live">Live</span>
-            <a class="ghost-link" href="/practice.html">Practice</a>
-            <button id="leave-match" class="button" type="button">Leave</button>
-          </div>
-        </div>
+        <header class="match-head">
+          <div class="match-head__top">
+            <div class="match-context">
+              <span class="match-context__eyebrow">LAN match</span>
+              <span class="match-context__room">
+                Room <strong id="match-room" class="ui-mono">----</strong>
+              </span>
+              <span id="match-chip" class="ui-badge match-status" data-state="live" aria-live="polite">Live</span>
+            </div>
 
-        <p id="match-event" class="match-event" hidden></p>
+            <div class="match-actions" aria-label="Match actions">
+              <button id="open-subs" class="ui-button ui-button--small ui-button--outline-accent" type="button" hidden>
+                Subs
+              </button>
+              <button id="pause-match" class="ui-button ui-button--small" type="button" hidden>
+                Pause
+              </button>
+              <button id="replay-button" class="ui-button ui-button--small" type="button" disabled>
+                Replay goal
+              </button>
+              <button id="renderer-toggle" class="ui-button ui-button--small" type="button" aria-pressed="false">
+                2D view
+              </button>
+              <button id="audio-toggle" class="ui-button ui-button--small" type="button" aria-pressed="false">
+                Sound off
+              </button>
+              <button id="leave-match" class="ui-button ui-button--small ui-button--quiet" type="button">
+                Leave
+              </button>
+            </div>
+          </div>
 
-        <section class="stage-card" aria-label="Server match visualisation">
-          <div class="stage-meta">
-            <span class="chip">Server stream</span>
-            <span class="chip">30 Hz snapshots</span>
-            <span class="chip">60 Hz simulation</span>
-            <span class="chip" id="buffer-chip">100 ms interpolation</span>
-            <span class="chip" id="control-player">You: —</span>
+          <div class="match-scoreboard">
+            <div class="match-team match-team--home">
+              <span id="home-swatch" class="match-team__mark" aria-hidden="true"></span>
+              <div class="match-team__copy">
+                <span class="ui-kicker">Home</span>
+                <strong id="home-name" class="match-team__name">Host XI</strong>
+              </div>
+            </div>
+
+            <div class="scoreline" aria-live="polite" aria-label="Match score">
+              <div class="scoreline__clock">
+                <span id="score-clock" class="score-clock ui-mono">00:00</span>
+                <span id="score-added" class="score-added ui-mono" hidden></span>
+              </div>
+              <div class="scoreline__numbers">
+                <strong id="score-home">0</strong>
+                <span class="score-sep" aria-hidden="true">–</span>
+                <strong id="score-away">0</strong>
+              </div>
+              <div class="scoreline__phase">
+                <span id="score-phase" class="score-phase">1st half</span>
+                <span id="score-pens" class="score-pens ui-mono" hidden></span>
+              </div>
+            </div>
+
+            <div class="match-team match-team--away">
+              <div class="match-team__copy">
+                <span class="ui-kicker">Away</span>
+                <strong id="away-name" class="match-team__name">Guest XI</strong>
+              </div>
+              <span id="away-swatch" class="match-team__mark" aria-hidden="true"></span>
+            </div>
+          </div>
+
+          <div class="match-strip">
+            <div class="match-strip__feed" aria-live="polite">
+              <span class="match-strip__dot" aria-hidden="true"></span>
+              <p id="match-event" class="match-event" hidden></p>
+              <span id="match-strip-idle" class="match-strip__idle">Referee feed</span>
+            </div>
+            <span id="match-cards" class="score-discipline ui-mono">YC 0–0 · RC 0–0</span>
+          </div>
+        </header>
+
+        <section class="match-stage" aria-label="Server match visualisation">
+          <div class="match-feedbar">
+            <div class="match-feedbar__group">
+              <span class="match-feedbar__live"><i aria-hidden="true"></i> Server stream</span>
+              <span class="match-feedbar__spec">60 Hz simulation / 30 Hz snapshots</span>
+              <span id="buffer-chip" class="match-feedbar__chip">100 ms interpolation</span>
+              <span id="match-rules" class="match-feedbar__chip match-feedbar__rules">Ref standard · AI professional</span>
+            </div>
+            <span id="control-player" class="match-feedbar__player">You: —</span>
           </div>
 
           <div id="pitch-stage" class="pitch-stage">
@@ -939,7 +1006,7 @@
               <div class="power-track"><i id="power-fill"></i></div>
             </div>
 
-            <div id="match-overlay" class="match-overlay" hidden>
+            <div id="match-overlay" class="match-overlay" data-tone="info" role="status" aria-live="polite" hidden>
               <div class="overlay-box">
                 <span class="overlay-pulse" aria-hidden="true"></span>
                 <h2 id="overlay-title">Connecting</h2>
@@ -950,42 +1017,42 @@
             <div id="replay-banner" class="replay-banner" hidden>
               <span class="replay-dot" aria-hidden="true"></span>
               <strong>Replay</strong>
-              <span id="replay-progress" class="mono">0.0s</span>
-              <button id="replay-stop" class="button small" type="button">Skip</button>
+              <span id="replay-progress" class="ui-mono">0.0s</span>
+              <button id="replay-stop" class="ui-button ui-button--small" type="button">Skip</button>
             </div>
 
             <section id="stats-screen" class="stats-screen" aria-label="Full-time match statistics" hidden>
-              <div class="stats-head">
-                <div>
-                  <p class="eyebrow">Full time</p>
+              <header class="stats-head">
+                <div class="stats-head__copy">
+                  <p class="ui-kicker">Full time</p>
                   <h2 id="stats-title">Match statistics</h2>
                 </div>
                 <strong id="stats-score" class="stats-score">0 – 0</strong>
-              </div>
+              </header>
               <p id="stats-note" class="stats-note"></p>
               <div id="stats-rows" class="stats-rows"></div>
             </section>
           </div>
 
-          <div class="hud">
+          <div class="hud" aria-label="Connection telemetry">
             <div class="hud-item">
               <span class="hud-label">Room</span>
-              <strong id="hud-room" class="hud-value mono">----</strong>
+              <strong id="hud-room" class="hud-value ui-mono">----</strong>
             </div>
             <div class="hud-item">
               <span class="hud-label">Ping</span>
               <strong id="hud-ping" class="hud-value">—</strong>
             </div>
-            <div class="hud-item">
-              <span class="hud-label">Server tick</span>
-              <strong id="hud-tick" class="hud-value mono">0</strong>
+            <div class="hud-item hud-item--detail">
+              <span class="hud-label">Tick</span>
+              <strong id="hud-tick" class="hud-value ui-mono">0</strong>
             </div>
-            <div class="hud-item">
+            <div class="hud-item hud-item--detail">
               <span class="hud-label">Snapshot</span>
-              <strong id="hud-snapshot" class="hud-value mono">0</strong>
+              <strong id="hud-snapshot" class="hud-value ui-mono">0</strong>
             </div>
             <div class="hud-item">
-              <span class="hud-label">Interp</span>
+              <span class="hud-label">Interpolation</span>
               <strong id="hud-buffer" class="hud-value">100 ms</strong>
             </div>
             <div class="hud-item">
@@ -996,27 +1063,45 @@
         </section>
 
         <footer class="match-footer">
-          <div class="match-notes">
-            <p>
-              White ring: your player. The host owns the simulation; both
-              devices render interpolated server snapshots.
-            </p>
-            <p class="control-hint">
-              <kbd>WASD</kbd> move <kbd>Shift</kbd> sprint
-              <kbd>X</kbd> pass <kbd>C</kbd> through <kbd>V</kbd> lob
-              <kbd>Z</kbd> hold shoot <kbd>F</kbd> tackle
-              <kbd>Space</kbd> switch <kbd>E</kbd> finesse
-            </p>
-            <p class="control-hint">
-              Gamepad: stick move, A pass, B/RT shoot, X tackle, Y through,
-              LB switch, RB lob, LT sprint, L3 finesse.
-            </p>
-          </div>
-          <p class="shortcut-hint">
-            <a href="/">Lobby</a>
-            <span class="hint-sep">/</span>
-            <a href="/controller.html">Phone controller</a>
-          </p>
+          <details class="match-help">
+            <summary>
+              <span class="ui-kicker">Controls &amp; shortcuts</span>
+              <span class="match-help__hint">WASD move · X pass · Z shoot</span>
+            </summary>
+            <div class="match-help__panel">
+              <div class="match-help__row">
+                <span class="match-help__label">Keyboard</span>
+                <p>
+                  <kbd>WASD</kbd> move <kbd>Shift</kbd> sprint
+                  <kbd>X</kbd> pass <kbd>C</kbd> through <kbd>V</kbd> lob
+                  <kbd>Z</kbd> hold shoot <kbd>F</kbd> tackle
+                  <kbd>Space</kbd> switch <kbd>E</kbd> finesse
+                </p>
+              </div>
+              <div class="match-help__row">
+                <span class="match-help__label">Gamepad</span>
+                <p>
+                  Stick move, A pass, B/RT shoot, X tackle, Y through,
+                  LB switch, RB lob, LT sprint, L3 finesse.
+                </p>
+              </div>
+              <p class="match-help__note">
+                White ring: your player. The host owns the simulation; both
+                devices render interpolated server snapshots. A disconnect
+                auto-pauses the match for 60 seconds.
+              </p>
+              <div class="match-help__links">
+                <a href="/">Lobby</a>
+                <span aria-hidden="true">/</span>
+                <a href="/controller.html">Phone controller</a>
+                <span aria-hidden="true">/</span>
+                <button id="match-bindings" class="match-help__button" type="button">
+                  Edit bindings
+                </button>
+              </div>
+            </div>
+          </details>
+          <p class="match-footer__note">Host-authoritative · 60 Hz simulation</p>
         </footer>
       </main>
 
@@ -1058,34 +1143,42 @@
 
       <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-      <dialog id="subs-dialog" class="controls-dialog subs-dialog">
-        <div class="dialog-head">
+      <dialog id="subs-dialog" class="match-dialog subs-dialog" aria-labelledby="subs-title">
+        <header class="match-dialog__head">
           <div>
-            <p class="eyebrow">Matchday squad</p>
-            <h2>Substitutions</h2>
+            <p class="ui-kicker">Matchday squad</p>
+            <h2 id="subs-title" class="match-dialog__title">Substitutions</h2>
+            <p class="match-dialog__copy">
+              Requests are queued and applied at the next stoppage or half-time.
+              Five substitutions are allowed in three windows, plus one in extra
+              time.
+            </p>
           </div>
-          <button id="close-subs" class="button" type="button">Close</button>
-        </div>
-        <p class="dialog-copy">
-          Requests are queued and applied at the next stoppage or half-time.
-          Five substitutions are allowed in three windows, plus one in extra
-          time.
-        </p>
+          <button id="close-subs" class="ui-button ui-button--small ui-button--quiet" type="button">
+            Close
+          </button>
+        </header>
+
         <div class="subs-form">
-          <label class="editor-select">
-            <span>Player off</span>
-            <select id="subs-out"></select>
+          <label class="squad-field">
+            <span class="ui-label">Player off</span>
+            <select id="subs-out" class="ui-select"></select>
           </label>
-          <label class="editor-select">
-            <span>Player on</span>
-            <select id="subs-in"></select>
+          <label class="squad-field">
+            <span class="ui-label">Player on</span>
+            <select id="subs-in" class="ui-select"></select>
           </label>
-          <button id="subs-submit" class="button primary" type="button">Queue substitution</button>
+          <button id="subs-submit" class="ui-button ui-button--primary" type="button">
+            Queue substitution
+          </button>
         </div>
-        <p id="subs-status" class="editor-status" role="status"></p>
-        <div class="dialog-actions">
-          <span id="subs-bench-count" class="chip">Bench: 7</span>
-        </div>
+
+        <p id="subs-status" class="match-dialog__status" role="status" hidden></p>
+
+        <footer class="match-dialog__foot">
+          <span id="subs-bench-count" class="ui-badge">Bench: 7</span>
+          <span class="match-dialog__rule">3 windows · extra-time change if needed</span>
+        </footer>
       </dialog>
 
       <dialog id="controls-dialog" class="controls-dialog">
