@@ -341,6 +341,9 @@
             <span id="match-cards" class="score-discipline mono">YC 0–0 · RC 0–0</span>
           </div>
           <div class="match-bar-actions">
+            <button id="replay-button" class="button small" type="button" disabled>Replay goal</button>
+            <button id="renderer-toggle" class="button small" type="button" aria-pressed="false">2D view</button>
+            <button id="audio-toggle" class="button small" type="button" aria-pressed="false">Sound off</button>
             <button id="open-subs" class="button small" type="button" hidden>Subs</button>
             <span id="match-chip" class="chip live" data-state="live">Live</span>
             <a class="ghost-link" href="/practice.html">Practice</a>
@@ -359,7 +362,7 @@
             <span class="chip" id="control-player">You: —</span>
           </div>
 
-          <div class="pitch-stage">
+          <div id="pitch-stage" class="pitch-stage">
             <canvas id="pitch" aria-label="Top-down football pitch">
               Canvas rendering is required to view the match.
             </canvas>
@@ -378,6 +381,13 @@
                 <h2 id="overlay-title">Connecting</h2>
                 <p id="overlay-detail">Waiting for the server.</p>
               </div>
+            </div>
+
+            <div id="replay-banner" class="replay-banner" hidden>
+              <span class="replay-dot" aria-hidden="true"></span>
+              <strong>Replay</strong>
+              <span id="replay-progress" class="mono">0.0s</span>
+              <button id="replay-stop" class="button small" type="button">Skip</button>
             </div>
 
             <section id="stats-screen" class="stats-screen" aria-label="Full-time match statistics" hidden>

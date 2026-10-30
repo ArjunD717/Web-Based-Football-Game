@@ -25,10 +25,17 @@ import {
   type GameLinkStatus,
 } from "./net/game-client";
 import { TeamEditor } from "./lobby/team-editor";
-import { createCanvasRenderer } from "./render/canvas-renderer";
+import {
+  mountMatchRenderer,
+  preferredRendererMode,
+  saveRendererMode,
+  type RendererMode,
+} from "./render/factory";
 import type { MatchView } from "./render/view";
 import { describeMatchEvent, formatCardCounts } from "./match/event-label";
 import { SubstitutionPanel } from "./match/substitution-panel";
+import { MatchAudio } from "./audio/match-audio";
+import { MatchReplayBuffer } from "./presentation/replay";
 import {
   renderMatchStatsScreen,
   type MatchStatsViewRow,
@@ -44,9 +51,14 @@ const STATUS_LABELS: Record<GameLinkStatus, string> = {
   fatal: "Connection error",
 };
 
-const canvas = byId<HTMLCanvasElement>("pitch");
-const renderer = createCanvasRenderer(canvas);
+const pitchStage = byId<HTMLElement>("pitch-stage");
+let mounted = mountMatchRenderer(pitchStage, preferredRendererMode());
+let renderer = mounted.renderer;
+let rendererMode: RendererMode = mounted.mode;
+let rendererFellBack = mounted.fellBack;
 const client = new GameClient();
+const replay = new MatchReplayBuffer();
+const audio = new MatchAudio();
 
 const connectionDot = byId<HTMLSpanElement>("connection-dot");
 const connectionLabel = byId<HTMLElement>("connection-label");
@@ -89,6 +101,13 @@ const statsNote = byId<HTMLElement>("stats-note");
 const statsRows = byId<HTMLElement>("stats-rows");
 const matchEvent = byId<HTMLElement>("match-event");
 const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
+const rendererToggleButton =
+  byId<HTMLButtonElement>("renderer-toggle");
+const replayButton = byId<HTMLButtonElement>("replay-button");
+const replayStopButton = byId<HTMLButtonElement>("replay-stop");
+const replayBanner = byId<HTMLElement>("replay-banner");
+const replayProgress = byId<HTMLElement>("replay-progress");
+const audioToggleButton = byId<HTMLButtonElement>("audio-toggle");
 const bufferChip = byId<HTMLElement>("buffer-chip");
 const controlPlayerChip = byId<HTMLElement>("control-player");
 const hudRoom = byId<HTMLElement>("hud-room");
@@ -110,6 +129,9 @@ const resetBindingsButton = byId<HTMLButtonElement>("reset-bindings");
 const bindingsGrid = byId<HTMLElement>("bindings-grid");
 const toast = byId<HTMLElement>("toast");
 
+let currentState: GameClientState | null = null;
+let toastTimer: number | null = null;
+
 const substitutionPanel = new SubstitutionPanel({
   onSubstitute: (outId, inId) => client.substitute(outId, inId),
 });
@@ -126,12 +148,17 @@ const teamEditor = new TeamEditor({
   },
 });
 
+updateRendererControl();
+updateAudioControl();
+if (rendererFellBack) {
+  showToast("3D view unavailable; using the 2D renderer");
+}
+
 const queryCode = readQueryRoomCode();
 if (queryCode !== null) {
   roomInput.value = queryCode;
 }
 
-let currentState: GameClientState | null = null;
 let lastLobby: ServerLobbyStateMessage | null | undefined;
 let lastStatus: GameLinkStatus | null = null;
 let lastNotice: string | null = null;
@@ -144,7 +171,6 @@ let autoJoinAttempted = false;
 let lastHudAt = 0;
 let lastMatchEventSeq = 0;
 let matchEventTimer: number | null = null;
-let toastTimer: number | null = null;
 let controls: DesktopControls | null = null;
 let lastSelfTeam: "home" | "away" | null = null;
 let lastLoopAt = performance.now();
@@ -206,6 +232,49 @@ leaveRoomButton.addEventListener("click", () => {
 
 leaveMatchButton.addEventListener("click", () => {
   client.leaveRoom();
+});
+
+rendererToggleButton.addEventListener("click", () => {
+  const next: RendererMode = rendererMode === "3d" ? "2d" : "3d";
+  switchRenderer(next);
+});
+
+replayButton.addEventListener("click", () => {
+  toggleReplay();
+});
+
+replayStopButton.addEventListener("click", () => {
+  stopReplay();
+});
+
+audioToggleButton.addEventListener("click", () => {
+  void audio.toggle().then(updateAudioControl);
+});
+
+window.addEventListener("pointerdown", () => {
+  void audio.unlock();
+});
+window.addEventListener("keydown", (event) => {
+  void audio.unlock();
+  const target = event.target;
+  const typing =
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "SELECT");
+  if (
+    !typing &&
+    !event.repeat &&
+    event.code === "KeyR" &&
+    !matchView.hidden &&
+    !controlsDialog.open
+  ) {
+    toggleReplay();
+  }
+});
+window.addEventListener("pagehide", () => {
+  audio.destroy();
 });
 
 openBindingsButton.addEventListener("click", () => {
@@ -383,6 +452,10 @@ function applyState(state: GameClientState): void {
   lastSetupRef = state.setup;
   if (newMatch || setupChanged) {
     if (newMatch) {
+      stopReplay();
+      replay.clear();
+      setReplayAvailable(false);
+      audio.reset();
       lastMatchEventSeq = 0;
       if (matchEventTimer !== null) {
         window.clearTimeout(matchEventTimer);
@@ -451,20 +524,45 @@ function renderLoop(now: number): void {
   );
   lastLoopAt = now;
 
-  if (builder !== null) {
+  if (replay.active) {
+    const sample = replay.sample(now);
+    if (sample === null) {
+      stopReplay();
+    } else {
+      renderer.render(sample.view);
+      replayBanner.hidden = false;
+      replayProgress.textContent = `${(sample.elapsedMs / 1_000).toFixed(
+        1,
+      )}s / ${(sample.durationMs / 1_000).toFixed(1)}s`;
+    }
+  } else if (builder !== null) {
     const frame = client.sampleSnapshot(now);
     if (frame !== null) {
+      audio.handleSnapshot(frame);
       const view = builder.build(frame);
       if (view !== null) {
         latestView = view;
         renderer.render(view);
+        if (
+          replay.record(
+            view,
+            frame.match.scoreHome,
+            frame.match.scoreAway,
+            now,
+          )
+        ) {
+          setReplayAvailable(true);
+          showToast("Goal — replay available");
+        }
       }
     } else if (latestView !== null) {
       renderer.render(latestView);
     }
   }
 
-  updateControlLoop(now, loopDt);
+  if (!replay.active) {
+    updateControlLoop(now, loopDt);
+  }
 
   if (
     currentState !== null &&
@@ -879,6 +977,10 @@ function updateControlPlayerChip(state: GameClientState): void {
 }
 
 function updateOverlay(state: GameClientState): void {
+  if (replay.active) {
+    matchOverlay.hidden = true;
+    return;
+  }
   if (state.setup === null) {
     matchOverlay.hidden = true;
     return;
@@ -1009,6 +1111,72 @@ function showOverlay(title: string, detail: string): void {
   matchOverlay.hidden = false;
   overlayTitle.textContent = title;
   overlayDetail.textContent = detail;
+}
+
+function toggleReplay(): void {
+  if (replay.active) {
+    stopReplay();
+    return;
+  }
+  if (!replay.start(performance.now())) {
+    return;
+  }
+  replayBanner.hidden = false;
+  replayButton.textContent = "Stop replay";
+  matchOverlay.hidden = true;
+}
+
+function stopReplay(): void {
+  replay.stop();
+  replayBanner.hidden = true;
+  replayButton.textContent = "Replay goal";
+}
+
+function setReplayAvailable(available: boolean): void {
+  replayButton.disabled = !available;
+  if (!available && !replay.active) {
+    replayButton.textContent = "Replay goal";
+  }
+}
+
+function switchRenderer(next: RendererMode): void {
+  if (next === rendererMode) {
+    return;
+  }
+  renderer.destroy();
+  mounted = mountMatchRenderer(pitchStage, next);
+  renderer = mounted.renderer;
+  rendererMode = mounted.mode;
+  rendererFellBack = mounted.fellBack;
+  saveRendererMode(rendererMode);
+  updateRendererControl();
+  if (latestView !== null) {
+    renderer.render(latestView);
+  }
+  renderer.resize();
+  if (rendererFellBack) {
+    showToast("3D view unavailable; using the 2D renderer");
+  }
+}
+
+function updateAudioControl(): void {
+  audioToggleButton.textContent = audio.isEnabled ? "Sound on" : "Sound off";
+  audioToggleButton.setAttribute("aria-pressed", String(audio.isEnabled));
+}
+
+function updateRendererControl(): void {
+  rendererToggleButton.textContent =
+    rendererMode === "3d" ? "2D view" : "3D view";
+  rendererToggleButton.setAttribute(
+    "aria-pressed",
+    String(rendererMode === "3d"),
+  );
+  rendererToggleButton.title =
+    rendererFellBack
+      ? "WebGL unavailable; using 2D"
+      : rendererMode === "3d"
+        ? "Switch to the top-down renderer"
+        : "Switch to the 3D renderer";
 }
 
 function showMatch(): void {

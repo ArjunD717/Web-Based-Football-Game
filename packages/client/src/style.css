@@ -1971,3 +1971,62 @@ kbd {
     gap: 0.35rem;
   }
 }
+
+/* M11 presentation */
+.replay-banner {
+  position: absolute;
+  left: 50%;
+  top: 0.75rem;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  transform: translateX(-50%);
+  padding: 0.42rem 0.55rem 0.42rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: rgba(4, 13, 8, 0.9);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.replay-banner strong {
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
+.replay-banner .mono {
+  color: var(--accent);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.replay-dot {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: var(--bad);
+  box-shadow: 0 0 0.7rem var(--bad);
+  animation: replay-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes replay-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .match-bar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}

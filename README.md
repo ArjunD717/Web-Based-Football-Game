@@ -2,11 +2,12 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 10**:
+both devices are thin clients. This repository is at **Milestone 11**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
-teams, and a complete match-management layer with substitutions, injuries,
-added time, extra time, shootouts, VAR-lite and full-time statistics.
+teams, a complete match-management layer with substitutions, injuries, added
+time, extra time, shootouts, VAR-lite and full-time statistics, plus an
+animated Three.js match presentation, local goal replays and procedural audio.
 
 ## Requirements
 
@@ -69,6 +70,10 @@ pnpm dev
 ```
 
 - Lobby/match via Vite: **https://localhost:5173/**
+- The match opens in the 3D renderer by default; append `?renderer=2d` to force
+  the canvas renderer or `?renderer=3d` to force Three.js. The choice is also
+  available from the match top bar and persists in `localStorage`. Without a
+  WebGL context the client falls back to canvas and explains why
 - Phone controller: **https://localhost:5173/controller.html**
 - M1 local practice: **https://localhost:5173/practice.html**
 - M0 transport check: **https://localhost:5173/link.html**
@@ -114,6 +119,49 @@ Useful environment overrides:
 | `FB_STATIC_DIR` | `packages/client/dist` | Built client directory |
 | `FB_DATA_DIR` | `data` | Generated public football data |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
+
+## Milestone 11 scope
+
+Implemented:
+
+- The match presentation is now behind the existing `MatchRenderer` interface.
+  A Three.js renderer draws a lit, striped 105 x 68 m pitch with goal frames,
+  netting, a ball shadow, a surround plane and a fitted perspective camera. The
+  camera projects the pitch corners every time the stage aspect or pitch changes
+  and adjusts its distance until the whole playing area fits
+- Players are low-poly capsule rigs with team kits, shorts, socks, skin/hair
+  variation, shirt numbers and a card marker. Local-space animation poses drive
+  sprint lean, kick/header/volley, tackle/slide/fall, dribble and celebration
+  states; facing comes from the authoritative snapshot
+- The canvas 2D renderer remains the practice renderer and the automatic
+  fallback. WebGL failures are caught, reported as a toast and keep the match
+  playable. Renderer mode survives reloads and can be overridden with
+  `?renderer=2d` / `?renderer=3d`
+- The client keeps a bounded 12-second ring of rendered match views. When the
+  scoreline changes it freezes the preceding 5.5 seconds; the **Replay goal**
+  button (or `R`) plays this locally in a slow-motion 3D replay with a progress
+  banner and a stop button. The live server simulation keeps running
+- Procedural Web Audio supplies kick/whistle/goal sounds and a quiet crowd bed
+  with no bundled audio assets. The **Sound on/off** control persists its
+  preference and the context unlocks on the first pointer/key gesture
+- Unit tests cover renderer pose mapping, the exact-fit camera projection,
+  pitch layout/asset-free mesh construction and replay-buffer goal detection,
+  trimming and playback sampling
+
+Known M11 limitations (by design):
+
+- Players are procedural low-poly rigs; there are no GLTF/skeletal animation
+  assets, facial animation or broadcast-quality cutscenes
+- The camera is a static full-pitch tactical view with a fixed angle; it does
+  not follow the ball or cut between broadcast cameras
+- Replays are local to the client, cover the last goal only, render through the
+  3D scene even if the pitch is currently in 2D mode, and are not persisted or
+  shared over the network
+- Audio is synthesized; there is no commentary, music, positional audio or
+  pre-match crowd recording. Browsers require the first user gesture before
+  sound can start
+- The Three.js bundle is loaded with the lobby client; a slow device may take
+  slightly longer to become interactive than the canvas-only build
 
 ## Milestone 10 scope
 
@@ -511,7 +559,8 @@ Not implemented yet (by milestone design):
 - Real CSV registry and further national-team competition modes; M9 ships the
   call-up pipeline and playable national teams, but the bundled dataset is
   still clearly marked fake sample data
-- Three.js, animation, replays, audio (M11)
+- Real animation assets (GLTF/skeletal), commentary audio, server-side replay
+  clips/export, broadcast camera cuts and a career/competition mode
 - Local prediction/reconciliation; controls feel the RTT on a LAN
 - Authentication. The server is intended for a trusted private LAN only.
 
@@ -574,6 +623,9 @@ pause/resume. M6 adds CSV quoting/header errors, deterministic mutation
 strategies/overrides/uniqueness/diacritics, normalisation and stat-copy checks,
 sheet construction, schema/cross-file rejection, asset/report generation,
 byte-deterministic rebuilds, fuzzy club renaming, and sim attribute/team mapping.
+M10 adds substitution windows/limits, injury risk, shootouts, extra time, VAR,
+settings/roster/statistics protocol flow and the full-time client state. M11
+adds Three.js pose/camera/pitch tests and the client replay buffer.
 
 The two-minute data check:
 
@@ -622,7 +674,15 @@ The two-minute match check:
 10. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 11. Guest **Leave**: host returns to the room lobby with the code intact.
-12. `pnpm check`: expect 36 test files and 420 tests passing.
+12. `pnpm check`: expect 44 test files and 468 tests passing.
+13. Verify the 3D presentation: the match opens in 3D, the whole pitch fits
+    after resizing the window, players animate and carry numbers, and the
+    **2D view** button switches renderers. Reload and confirm the mode persisted.
+    Append `?renderer=2d` to load the canvas renderer directly.
+14. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
+    replay banner, progress and stop control. Toggle **Sound** and confirm the
+    whistle/kick/goal effects and crowd bed respect the setting. Disable WebGL
+    in a test browser to verify the automatic 2D fallback toast.
 
 ## Layout
 
@@ -631,7 +691,7 @@ packages/shared      math, RNG, tuning, data contracts, protocol, input/snapshot
 packages/sim         pure fixed-step football simulation, data mapping and human actions
 packages/data-tools  CSV ingest, normalise, validate, name mutation, sheets, assets
 packages/server      HTTPS/WSS, sessions, rooms, input routing, match runner, QR
-packages/client      LAN lobby, match client/interpolation, 2D renderer
+packages/client      LAN lobby, match client/interpolation, canvas + Three.js renderers
   ├── controller     phone controller page (virtual stick + action buttons)
   ├── practice.html  offline M1 simulation
   └── link.html      M0 transport diagnostics
