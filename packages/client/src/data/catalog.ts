@@ -1,6 +1,7 @@
 // packages/client/src/data/catalog.ts
 
 import {
+  TEAM_KINDS,
   isRecord,
   parseTeamSheet,
   type DataManifest,
@@ -20,6 +21,7 @@ export interface Catalog {
   readonly manifest: DataManifest;
   readonly leagues: readonly LeagueData[];
   readonly teams: readonly TeamData[];
+  readonly nationalTeams: readonly TeamData[];
   readonly players: readonly PlayerData[];
   readonly nations: readonly NationData[];
   readonly playersById: ReadonlyMap<string, PlayerData>;
@@ -40,16 +42,19 @@ export function loadCatalog(): Promise<Catalog> {
 }
 
 async function fetchCatalog(): Promise<Catalog> {
-  const [manifest, leagues, teams, players, nations] = await Promise.all([
-    fetchJson("/data/manifest.json"),
-    fetchJson("/data/leagues.json"),
-    fetchJson("/data/teams.json"),
-    fetchJson("/data/players.json"),
-    fetchJson("/data/nations.json"),
-  ]);
+  const [manifest, leagues, teams, nationalTeams, players, nations] =
+    await Promise.all([
+      fetchJson("/data/manifest.json"),
+      fetchJson("/data/leagues.json"),
+      fetchJson("/data/teams.json"),
+      fetchJson("/data/national-teams.json"),
+      fetchJson("/data/players.json"),
+      fetchJson("/data/nations.json"),
+    ]);
   if (
     !Array.isArray(leagues) ||
     !Array.isArray(teams) ||
+    !Array.isArray(nationalTeams) ||
     !Array.isArray(players) ||
     !Array.isArray(nations) ||
     typeof manifest !== "object" ||
@@ -59,13 +64,17 @@ async function fetchCatalog(): Promise<Catalog> {
   }
 
   const parsedTeams = teams.map((team) => parseTeam(team));
+  const parsedNationalTeams = nationalTeams.map((team) => parseTeam(team));
   const parsedPlayers = players.map((player) => parsePlayer(player));
   const playersById = new Map(parsedPlayers.map((player) => [player.id, player]));
   const nationsById = new Map(
     (nations as NationData[]).map((nation) => [nation.id, nation]),
   );
   const teamEntries = new Map<string, TeamCatalogEntry>();
-  for (const team of parsedTeams) {
+  for (const team of [...parsedTeams, ...parsedNationalTeams]) {
+    if (teamEntries.has(team.id)) {
+      throw new Error(`Duplicate selectable team ${team.id}`);
+    }
     const squad = new Map<string, PlayerData>();
     for (const playerId of team.squad) {
       const player = playersById.get(playerId);
@@ -85,6 +94,7 @@ async function fetchCatalog(): Promise<Catalog> {
     manifest: manifest as unknown as DataManifest,
     leagues: leagues as LeagueData[],
     teams: parsedTeams,
+    nationalTeams: parsedNationalTeams,
     players: parsedPlayers,
     nations: nations as NationData[],
     playersById,
@@ -108,10 +118,14 @@ function parseTeam(value: unknown): TeamData {
   if (
     typeof value.id !== "string" ||
     typeof value.name !== "string" ||
+    (value.kind !== "club" && value.kind !== "nation") ||
     !Array.isArray(value.squad) ||
     value.squad.some((id) => typeof id !== "string")
   ) {
     throw new Error("Team catalog entry is missing id, name or squad");
+  }
+  if (!(TEAM_KINDS as readonly string[]).includes(value.kind)) {
+    throw new Error("Team catalog entry has an unknown kind");
   }
   const sheet = parseTeamSheet(value.defaultSheet);
   if (sheet === null) {

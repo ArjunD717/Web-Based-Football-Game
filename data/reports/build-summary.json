@@ -6,20 +6,21 @@
   "counts": {
     "leagues": 1,
     "teams": 3,
-    "players": 60,
+    "nationalTeams": 5,
+    "players": 156,
     "nations": 5,
-    "faceStatsDerived": 60
+    "faceStatsDerived": 156
   },
   "strategies": {
-    "cluster": 11,
-    "phonetic": 25,
-    "vowel": 22,
+    "cluster": 38,
+    "phonetic": 69,
+    "vowel": 47,
     "override": 2
   },
   "renameClubs": false,
   "assets": {
-    "crests": 3,
-    "kits": 9,
-    "faces": 60
+    "crests": 8,
+    "kits": 24,
+    "faces": 156
   }
 }

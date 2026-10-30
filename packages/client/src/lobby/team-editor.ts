@@ -79,6 +79,7 @@ export class TeamEditor {
   private readonly root = byId<HTMLElement>("team-editor");
   private readonly status = byId<HTMLElement>("editor-status");
   private readonly body = byId<HTMLElement>("editor-body");
+  private readonly teamKind = byId<HTMLSelectElement>("team-kind");
   private readonly leagueFilter = byId<HTMLSelectElement>("league-filter");
   private readonly teamSelect = byId<HTMLSelectElement>("team-select");
   private readonly formationSelect =
@@ -134,6 +135,10 @@ export class TeamEditor {
       }
       this.selection = null;
       this.callbacks.onSetTeam(teamId);
+    });
+
+    this.teamKind.addEventListener("change", () => {
+      this.renderToolbar();
     });
 
     this.leagueFilter.addEventListener("change", () => {
@@ -252,12 +257,16 @@ export class TeamEditor {
     this.opponent =
       room.players.find((player) => player.seat !== selfSeat) ?? null;
     const teamId = this.self?.teamId ?? null;
-    if (teamId !== this.lastTeamId) {
+    const teamChanged = teamId !== this.lastTeamId;
+    if (teamChanged) {
       this.lastTeamId = teamId;
       this.selection = null;
     }
     this.entry =
       teamId === null ? null : this.catalog?.teamEntries.get(teamId) ?? null;
+    if (teamChanged && this.entry !== null) {
+      this.teamKind.value = this.entry.team.kind;
+    }
     this.sheet = this.self?.sheet ?? null;
     this.syncChip.textContent = "Synced with host";
     this.syncChip.dataset.state = "ok";
@@ -329,42 +338,61 @@ export class TeamEditor {
       return;
     }
     const opponentTeamId = this.opponent?.teamId ?? null;
+    const teamKind = this.teamKind.value || "club";
+    this.teamKind.value = teamKind;
     const currentLeague = this.leagueFilter.value || "all";
     this.leagueFilter.replaceChildren();
+    this.leagueFilter.disabled = teamKind === "nation";
     const allLeagues = document.createElement("option");
     allLeagues.value = "all";
-    allLeagues.textContent = "All leagues";
+    allLeagues.textContent =
+      teamKind === "nation" ? "International" : "All leagues";
     this.leagueFilter.append(allLeagues);
-    for (const league of [...this.catalog.leagues].sort((a, b) =>
-      a.country.localeCompare(b.country),
-    )) {
-      const option = document.createElement("option");
-      option.value = league.id;
-      option.textContent = `${league.country} · ${league.name}`;
-      this.leagueFilter.append(option);
+    if (teamKind !== "nation") {
+      for (const league of [...this.catalog.leagues].sort((a, b) =>
+        a.country.localeCompare(b.country),
+      )) {
+        const option = document.createElement("option");
+        option.value = league.id;
+        option.textContent = `${league.country} · ${league.name}`;
+        this.leagueFilter.append(option);
+      }
     }
-    this.leagueFilter.value =
-      currentLeague === "all" ||
-      this.catalog.leagues.some((league) => league.id === currentLeague)
-        ? currentLeague
-        : "all";
-    const leagueId = this.leagueFilter.value;
+    const leagueId =
+      teamKind === "nation"
+        ? "all"
+        : currentLeague === "all" ||
+            this.catalog.leagues.some((league) => league.id === currentLeague)
+          ? currentLeague
+          : "all";
+    this.leagueFilter.value = leagueId;
 
     this.teamSelect.replaceChildren();
     const teams = [...this.catalog.teamEntries.values()]
-      .filter(
-        (teamEntry) =>
-          leagueId === "all" ||
-          teamEntry.team.leagueId === leagueId ||
-          teamEntry.team.id === entry.team.id,
-      )
+      .filter((teamEntry) => {
+        const isCurrent = teamEntry.team.id === entry.team.id;
+        if (!isCurrent && teamKind !== "all" && teamEntry.team.kind !== teamKind) {
+          return false;
+        }
+        if (teamKind === "nation" || leagueId === "all") {
+          return true;
+        }
+        return isCurrent || teamEntry.team.leagueId === leagueId;
+      })
       .sort((a, b) => a.team.name.localeCompare(b.team.name));
     for (const teamEntry of teams) {
       const option = document.createElement("option");
       option.value = teamEntry.team.id;
-      option.textContent = teamEntry.team.sample
-        ? `${teamEntry.team.name} (sample)`
-        : teamEntry.team.name;
+      const isCurrent = teamEntry.team.id === entry.team.id;
+      const kindPrefix =
+        teamEntry.team.kind === "nation" ? "National · " : "";
+      const currentPrefix =
+        isCurrent && teamKind !== "all" && teamEntry.team.kind !== teamKind
+          ? "Current · "
+          : "";
+      option.textContent = `${currentPrefix}${kindPrefix}${teamEntry.team.name}${
+        teamEntry.team.sample ? " (sample)" : ""
+      }`;
       option.disabled =
         teamEntry.team.id === opponentTeamId &&
         teamEntry.team.id !== entry.team.id;
@@ -418,11 +446,18 @@ export class TeamEditor {
     const league = this.catalog?.leagues.find(
       (item) => item.id === entry.team.leagueId,
     );
+    const nation =
+      entry.team.kind === "nation" && entry.team.nationId !== null
+        ? this.catalog?.nationsById.get(entry.team.nationId)
+        : null;
     const meta = document.createElement("p");
     meta.className = "panel-hint";
-    meta.textContent = `${league?.name ?? entry.team.leagueId} · ${
-      entry.team.stadium
-    } · ${entry.team.managerName}`;
+    meta.textContent =
+      entry.team.kind === "nation"
+        ? `National team · ${nation?.name ?? entry.team.name} · ${entry.team.squad.length}-player call-ups`
+        : `${league?.name ?? "Unknown league"} · ${entry.team.stadium} · ${
+            entry.team.managerName
+          }`;
     identity.append(name, meta);
 
     const swatches = document.createElement("div");
@@ -441,7 +476,13 @@ export class TeamEditor {
     }
     const sample = document.createElement("span");
     sample.className = "chip";
-    sample.textContent = entry.team.sample ? "Sample club" : "Club";
+    sample.textContent = entry.team.sample
+      ? entry.team.kind === "nation"
+        ? "Sample nation"
+        : "Sample club"
+      : entry.team.kind === "nation"
+        ? "National team"
+        : "Club";
     swatches.append(sample);
 
     this.clubPreview.append(crest, kit, identity, swatches);

@@ -8,6 +8,7 @@ import {
   PLAYER_POSITIONS,
   PREFERRED_FEET,
   PRESS_INTENSITIES,
+  TEAM_KINDS,
   WORK_RATES,
 } from "@fb/shared";
 import type {
@@ -24,7 +25,7 @@ import type {
 } from "@fb/shared";
 import { z } from "zod";
 
-export const DATA_SCHEMA_VERSION = 2;
+export const DATA_SCHEMA_VERSION = 3;
 
 const rating = z.number().int().min(1).max(99);
 const shortText = z.string().trim().min(1).max(80);
@@ -267,9 +268,11 @@ export const TeamSheetSchema: z.ZodType<TeamSheet> = z
 export const TeamDataSchema: z.ZodType<TeamData> = z
   .object({
     id,
+    kind: z.enum(TEAM_KINDS),
     name: shortText,
     short: z.string().trim().min(2).max(8),
-    leagueId: id,
+    leagueId: id.nullable(),
+    nationId: id.nullable(),
     colours: TeamColoursSchema,
     stadium: shortText,
     managerName: shortText,
@@ -287,6 +290,35 @@ export const TeamDataSchema: z.ZodType<TeamData> = z
   })
   .strict()
   .superRefine((team, ctx) => {
+    if (team.kind === "club" && team.leagueId === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["leagueId"],
+        message: "Club teams must belong to a league",
+      });
+    }
+    if (team.kind === "nation") {
+      if (team.leagueId !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["leagueId"],
+          message: "National teams do not belong to a league",
+        });
+      }
+      if (team.nationId === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["nationId"],
+          message: "National teams must reference a nation",
+        });
+      }
+    } else if (team.nationId !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["nationId"],
+        message: "Only national teams have a nationId",
+      });
+    }
     if (new Set(team.squad).size !== team.squad.length) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -337,7 +369,7 @@ export const NationDataSchema: z.ZodType<NationData> = z
     name: shortText,
     short: z.string().trim().min(2).max(8),
     colours: TeamColoursSchema,
-    squad: z.array(id).max(26),
+    squad: z.array(id).length(26),
     reserves: z.array(id),
     sample: z.boolean(),
   })
@@ -349,10 +381,12 @@ export const DataManifestSchema: z.ZodType<DataManifest> = z
     sample: z.boolean(),
     leagues: z.number().int().nonnegative(),
     teams: z.number().int().nonnegative(),
+    nationalTeams: z.number().int().nonnegative(),
     players: z.number().int().nonnegative(),
     nations: z.number().int().nonnegative(),
     leagueIds: z.array(id),
     teamIds: z.array(id),
+    nationalTeamIds: z.array(id),
   })
   .strict();
 
@@ -361,6 +395,7 @@ export const DataBundleSchema = z
     manifest: DataManifestSchema,
     leagues: z.array(LeagueDataSchema),
     teams: z.array(TeamDataSchema),
+    nationalTeams: z.array(TeamDataSchema),
     players: z.array(PlayerDataSchema),
     nations: z.array(NationDataSchema),
   })

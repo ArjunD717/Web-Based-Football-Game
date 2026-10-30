@@ -27,6 +27,7 @@ async function loadBundle(): Promise<ParsedBundle> {
     manifest: await readJson("manifest.json"),
     leagues: await readJson("leagues.json"),
     teams: await readJson("teams.json"),
+    nationalTeams: await readJson("national-teams.json"),
     players: await readJson("players.json"),
     nations: await readJson("nations.json"),
   });
@@ -36,7 +37,8 @@ describe("data schemas", () => {
   it("validates the committed sample bundle and cross-file references", async () => {
     const bundle = await loadBundle();
     expect(bundle.manifest.sample).toBe(true);
-    expect(bundle.players).toHaveLength(60);
+    expect(bundle.players).toHaveLength(156);
+    expect(bundle.nationalTeams).toHaveLength(5);
     expect(() => assertValidBundle(bundle)).not.toThrow();
   });
 
@@ -53,6 +55,9 @@ describe("data schemas", () => {
   it("rejects bad ratings, missing keeper stats and duplicate names", async () => {
     const bundle = await loadBundle();
     const player = bundle.players[0]!;
+    const keeper = bundle.players.find((entry) =>
+      entry.positions.includes("GK"),
+    )!;
     expect(
       PlayerDataSchema.safeParse({
         ...player,
@@ -60,7 +65,7 @@ describe("data schemas", () => {
       }).success,
     ).toBe(false);
     expect(
-      PlayerDataSchema.safeParse({ ...player, goalkeeper: null }).success,
+      PlayerDataSchema.safeParse({ ...keeper, goalkeeper: null }).success,
     ).toBe(false);
 
     const duplicated = {

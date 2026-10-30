@@ -67,6 +67,12 @@ export type BuildUpStyle = (typeof BUILD_UP_STYLES)[number];
 export const KIT_CHOICES = ["home", "away", "third"] as const;
 export type KitChoice = (typeof KIT_CHOICES)[number];
 
+export const TEAM_KINDS = ["club", "nation"] as const;
+export type TeamKind = (typeof TEAM_KINDS)[number];
+
+export const CALLUP_GROUPS = ["squad", "reserve"] as const;
+export type CallupGroup = (typeof CALLUP_GROUPS)[number];
+
 /** FC-style six-field summary; keys mirror the source-data headings. */
 export interface FaceStats {
   readonly PAC: number;
@@ -197,9 +203,13 @@ export interface TeamSheet {
 
 export interface TeamData {
   readonly id: string;
+  readonly kind: TeamKind;
   readonly name: string;
   readonly short: string;
-  readonly leagueId: string;
+  /** Domestic league ID for clubs; null for national teams. */
+  readonly leagueId: string | null;
+  /** Set for national teams; null for clubs. */
+  readonly nationId: string | null;
   readonly colours: TeamColours;
   readonly stadium: string;
   readonly managerName: string;
@@ -226,8 +236,9 @@ export interface LeagueData {
 }
 
 /**
- * National-team metadata is present from M6; call-up/reserve validation arrives
- * with the nation registry in M9.
+ * National-team registry. `squad` is the 26-player call-up list; `reserves` is
+ * the wider pool that can be called up later. National TeamData is generated
+ * from the squad and lives in national-teams.json.
  */
 export interface NationData {
   readonly id: string;
@@ -244,10 +255,12 @@ export interface DataManifest {
   readonly sample: boolean;
   readonly leagues: number;
   readonly teams: number;
+  readonly nationalTeams: number;
   readonly players: number;
   readonly nations: number;
   readonly leagueIds: readonly string[];
   readonly teamIds: readonly string[];
+  readonly nationalTeamIds: readonly string[];
 }
 
 export function isPlayerPosition(value: string): value is PlayerPosition {

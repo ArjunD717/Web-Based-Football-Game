@@ -105,6 +105,13 @@ export const NATION_HEADERS = [
 
 export const OVERRIDE_HEADERS = ["player_id", "override_name"] as const;
 
+/**
+ * Supplied national-team registry. `group=squad` must contain exactly 26 rows
+ * per nation; `group=reserve` is the wider call-up pool. Row order is preserved
+ * so the source can express its own depth chart.
+ */
+export const CALLUP_HEADERS = ["nation_id", "player_id", "group"] as const;
+
 export interface DatasetMetadata {
   readonly sample: boolean;
   readonly label: string;
@@ -118,6 +125,8 @@ export interface RawDataset {
   readonly nations: readonly CsvRecord[];
   readonly players: readonly CsvRecord[];
   readonly overrides: ReadonlyMap<string, string>;
+  /** Null when callups.csv is absent, in which case the builder derives it. */
+  readonly callups: readonly CsvRecord[] | null;
 }
 
 async function readCsv(
@@ -127,6 +136,26 @@ async function readCsv(
 ): Promise<readonly CsvRecord[]> {
   const text = await readFile(join(inputDir, file), "utf8");
   return parseCsvRecords(text, headers, file).records;
+}
+
+async function readOptionalCsv(
+  inputDir: string,
+  file: string,
+  headers: readonly string[],
+): Promise<readonly CsvRecord[] | null> {
+  try {
+    return await readCsv(inputDir, file, headers);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 async function readMetadata(inputDir: string): Promise<DatasetMetadata> {
@@ -198,5 +227,10 @@ export async function readInputDataset(
     nations: await readCsv(inputDir, "nations.csv", NATION_HEADERS),
     players: await readCsv(inputDir, "players.csv", PLAYER_HEADERS),
     overrides: overrideMap,
+    callups: await readOptionalCsv(
+      inputDir,
+      "callups.csv",
+      CALLUP_HEADERS,
+    ),
   };
 }

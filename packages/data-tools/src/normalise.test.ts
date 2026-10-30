@@ -24,7 +24,7 @@ describe("input normalisation", () => {
     expect(normalised.sample).toBe(true);
     expect(normalised.leagues).toHaveLength(1);
     expect(normalised.clubs).toHaveLength(3);
-    expect(normalised.players).toHaveLength(60);
+    expect(normalised.players).toHaveLength(156);
     expect(normalised.nations).toHaveLength(5);
     const keeper = normalised.players.find(
       (player) => player.data.positions.includes("GK"),
@@ -60,21 +60,59 @@ describe("input normalisation", () => {
       expect(league.clubIds).toHaveLength(3);
     }
     for (const club of normalised.clubs) {
-      expect(club.squad).toHaveLength(20);
+      expect(club.squad).toHaveLength(52);
       expect(club.squad.filter((id) => {
         const player = normalised.players.find((entry) => entry.data.id === id);
         return player?.data.positions.includes("GK") === true;
-      })).toHaveLength(3);
+      })).toHaveLength(5);
       const team = buildTeamData(club, normalised.players, true);
       expect(team.defaultSheet.startingXI).toHaveLength(11);
       expect(team.defaultSheet.bench).toHaveLength(7);
-      expect(team.defaultSheet.reserves).toHaveLength(2);
+      expect(team.defaultSheet.reserves).toHaveLength(34);
       expect(new Set([
         ...team.defaultSheet.startingXI.map((slot) => slot.playerId),
         ...team.defaultSheet.bench,
         ...team.defaultSheet.reserves,
-      ]).size).toBe(20);
+      ]).size).toBe(52);
     }
+  });
+
+  it("uses the supplied 26-man call-up registry and reserve pools", async () => {
+    const { raw, normalised } = await loadSample();
+    expect(raw.callups).not.toBeNull();
+    for (const nation of normalised.nations) {
+      expect(nation.squad).toHaveLength(26);
+      expect(nation.reserves.length).toBeGreaterThan(0);
+      const keepers = nation.squad.filter((playerId) => {
+        const player = normalised.players.find(
+          (entry) => entry.data.id === playerId,
+        );
+        return player?.data.positions.includes("GK") === true;
+      });
+      expect(keepers.length).toBeGreaterThanOrEqual(2);
+    }
+
+    const callups = raw.callups!;
+    const broken = callups.filter(
+      (row, index) =>
+        !(row.nation_id === "sampleland" && row.group === "squad" && index === 0),
+    );
+    expect(() =>
+      normaliseDataset({ ...raw, callups: broken }, "2026-07-01"),
+    ).toThrow(/expected 26 call-ups/);
+
+    const duplicated = [...callups, { ...callups[0]! }];
+    expect(() =>
+      normaliseDataset({ ...raw, callups: duplicated }, "2026-07-01"),
+    ).toThrow(/appears more than once/);
+
+    const derived = normaliseDataset(
+      { ...raw, callups: null },
+      "2026-07-01",
+    );
+    expect(derived.nations.every((nation) => nation.squad.length === 26)).toBe(
+      true,
+    );
   });
 
   it("rejects duplicate kit numbers inside a club", async () => {
@@ -125,7 +163,7 @@ describe("input normalisation", () => {
         generated.sheet.startingXI.filter((slot) => slot.role === "GK"),
       ).toHaveLength(1);
       expect(generated.sheet.bench).toHaveLength(7);
-      expect(generated.used).toHaveLength(20);
+      expect(generated.used).toHaveLength(52);
     }
     const sheet = buildDefaultSheet(clubPlayers, "4-4-2");
     expect(
@@ -170,8 +208,8 @@ describe("input normalisation", () => {
         overrides: raw.overrides,
       },
     );
-    expect(mutations).toHaveLength(60);
-    expect(new Set(mutations.map((entry) => normalizeName(entry.name))).size).toBe(60);
+    expect(mutations).toHaveLength(156);
+    expect(new Set(mutations.map((entry) => normalizeName(entry.name))).size).toBe(156);
     expect(mutations.some((entry) => entry.strategy === "override")).toBe(true);
     expect(mutations.some((entry) => entry.strategy === "cluster")).toBe(true);
     const built = buildTeamData(
@@ -183,17 +221,20 @@ describe("input normalisation", () => {
       assertValidBundle(
         parseBundle({
           manifest: {
-            schemaVersion: 2,
+            schemaVersion: 3,
             sample: true,
             leagues: 1,
             teams: 3,
-            players: 60,
+            nationalTeams: 0,
+            players: 156,
             nations: 5,
             leagueIds: ["sample-league"],
             teamIds: ["northbridge-athletic"],
+            nationalTeamIds: [],
           },
           leagues: normalised.leagues,
           teams: [built],
+          nationalTeams: [],
           players: normalised.players.map((player) => player.data),
           nations: normalised.nations,
         }),

@@ -22,6 +22,9 @@ function crossValidate(bundle: DataBundle): string[] {
   const errors: string[] = [];
   const leagueById = new Map(bundle.leagues.map((league) => [league.id, league]));
   const teamById = new Map(bundle.teams.map((team) => [team.id, team]));
+  const nationalTeamById = new Map(
+    bundle.nationalTeams.map((team) => [team.id, team]),
+  );
   const playerById = new Map(bundle.players.map((player) => [player.id, player]));
   const nationById = new Map(bundle.nations.map((nation) => [nation.id, nation]));
   if (leagueById.size !== bundle.leagues.length) {
@@ -29,6 +32,16 @@ function crossValidate(bundle: DataBundle): string[] {
   }
   if (teamById.size !== bundle.teams.length) {
     errors.push("duplicate team ID in generated data");
+  }
+  if (nationalTeamById.size !== bundle.nationalTeams.length) {
+    errors.push("duplicate national team ID in generated data");
+  }
+  for (const nationalTeam of bundle.nationalTeams) {
+    if (teamById.has(nationalTeam.id)) {
+      errors.push(
+        `national team ${nationalTeam.id}: ID also used by a club`,
+      );
+    }
   }
   if (playerById.size !== bundle.players.length) {
     errors.push("duplicate player ID in generated data");
@@ -52,7 +65,11 @@ function crossValidate(bundle: DataBundle): string[] {
   }
 
   for (const team of bundle.teams) {
-    if (!leagueById.has(team.leagueId)) {
+    if (team.kind !== "club") {
+      errors.push(`team ${team.id}: club list contains a ${team.kind} team`);
+      continue;
+    }
+    if (team.leagueId === null || !leagueById.has(team.leagueId)) {
       errors.push(`team ${team.id}: unknown league ${team.leagueId}`);
     }
     if (new Set(team.squad).size !== team.squad.length) {
@@ -155,6 +172,11 @@ function crossValidate(bundle: DataBundle): string[] {
   }
 
   for (const nation of bundle.nations) {
+    if (nation.squad.length !== 26) {
+      errors.push(
+        `nation ${nation.id}: expected 26 call-ups, found ${nation.squad.length}`,
+      );
+    }
     const all = [...nation.squad, ...nation.reserves];
     if (new Set(all).size !== all.length) {
       errors.push(`nation ${nation.id}: duplicate player`);
@@ -169,6 +191,94 @@ function crossValidate(bundle: DataBundle): string[] {
         );
       }
     }
+    const keepers = nation.squad.filter(
+      (playerId) => playerById.get(playerId)?.positions.includes("GK") === true,
+    );
+    if (keepers.length < 2) {
+      errors.push(`nation ${nation.id}: fewer than two call-up goalkeepers`);
+    }
+  }
+
+  for (const nationalTeam of bundle.nationalTeams) {
+    if (nationalTeam.kind !== "nation") {
+      errors.push(
+        `national team ${nationalTeam.id}: kind is ${nationalTeam.kind}`,
+      );
+      continue;
+    }
+    if (nationalTeam.nationId === null) {
+      errors.push(`national team ${nationalTeam.id}: missing nationId`);
+      continue;
+    }
+    const nation = nationById.get(nationalTeam.nationId);
+    if (nation === undefined) {
+      errors.push(
+        `national team ${nationalTeam.id}: unknown nation ${nationalTeam.nationId}`,
+      );
+      continue;
+    }
+    if (nationalTeam.leagueId !== null) {
+      errors.push(`national team ${nationalTeam.id}: must not have a league`);
+    }
+    if (
+      nationalTeam.squad.length !== nation.squad.length ||
+      nationalTeam.squad.some(
+        (playerId, index) => playerId !== nation.squad[index],
+      )
+    ) {
+      errors.push(
+        `national team ${nationalTeam.id}: squad must match the 26 call-ups`,
+      );
+    }
+    if (new Set(nationalTeam.squad).size !== nationalTeam.squad.length) {
+      errors.push(`national team ${nationalTeam.id}: duplicate squad player`);
+    }
+    const squadPlayers = nationalTeam.squad.map((playerId) =>
+      playerById.get(playerId),
+    );
+    if (squadPlayers.some((player) => player === undefined)) {
+      errors.push(
+        `national team ${nationalTeam.id}: squad references a missing player`,
+      );
+    }
+    const sheets = [
+      ...nationalTeam.defaultSheet.startingXI.map((slot) => slot.playerId),
+      ...nationalTeam.defaultSheet.bench,
+      ...nationalTeam.defaultSheet.reserves,
+    ];
+    if (new Set(sheets).size !== sheets.length) {
+      errors.push(
+        `national team ${nationalTeam.id}: sheet contains duplicate player`,
+      );
+    }
+    if (sheets.length !== nationalTeam.squad.length) {
+      errors.push(
+        `national team ${nationalTeam.id}: sheet covers ${sheets.length} of ${nationalTeam.squad.length} players`,
+      );
+    }
+    for (const playerId of sheets) {
+      if (!nationalTeam.squad.includes(playerId)) {
+        errors.push(
+          `national team ${nationalTeam.id}: sheet player ${playerId} not in squad`,
+        );
+      }
+    }
+    const starterKeepers = nationalTeam.defaultSheet.startingXI.filter(
+      (slot) => slot.role === "GK",
+    );
+    if (starterKeepers.length !== 1) {
+      errors.push(
+        `national team ${nationalTeam.id}: starting XI must have exactly one GK`,
+      );
+    }
+    const benchKeepers = nationalTeam.defaultSheet.bench.filter(
+      (playerId) => playerById.get(playerId)?.positions.includes("GK") === true,
+    );
+    if (benchKeepers.length === 0) {
+      errors.push(
+        `national team ${nationalTeam.id}: bench must include a goalkeeper`,
+      );
+    }
   }
 
   if (bundle.manifest.leagues !== bundle.leagues.length) {
@@ -176,6 +286,21 @@ function crossValidate(bundle: DataBundle): string[] {
   }
   if (bundle.manifest.teams !== bundle.teams.length) {
     errors.push("manifest: team count mismatch");
+  }
+  if (bundle.manifest.nationalTeams !== bundle.nationalTeams.length) {
+    errors.push("manifest: national team count mismatch");
+  }
+  if (
+    bundle.manifest.teamIds.join("|") !==
+    bundle.teams.map((team) => team.id).sort().join("|")
+  ) {
+    errors.push("manifest: team IDs do not match generated clubs");
+  }
+  if (
+    bundle.manifest.nationalTeamIds.join("|") !==
+    bundle.nationalTeams.map((team) => team.id).sort().join("|")
+  ) {
+    errors.push("manifest: national team IDs do not match generated nations");
   }
   if (bundle.manifest.players !== bundle.players.length) {
     errors.push("manifest: player count mismatch");
@@ -193,6 +318,18 @@ function crossValidate(bundle: DataBundle): string[] {
     for (const team of bundle.teams) {
       if (!team.sample) {
         errors.push(`team ${team.id}: sample dataset team not labelled`);
+      }
+    }
+    for (const team of bundle.nationalTeams) {
+      if (!team.sample) {
+        errors.push(
+          `national team ${team.id}: sample dataset team not labelled`,
+        );
+      }
+    }
+    for (const nation of bundle.nations) {
+      if (!nation.sample) {
+        errors.push(`nation ${nation.id}: sample dataset nation not labelled`);
       }
     }
     for (const league of bundle.leagues) {

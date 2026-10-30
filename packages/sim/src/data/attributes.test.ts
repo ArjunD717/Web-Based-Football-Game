@@ -115,9 +115,11 @@ function team(): TeamData {
   );
   return {
     id: "sample-club",
+    kind: "club",
     name: "Sample Club",
     short: "SMP",
     leagueId: "sample-league",
+    nationId: null,
     colours: {
       home: "#112233",
       away: "#ffffff",

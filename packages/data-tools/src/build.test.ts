@@ -27,13 +27,22 @@ describe("data build", () => {
       sample: true,
       leagues: 1,
       teams: 3,
-      players: 60,
+      nationalTeams: 5,
+      players: 156,
       nations: 5,
     });
     const validated = await validateGeneratedData(outDir);
     expect(validated.players.every((player) => player.sample)).toBe(true);
     expect(validated.teams.every((team) => team.defaultSheet.bench.length === 7)).toBe(true);
-    expect(result.assets).toEqual({ crests: 3, kits: 9, faces: 60 });
+    expect(
+      validated.nationalTeams.every(
+        (team) =>
+          team.kind === "nation" &&
+          team.squad.length === 26 &&
+          team.defaultSheet.bench.length === 7,
+      ),
+    ).toBe(true);
+    expect(result.assets).toEqual({ crests: 8, kits: 24, faces: 156 });
 
     const serializedPlayers = await readFile(join(outDir, "players.json"), "utf8");
     expect(serializedPlayers).not.toContain("realRef");
@@ -43,7 +52,7 @@ describe("data build", () => {
       "utf8",
     );
     const reportLines = report.trim().split("\n");
-    expect(reportLines).toHaveLength(61);
+    expect(reportLines).toHaveLength(157);
     expect(reportLines[0]).toContain("public_name");
     const crest = await readFile(
       join(outDir, "assets", "crests", "northbridge-athletic.svg"),
@@ -51,6 +60,11 @@ describe("data build", () => {
     );
     expect(crest).toContain("<svg");
     expect(crest).toContain("Northbridge Athletic");
+    const nationalCrest = await readFile(
+      join(outDir, "assets", "crests", "nation-sampleland.svg"),
+      "utf8",
+    );
+    expect(nationalCrest).toContain("Sampleland");
   });
 
   it("is byte-deterministic for the same input and reference date", async () => {
@@ -61,6 +75,7 @@ describe("data build", () => {
     for (const file of [
       "leagues.json",
       "teams.json",
+      "national-teams.json",
       "players.json",
       "nations.json",
       "manifest.json",

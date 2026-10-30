@@ -293,6 +293,8 @@ describe("team selection and live sheets", () => {
     expect(host?.teamId).toBeTruthy();
     expect(guest?.teamId).toBeTruthy();
     expect(host?.teamId).not.toBe(guest?.teamId);
+    expect(registry.getTeam(host?.teamId ?? "")?.kind).toBe("club");
+    expect(registry.getTeam(guest?.teamId ?? "")?.kind).toBe("club");
     expect(host?.sheet?.startingXI).toHaveLength(11);
     expect(guest?.sheet?.startingXI).toHaveLength(11);
   });
@@ -369,6 +371,36 @@ describe("team selection and live sheets", () => {
       teamId: "not-a-team",
     });
     expect(fixture.host.lastMessageType("error")?.code).toBe("invalid_team");
+  });
+
+  it("starts a national team against a club with the call-up XI", () => {
+    const fixture = setupRoom();
+    const nation = registry.teams.find((team) => team.kind === "nation");
+    const club = registry.teams.find((team) => team.kind === "club");
+    if (nation === undefined || club === undefined) {
+      throw new Error("Sample data must include a nation and a club");
+    }
+    fixture.manager.onMessage(fixture.host, {
+      t: "setTeam",
+      teamId: nation.id,
+    });
+    fixture.manager.onMessage(fixture.guest, {
+      t: "setTeam",
+      teamId: club.id,
+    });
+    startReadyMatch(fixture);
+    const setup = fixture.host.lastMatchStart().setup;
+    expect(setup.home.name).toBe(nation.name);
+    expect(setup.away.name).toBe(club.name);
+    expect(setup.home.players).toHaveLength(11);
+    expect(setup.home.players[0]?.id).toBe(
+      `home:${nation.defaultSheet.startingXI[0]!.playerId}`,
+    );
+    expect(
+      fixture.host.lastLobby().room?.players.find(
+        (player) => player.seat === 0,
+      )?.teamId,
+    ).toBe(nation.id);
   });
 
   it("starts with the authoritative selected starting XI", () => {

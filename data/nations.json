@@ -10,20 +10,42 @@
       "goalkeeper": "#bbf7d0"
     },
     "squad": [
+      "kpu-p51",
+      "nbr-p51",
+      "rvr-p51",
+      "kpu-p44",
+      "nbr-p44",
+      "rvr-p44",
       "kpu-p19",
+      "kpu-p42",
       "nbr-p19",
+      "nbr-p42",
       "rvr-p19",
+      "rvr-p42",
+      "nbr-p43",
+      "kpu-p43",
+      "rvr-p43",
       "kpu-p04",
       "kpu-p14",
+      "kpu-p39",
       "nbr-p04",
       "nbr-p14",
+      "nbr-p39",
       "rvr-p04",
       "rvr-p14",
+      "rvr-p39",
+      "kpu-p41",
+      "nbr-p41"
+    ],
+    "reserves": [
+      "rvr-p41",
+      "kpu-p40",
+      "rvr-p40",
       "kpu-p09",
       "nbr-p09",
-      "rvr-p09"
+      "rvr-p09",
+      "nbr-p40"
     ],
-    "reserves": [],
     "sample": true
   },
   {
@@ -37,20 +59,39 @@
       "goalkeeper": "#fde68a"
     },
     "squad": [
+      "nbr-p02",
+      "rvr-p02",
+      "kpu-p02",
       "kpu-p12",
+      "kpu-p32",
       "nbr-p12",
+      "nbr-p32",
       "rvr-p12",
+      "rvr-p32",
+      "kpu-p29",
+      "kpu-p30",
+      "nbr-p29",
+      "nbr-p30",
+      "rvr-p29",
+      "rvr-p30",
       "kpu-p17",
+      "kpu-p28",
       "nbr-p17",
       "rvr-p17",
+      "rvr-p28",
+      "nbr-p31",
+      "kpu-p31",
+      "nbr-p28",
+      "rvr-p31",
       "kpu-p07",
-      "nbr-p07",
-      "rvr-p07",
-      "kpu-p02",
-      "nbr-p02",
-      "rvr-p02"
+      "kpu-p27"
     ],
-    "reserves": [],
+    "reserves": [
+      "nbr-p07",
+      "nbr-p27",
+      "rvr-p07",
+      "rvr-p27"
+    ],
     "sample": true
   },
   {
@@ -64,20 +105,39 @@
       "goalkeeper": "#9be564"
     },
     "squad": [
+      "nbr-p01",
+      "rvr-p01",
+      "kpu-p01",
+      "kpu-p24",
+      "nbr-p24",
+      "rvr-p24",
+      "kpu-p26",
+      "nbr-p26",
+      "rvr-p26",
       "kpu-p11",
       "kpu-p16",
       "nbr-p11",
       "nbr-p16",
       "rvr-p11",
       "rvr-p16",
+      "kpu-p23",
+      "nbr-p23",
+      "rvr-p23",
+      "nbr-p22",
       "kpu-p06",
+      "kpu-p25",
       "nbr-p06",
       "rvr-p06",
-      "kpu-p01",
-      "nbr-p01",
-      "rvr-p01"
+      "rvr-p25",
+      "kpu-p22",
+      "nbr-p25"
     ],
-    "reserves": [],
+    "reserves": [
+      "rvr-p22",
+      "kpu-p21",
+      "nbr-p21",
+      "rvr-p21"
+    ],
     "sample": true
   },
   {
@@ -91,20 +151,39 @@
       "goalkeeper": "#bfdbfe"
     },
     "squad": [
+      "nbr-p03",
+      "rvr-p03",
+      "kpu-p03",
+      "kpu-p38",
+      "nbr-p38",
+      "rvr-p38",
+      "kpu-p36",
+      "nbr-p36",
+      "rvr-p36",
       "kpu-p18",
       "nbr-p18",
+      "nbr-p34",
       "rvr-p18",
       "kpu-p08",
+      "kpu-p37",
       "nbr-p08",
       "rvr-p08",
+      "rvr-p37",
       "kpu-p13",
+      "kpu-p34",
       "nbr-p13",
+      "nbr-p37",
       "rvr-p13",
-      "kpu-p03",
-      "nbr-p03",
-      "rvr-p03"
+      "rvr-p34",
+      "kpu-p33",
+      "nbr-p33"
     ],
-    "reserves": [],
+    "reserves": [
+      "rvr-p33",
+      "kpu-p35",
+      "nbr-p35",
+      "rvr-p35"
+    ],
     "sample": true
   },
   {
@@ -118,20 +197,42 @@
       "goalkeeper": "#bae6fd"
     },
     "squad": [
+      "kpu-p52",
+      "nbr-p52",
+      "rvr-p52",
+      "kpu-p48",
+      "nbr-p48",
+      "rvr-p48",
       "kpu-p20",
       "nbr-p20",
       "rvr-p20",
+      "kpu-p49",
+      "rvr-p49",
+      "kpu-p50",
+      "nbr-p49",
+      "nbr-p50",
+      "rvr-p50",
       "kpu-p15",
       "nbr-p15",
       "rvr-p15",
       "kpu-p10",
+      "kpu-p47",
       "nbr-p10",
+      "nbr-p47",
       "rvr-p10",
-      "kpu-p05",
-      "nbr-p05",
-      "rvr-p05"
+      "rvr-p47",
+      "nbr-p46",
+      "kpu-p05"
     ],
-    "reserves": [],
+    "reserves": [
+      "nbr-p05",
+      "rvr-p05",
+      "kpu-p46",
+      "rvr-p46",
+      "kpu-p45",
+      "nbr-p45",
+      "rvr-p45"
+    ],
     "sample": true
   }
 ]

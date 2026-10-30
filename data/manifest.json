@@ -1,9 +1,10 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "sample": true,
   "leagues": 1,
   "teams": 3,
-  "players": 60,
+  "nationalTeams": 5,
+  "players": 156,
   "nations": 5,
   "leagueIds": [
     "sample-league"
@@ -12,5 +13,12 @@
     "kingsport-united",
     "northbridge-athletic",
     "riverside-rovers"
+  ],
+  "nationalTeamIds": [
+    "nation-eastmark",
+    "nation-northland",
+    "nation-sampleland",
+    "nation-southland",
+    "nation-westvale"
   ]
 }

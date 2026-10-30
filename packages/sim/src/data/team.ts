@@ -97,7 +97,7 @@ export function createTeamFromData(
     if (slot.role !== "GK" && player.positions.includes("GK")) {
       throw new Error(`${team.id}: goalkeeper ${player.id} is an outfielder slot`);
     }
-    if (player.clubId !== team.id) {
+    if (team.kind === "club" && player.clubId !== team.id) {
       throw new Error(`${team.id}: ${player.id} belongs to ${player.clubId}`);
     }
 
@@ -106,7 +106,7 @@ export function createTeamFromData(
       id: `${side}:${player.id}`,
       team: side,
       role: formationSlot.role,
-      number: player.kitNumber,
+      number: team.kind === "nation" ? index + 1 : player.kitNumber,
       attributes: mapPlayerAttributes(player),
       roleFamiliarity: positionFamiliarity(player, slot.role),
       formationX: formationSlot.x,

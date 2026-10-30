@@ -386,7 +386,7 @@ export function validateTeamSheetAgainstData(
       errors.push(`missing player record for ${slot.playerId}`);
       continue;
     }
-    if (player.clubId !== team.id) {
+    if (team.kind === "club" && player.clubId !== team.id) {
       errors.push(`${player.id} belongs to ${player.clubId}`);
     }
     const isKeeper = player.positions.includes("GK");

@@ -1,0 +1,712 @@
+[
+  {
+    "id": "nation-eastmark",
+    "kind": "nation",
+    "name": "Eastmark",
+    "short": "EST",
+    "leagueId": null,
+    "nationId": "eastmark",
+    "colours": {
+      "home": "#7c3aed",
+      "away": "#ede9fe",
+      "third": "#16a34a",
+      "goalkeeper": "#bbf7d0"
+    },
+    "stadium": "National Stadium",
+    "managerName": "National Coach",
+    "crest": "assets/crests/nation-eastmark.svg",
+    "kits": {
+      "home": "assets/kits/nation-eastmark-home.svg",
+      "away": "assets/kits/nation-eastmark-away.svg",
+      "third": "assets/kits/nation-eastmark-third.svg"
+    },
+    "squad": [
+      "kpu-p51",
+      "nbr-p51",
+      "rvr-p51",
+      "kpu-p44",
+      "nbr-p44",
+      "rvr-p44",
+      "kpu-p19",
+      "kpu-p42",
+      "nbr-p19",
+      "nbr-p42",
+      "rvr-p19",
+      "rvr-p42",
+      "nbr-p43",
+      "kpu-p43",
+      "rvr-p43",
+      "kpu-p04",
+      "kpu-p14",
+      "kpu-p39",
+      "nbr-p04",
+      "nbr-p14",
+      "nbr-p39",
+      "rvr-p04",
+      "rvr-p14",
+      "rvr-p39",
+      "kpu-p41",
+      "nbr-p41"
+    ],
+    "defaultSheet": {
+      "formation": "4-3-3",
+      "kit": "home",
+      "startingXI": [
+        {
+          "slot": 0,
+          "role": "GK",
+          "playerId": "kpu-p51"
+        },
+        {
+          "slot": 1,
+          "role": "RB",
+          "playerId": "kpu-p04"
+        },
+        {
+          "slot": 2,
+          "role": "CB",
+          "playerId": "kpu-p39"
+        },
+        {
+          "slot": 3,
+          "role": "CB",
+          "playerId": "nbr-p39"
+        },
+        {
+          "slot": 4,
+          "role": "LB",
+          "playerId": "kpu-p43"
+        },
+        {
+          "slot": 5,
+          "role": "CDM",
+          "playerId": "kpu-p41"
+        },
+        {
+          "slot": 6,
+          "role": "CM",
+          "playerId": "nbr-p41"
+        },
+        {
+          "slot": 7,
+          "role": "CM",
+          "playerId": "kpu-p42"
+        },
+        {
+          "slot": 8,
+          "role": "RW",
+          "playerId": "nbr-p43"
+        },
+        {
+          "slot": 9,
+          "role": "ST",
+          "playerId": "kpu-p44"
+        },
+        {
+          "slot": 10,
+          "role": "LW",
+          "playerId": "rvr-p43"
+        }
+      ],
+      "bench": [
+        "nbr-p51",
+        "nbr-p44",
+        "rvr-p44",
+        "kpu-p19",
+        "nbr-p19",
+        "nbr-p42",
+        "rvr-p19"
+      ],
+      "reserves": [
+        "kpu-p14",
+        "nbr-p04",
+        "nbr-p14",
+        "rvr-p04",
+        "rvr-p14",
+        "rvr-p39",
+        "rvr-p42",
+        "rvr-p51"
+      ],
+      "captain": "kpu-p44",
+      "penaltyTaker": "kpu-p44",
+      "freeKickTaker": "kpu-p41",
+      "cornerLeft": "kpu-p41",
+      "cornerRight": "kpu-p41",
+      "tactics": {
+        "defensiveDepth": 50,
+        "width": 55,
+        "pressIntensity": "medium",
+        "buildUpStyle": "balanced"
+      }
+    },
+    "sample": true
+  },
+  {
+    "id": "nation-northland",
+    "kind": "nation",
+    "name": "Northland",
+    "short": "NTH",
+    "leagueId": null,
+    "nationId": "northland",
+    "colours": {
+      "home": "#0f766e",
+      "away": "#ccfbf1",
+      "third": "#f59e0b",
+      "goalkeeper": "#fde68a"
+    },
+    "stadium": "National Stadium",
+    "managerName": "National Coach",
+    "crest": "assets/crests/nation-northland.svg",
+    "kits": {
+      "home": "assets/kits/nation-northland-home.svg",
+      "away": "assets/kits/nation-northland-away.svg",
+      "third": "assets/kits/nation-northland-third.svg"
+    },
+    "squad": [
+      "nbr-p02",
+      "rvr-p02",
+      "kpu-p02",
+      "kpu-p12",
+      "kpu-p32",
+      "nbr-p12",
+      "nbr-p32",
+      "rvr-p12",
+      "rvr-p32",
+      "kpu-p29",
+      "kpu-p30",
+      "nbr-p29",
+      "nbr-p30",
+      "rvr-p29",
+      "rvr-p30",
+      "kpu-p17",
+      "kpu-p28",
+      "nbr-p17",
+      "rvr-p17",
+      "rvr-p28",
+      "nbr-p31",
+      "kpu-p31",
+      "nbr-p28",
+      "rvr-p31",
+      "kpu-p07",
+      "kpu-p27"
+    ],
+    "defaultSheet": {
+      "formation": "4-3-3",
+      "kit": "home",
+      "startingXI": [
+        {
+          "slot": 0,
+          "role": "GK",
+          "playerId": "kpu-p02"
+        },
+        {
+          "slot": 1,
+          "role": "RB",
+          "playerId": "kpu-p28"
+        },
+        {
+          "slot": 2,
+          "role": "CB",
+          "playerId": "kpu-p27"
+        },
+        {
+          "slot": 3,
+          "role": "CB",
+          "playerId": "kpu-p29"
+        },
+        {
+          "slot": 4,
+          "role": "LB",
+          "playerId": "nbr-p28"
+        },
+        {
+          "slot": 5,
+          "role": "CDM",
+          "playerId": "nbr-p29"
+        },
+        {
+          "slot": 6,
+          "role": "CM",
+          "playerId": "rvr-p29"
+        },
+        {
+          "slot": 7,
+          "role": "CM",
+          "playerId": "kpu-p12"
+        },
+        {
+          "slot": 8,
+          "role": "RW",
+          "playerId": "kpu-p17"
+        },
+        {
+          "slot": 9,
+          "role": "ST",
+          "playerId": "kpu-p32"
+        },
+        {
+          "slot": 10,
+          "role": "LW",
+          "playerId": "kpu-p31"
+        }
+      ],
+      "bench": [
+        "nbr-p02",
+        "nbr-p12",
+        "nbr-p32",
+        "rvr-p12",
+        "rvr-p32",
+        "kpu-p30",
+        "nbr-p30"
+      ],
+      "reserves": [
+        "kpu-p07",
+        "nbr-p17",
+        "nbr-p31",
+        "rvr-p02",
+        "rvr-p17",
+        "rvr-p28",
+        "rvr-p30",
+        "rvr-p31"
+      ],
+      "captain": "kpu-p12",
+      "penaltyTaker": "kpu-p32",
+      "freeKickTaker": "kpu-p29",
+      "cornerLeft": "kpu-p29",
+      "cornerRight": "kpu-p29",
+      "tactics": {
+        "defensiveDepth": 50,
+        "width": 55,
+        "pressIntensity": "medium",
+        "buildUpStyle": "balanced"
+      }
+    },
+    "sample": true
+  },
+  {
+    "id": "nation-sampleland",
+    "kind": "nation",
+    "name": "Sampleland",
+    "short": "SMP",
+    "leagueId": null,
+    "nationId": "sampleland",
+    "colours": {
+      "home": "#2f6bff",
+      "away": "#dce7ff",
+      "third": "#f2c94c",
+      "goalkeeper": "#9be564"
+    },
+    "stadium": "National Stadium",
+    "managerName": "National Coach",
+    "crest": "assets/crests/nation-sampleland.svg",
+    "kits": {
+      "home": "assets/kits/nation-sampleland-home.svg",
+      "away": "assets/kits/nation-sampleland-away.svg",
+      "third": "assets/kits/nation-sampleland-third.svg"
+    },
+    "squad": [
+      "nbr-p01",
+      "rvr-p01",
+      "kpu-p01",
+      "kpu-p24",
+      "nbr-p24",
+      "rvr-p24",
+      "kpu-p26",
+      "nbr-p26",
+      "rvr-p26",
+      "kpu-p11",
+      "kpu-p16",
+      "nbr-p11",
+      "nbr-p16",
+      "rvr-p11",
+      "rvr-p16",
+      "kpu-p23",
+      "nbr-p23",
+      "rvr-p23",
+      "nbr-p22",
+      "kpu-p06",
+      "kpu-p25",
+      "nbr-p06",
+      "rvr-p06",
+      "rvr-p25",
+      "kpu-p22",
+      "nbr-p25"
+    ],
+    "defaultSheet": {
+      "formation": "4-3-3",
+      "kit": "home",
+      "startingXI": [
+        {
+          "slot": 0,
+          "role": "GK",
+          "playerId": "kpu-p01"
+        },
+        {
+          "slot": 1,
+          "role": "RB",
+          "playerId": "nbr-p22"
+        },
+        {
+          "slot": 2,
+          "role": "CB",
+          "playerId": "kpu-p06"
+        },
+        {
+          "slot": 3,
+          "role": "CB",
+          "playerId": "nbr-p06"
+        },
+        {
+          "slot": 4,
+          "role": "LB",
+          "playerId": "kpu-p22"
+        },
+        {
+          "slot": 5,
+          "role": "CDM",
+          "playerId": "kpu-p16"
+        },
+        {
+          "slot": 6,
+          "role": "CM",
+          "playerId": "kpu-p11"
+        },
+        {
+          "slot": 7,
+          "role": "CM",
+          "playerId": "nbr-p11"
+        },
+        {
+          "slot": 8,
+          "role": "RW",
+          "playerId": "kpu-p25"
+        },
+        {
+          "slot": 9,
+          "role": "ST",
+          "playerId": "kpu-p26"
+        },
+        {
+          "slot": 10,
+          "role": "LW",
+          "playerId": "nbr-p25"
+        }
+      ],
+      "bench": [
+        "nbr-p01",
+        "kpu-p24",
+        "nbr-p24",
+        "rvr-p24",
+        "nbr-p26",
+        "rvr-p26",
+        "nbr-p16"
+      ],
+      "reserves": [
+        "kpu-p23",
+        "nbr-p23",
+        "rvr-p01",
+        "rvr-p06",
+        "rvr-p11",
+        "rvr-p16",
+        "rvr-p23",
+        "rvr-p25"
+      ],
+      "captain": "kpu-p26",
+      "penaltyTaker": "kpu-p26",
+      "freeKickTaker": "nbr-p11",
+      "cornerLeft": "kpu-p25",
+      "cornerRight": "kpu-p25",
+      "tactics": {
+        "defensiveDepth": 50,
+        "width": 55,
+        "pressIntensity": "medium",
+        "buildUpStyle": "balanced"
+      }
+    },
+    "sample": true
+  },
+  {
+    "id": "nation-southland",
+    "kind": "nation",
+    "name": "Southland",
+    "short": "STH",
+    "leagueId": null,
+    "nationId": "southland",
+    "colours": {
+      "home": "#9d174d",
+      "away": "#fce7f3",
+      "third": "#2563eb",
+      "goalkeeper": "#bfdbfe"
+    },
+    "stadium": "National Stadium",
+    "managerName": "National Coach",
+    "crest": "assets/crests/nation-southland.svg",
+    "kits": {
+      "home": "assets/kits/nation-southland-home.svg",
+      "away": "assets/kits/nation-southland-away.svg",
+      "third": "assets/kits/nation-southland-third.svg"
+    },
+    "squad": [
+      "nbr-p03",
+      "rvr-p03",
+      "kpu-p03",
+      "kpu-p38",
+      "nbr-p38",
+      "rvr-p38",
+      "kpu-p36",
+      "nbr-p36",
+      "rvr-p36",
+      "kpu-p18",
+      "nbr-p18",
+      "nbr-p34",
+      "rvr-p18",
+      "kpu-p08",
+      "kpu-p37",
+      "nbr-p08",
+      "rvr-p08",
+      "rvr-p37",
+      "kpu-p13",
+      "kpu-p34",
+      "nbr-p13",
+      "nbr-p37",
+      "rvr-p13",
+      "rvr-p34",
+      "kpu-p33",
+      "nbr-p33"
+    ],
+    "defaultSheet": {
+      "formation": "4-3-3",
+      "kit": "home",
+      "startingXI": [
+        {
+          "slot": 0,
+          "role": "GK",
+          "playerId": "kpu-p03"
+        },
+        {
+          "slot": 1,
+          "role": "RB",
+          "playerId": "nbr-p34"
+        },
+        {
+          "slot": 2,
+          "role": "CB",
+          "playerId": "kpu-p08"
+        },
+        {
+          "slot": 3,
+          "role": "CB",
+          "playerId": "nbr-p08"
+        },
+        {
+          "slot": 4,
+          "role": "LB",
+          "playerId": "kpu-p34"
+        },
+        {
+          "slot": 5,
+          "role": "CDM",
+          "playerId": "kpu-p13"
+        },
+        {
+          "slot": 6,
+          "role": "CM",
+          "playerId": "nbr-p13"
+        },
+        {
+          "slot": 7,
+          "role": "CM",
+          "playerId": "rvr-p13"
+        },
+        {
+          "slot": 8,
+          "role": "RW",
+          "playerId": "kpu-p37"
+        },
+        {
+          "slot": 9,
+          "role": "ST",
+          "playerId": "kpu-p38"
+        },
+        {
+          "slot": 10,
+          "role": "LW",
+          "playerId": "kpu-p18"
+        }
+      ],
+      "bench": [
+        "nbr-p03",
+        "nbr-p38",
+        "rvr-p38",
+        "kpu-p36",
+        "nbr-p36",
+        "rvr-p36",
+        "nbr-p18"
+      ],
+      "reserves": [
+        "kpu-p33",
+        "nbr-p33",
+        "nbr-p37",
+        "rvr-p03",
+        "rvr-p08",
+        "rvr-p18",
+        "rvr-p34",
+        "rvr-p37"
+      ],
+      "captain": "kpu-p38",
+      "penaltyTaker": "kpu-p18",
+      "freeKickTaker": "rvr-p13",
+      "cornerLeft": "rvr-p13",
+      "cornerRight": "rvr-p13",
+      "tactics": {
+        "defensiveDepth": 50,
+        "width": 55,
+        "pressIntensity": "medium",
+        "buildUpStyle": "balanced"
+      }
+    },
+    "sample": true
+  },
+  {
+    "id": "nation-westvale",
+    "kind": "nation",
+    "name": "Westvale",
+    "short": "WST",
+    "leagueId": null,
+    "nationId": "westvale",
+    "colours": {
+      "home": "#b45309",
+      "away": "#fef3c7",
+      "third": "#0369a1",
+      "goalkeeper": "#bae6fd"
+    },
+    "stadium": "National Stadium",
+    "managerName": "National Coach",
+    "crest": "assets/crests/nation-westvale.svg",
+    "kits": {
+      "home": "assets/kits/nation-westvale-home.svg",
+      "away": "assets/kits/nation-westvale-away.svg",
+      "third": "assets/kits/nation-westvale-third.svg"
+    },
+    "squad": [
+      "kpu-p52",
+      "nbr-p52",
+      "rvr-p52",
+      "kpu-p48",
+      "nbr-p48",
+      "rvr-p48",
+      "kpu-p20",
+      "nbr-p20",
+      "rvr-p20",
+      "kpu-p49",
+      "rvr-p49",
+      "kpu-p50",
+      "nbr-p49",
+      "nbr-p50",
+      "rvr-p50",
+      "kpu-p15",
+      "nbr-p15",
+      "rvr-p15",
+      "kpu-p10",
+      "kpu-p47",
+      "nbr-p10",
+      "nbr-p47",
+      "rvr-p10",
+      "rvr-p47",
+      "nbr-p46",
+      "kpu-p05"
+    ],
+    "defaultSheet": {
+      "formation": "4-3-3",
+      "kit": "home",
+      "startingXI": [
+        {
+          "slot": 0,
+          "role": "GK",
+          "playerId": "kpu-p52"
+        },
+        {
+          "slot": 1,
+          "role": "RB",
+          "playerId": "nbr-p46"
+        },
+        {
+          "slot": 2,
+          "role": "CB",
+          "playerId": "kpu-p05"
+        },
+        {
+          "slot": 3,
+          "role": "CB",
+          "playerId": "kpu-p10"
+        },
+        {
+          "slot": 4,
+          "role": "LB",
+          "playerId": "nbr-p49"
+        },
+        {
+          "slot": 5,
+          "role": "CDM",
+          "playerId": "nbr-p10"
+        },
+        {
+          "slot": 6,
+          "role": "CM",
+          "playerId": "kpu-p47"
+        },
+        {
+          "slot": 7,
+          "role": "CM",
+          "playerId": "nbr-p47"
+        },
+        {
+          "slot": 8,
+          "role": "RW",
+          "playerId": "kpu-p49"
+        },
+        {
+          "slot": 9,
+          "role": "ST",
+          "playerId": "kpu-p50"
+        },
+        {
+          "slot": 10,
+          "role": "LW",
+          "playerId": "kpu-p20"
+        }
+      ],
+      "bench": [
+        "nbr-p52",
+        "kpu-p48",
+        "nbr-p48",
+        "rvr-p48",
+        "nbr-p20",
+        "rvr-p20",
+        "rvr-p49"
+      ],
+      "reserves": [
+        "kpu-p15",
+        "nbr-p15",
+        "nbr-p50",
+        "rvr-p10",
+        "rvr-p15",
+        "rvr-p47",
+        "rvr-p50",
+        "rvr-p52"
+      ],
+      "captain": "kpu-p20",
+      "penaltyTaker": "kpu-p20",
+      "freeKickTaker": "kpu-p10",
+      "cornerLeft": "kpu-p10",
+      "cornerRight": "kpu-p10",
+      "tactics": {
+        "defensiveDepth": 50,
+        "width": 55,
+        "pressIntensity": "medium",
+        "buildUpStyle": "balanced"
+      }
+    },
+    "sample": true
+  }
+]

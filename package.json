@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Private LAN football game. M8: layered AI, difficulty, set pieces and soak-tuned match averages.",
+  "description": "Private LAN football game. M9: club and national-team selection with a validated 26-man call-up registry.",
   "packageManager": "pnpm@10.18.3",
   "engines": {
     "node": ">=20.19.0",

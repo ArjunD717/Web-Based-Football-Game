@@ -24,7 +24,7 @@ import {
   type NormalisedClub,
   type NormalisedPlayer,
 } from "./normalise";
-import { buildTeamData } from "./sheet";
+import { buildNationalTeamData, buildTeamData } from "./sheet";
 import { DATA_SCHEMA_VERSION } from "./schema";
 import { assertValidBundle, parseBundle } from "./validate-data";
 
@@ -46,6 +46,7 @@ export interface BuildResult {
     readonly manifest: DataManifest;
     readonly leagues: readonly LeagueData[];
     readonly teams: readonly TeamData[];
+    readonly nationalTeams: readonly TeamData[];
     readonly players: readonly PlayerData[];
     readonly nations: readonly NationData[];
   };
@@ -192,6 +193,11 @@ export async function buildDataset(
   const teams = clubs
     .map((club) => buildTeamData(club, players, normalised.sample))
     .sort((a, b) => a.id.localeCompare(b.id));
+  const nationalTeams = normalised.nations
+    .map((nation) =>
+      buildNationalTeamData(nation, players, normalised.sample),
+    )
+    .sort((a, b) => a.id.localeCompare(b.id));
   const playerData = players
     .map((player) => player.data)
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -207,16 +213,19 @@ export async function buildDataset(
     sample: normalised.sample,
     leagues: leagues.length,
     teams: teams.length,
+    nationalTeams: nationalTeams.length,
     players: playerData.length,
     nations: nations.length,
     leagueIds: leagues.map((league) => league.id),
     teamIds: teams.map((team) => team.id),
+    nationalTeamIds: nationalTeams.map((team) => team.id),
   };
 
   const bundle = parseBundle({
     manifest,
     leagues,
     teams,
+    nationalTeams,
     players: playerData,
     nations,
   });
@@ -228,12 +237,18 @@ export async function buildDataset(
   }
   await writeJson(join(outDir, "leagues.json"), bundle.leagues);
   await writeJson(join(outDir, "teams.json"), bundle.teams);
+  await writeJson(join(outDir, "national-teams.json"), bundle.nationalTeams);
   await writeJson(join(outDir, "players.json"), bundle.players);
   await writeJson(join(outDir, "nations.json"), bundle.nations);
   await writeJson(join(outDir, "manifest.json"), bundle.manifest);
 
   const assets = generateAssetFiles
-    ? await generateAssets(outDir, bundle.teams, bundle.players)
+    ? await generateAssets(
+        outDir,
+        bundle.teams,
+        bundle.nationalTeams,
+        bundle.players,
+      )
     : null;
 
   const reportsDir = join(outDir, "reports");
@@ -251,6 +266,7 @@ export async function buildDataset(
     counts: {
       leagues: bundle.leagues.length,
       teams: bundle.teams.length,
+      nationalTeams: bundle.nationalTeams.length,
       players: bundle.players.length,
       nations: bundle.nations.length,
       faceStatsDerived: players.filter((player) => player.faceStatsDerived)
@@ -340,7 +356,7 @@ async function main(): Promise<void> {
   });
   const { manifest } = result.bundle;
   console.log(
-    `Built ${manifest.leagues} league(s), ${manifest.teams} team(s), ${manifest.players} player(s), ${manifest.nations} nation(s).`,
+    `Built ${manifest.leagues} league(s), ${manifest.teams} club(s), ${manifest.nationalTeams} national team(s), ${manifest.players} player(s), ${manifest.nations} nation(s).`,
   );
   if (manifest.sample) {
     console.log("DATASET IS LABELLED AS SAMPLE / FAKE DATA.");

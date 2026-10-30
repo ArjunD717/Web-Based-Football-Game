@@ -35,6 +35,7 @@ const PUBLIC_DATA_FILES = new Set([
   "manifest.json",
   "leagues.json",
   "teams.json",
+  "national-teams.json",
   "players.json",
   "nations.json",
 ]);

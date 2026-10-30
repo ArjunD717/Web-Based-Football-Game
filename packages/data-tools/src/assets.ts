@@ -63,9 +63,11 @@ async function writeSvg(absolutePath: string, content: string): Promise<void> {
 export async function generateAssets(
   dataDir: string,
   teams: readonly TeamData[],
+  nationalTeams: readonly TeamData[],
   players: readonly PlayerData[],
 ): Promise<{ crests: number; kits: number; faces: number }> {
-  for (const team of teams) {
+  const allTeams = [...teams, ...nationalTeams];
+  for (const team of allTeams) {
     await writeSvg(join(dataDir, team.crest), crestSvg(team));
     await writeSvg(
       join(dataDir, team.kits.home),
@@ -88,8 +90,8 @@ export async function generateAssets(
   );
 
   return {
-    crests: teams.length,
-    kits: teams.length * 3,
+    crests: allTeams.length,
+    kits: allTeams.length * 3,
     faces: players.length,
   };
 }

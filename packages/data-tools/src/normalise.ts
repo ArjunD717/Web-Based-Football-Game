@@ -530,7 +530,8 @@ export function normaliseDataset(
   const playerById = new Map(players.map((player) => [player.data.id, player]));
   const leagueById = new Map(leagues.map((league) => [league.id, league]));
   const clubById = new Map(clubs.map((club) => [club.id, club]));
-  const nationIds = new Set(nations.map((nation) => nation.id));
+  const nationById = new Map(nations.map((nation) => [nation.id, nation]));
+  const nationIds = new Set(nationById.keys());
 
   for (const overrideId of raw.overrides.keys()) {
     if (!playerById.has(overrideId)) {
@@ -602,18 +603,81 @@ export function normaliseDataset(
     }
   }
 
-  for (const nation of nations) {
-    const nationalPlayers = players
-      .filter((player) => player.data.nationId === nation.id)
-      .sort((a, b) =>
-        b.data.overall - a.data.overall || a.data.id.localeCompare(b.data.id),
+  if (raw.callups === null) {
+    // Legacy inputs without a registry: take the strongest 26, pool the rest.
+    for (const nation of nations) {
+      const nationalPlayers = players
+        .filter((player) => player.data.nationId === nation.id)
+        .sort((a, b) =>
+          b.data.overall - a.data.overall || a.data.id.localeCompare(b.data.id),
+        );
+      nation.squad.push(
+        ...nationalPlayers.slice(0, 26).map((player) => player.data.id),
       );
-    nation.squad.push(
-      ...nationalPlayers.slice(0, 26).map((player) => player.data.id),
-    );
-    nation.reserves.push(
-      ...nationalPlayers.slice(26).map((player) => player.data.id),
-    );
+      nation.reserves.push(
+        ...nationalPlayers.slice(26).map((player) => player.data.id),
+      );
+    }
+  } else {
+    const seen = new Set<string>();
+    for (const [index, row] of raw.callups.entries()) {
+      const context = `callups.csv row ${index + 2}`;
+      const nationId = parseId(
+        required(row, "nation_id", context),
+        "nation_id",
+        context,
+      );
+      const playerId = parseId(
+        required(row, "player_id", context),
+        "player_id",
+        context,
+      );
+      const group = required(row, "group", context);
+      if (group !== "squad" && group !== "reserve") {
+        fail(context, `group must be "squad" or "reserve", got "${group}"`);
+      }
+      const nation = nationById.get(nationId);
+      if (nation === undefined) {
+        fail(context, `unknown nation "${nationId}"`);
+      }
+      const player = playerById.get(playerId);
+      if (player === undefined) {
+        fail(context, `unknown player "${playerId}"`);
+      }
+      if (player.data.nationId !== nationId) {
+        fail(
+          context,
+          `player "${playerId}" belongs to ${player.data.nationId}`,
+        );
+      }
+      if (seen.has(playerId)) {
+        fail(context, `player "${playerId}" appears more than once`);
+      }
+      seen.add(playerId);
+      if (group === "squad") {
+        nation.squad.push(playerId);
+      } else {
+        nation.reserves.push(playerId);
+      }
+    }
+    for (const nation of nations) {
+      if (nation.squad.length !== 26) {
+        fail(
+          `callups.csv ${nation.id}`,
+          `expected 26 call-ups, found ${nation.squad.length}`,
+        );
+      }
+      const keepers = nation.squad.filter((playerId) => {
+        const player = playerById.get(playerId);
+        return player?.data.positions.includes("GK") === true;
+      });
+      if (keepers.length < 2) {
+        fail(
+          `callups.csv ${nation.id}`,
+          `needs at least two goalkeepers in the 26-man squad, found ${keepers.length}`,
+        );
+      }
+    }
   }
 
   return {

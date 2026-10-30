@@ -28,8 +28,16 @@ export function createTeamRegistry(bundle: ParsedBundle): TeamRegistry {
   if (bundle.teams.length === 0) {
     throw new Error("Generated data contains no teams");
   }
-  const teams = [...bundle.teams].sort((a, b) => a.name.localeCompare(b.name));
-  const teamsById = new Map(teams.map((team) => [team.id, team]));
+  const teams = [...bundle.teams, ...bundle.nationalTeams].sort(
+    (a, b) => a.name.localeCompare(b.name),
+  );
+  const teamsById = new Map<string, TeamData>();
+  for (const team of teams) {
+    if (teamsById.has(team.id)) {
+      throw new Error(`Duplicate selectable team ID ${team.id}`);
+    }
+    teamsById.set(team.id, team);
+  }
   const playersById = new Map(bundle.players.map((player) => [player.id, player]));
   const playersByTeam = new Map<string, ReadonlyMap<string, PlayerData>>();
   for (const team of teams) {

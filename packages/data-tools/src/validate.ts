@@ -22,6 +22,7 @@ export async function validateGeneratedData(
     manifest: await readJson(join(dataDir, "manifest.json")),
     leagues: await readJson(join(dataDir, "leagues.json")),
     teams: await readJson(join(dataDir, "teams.json")),
+    nationalTeams: await readJson(join(dataDir, "national-teams.json")),
     players: await readJson(join(dataDir, "players.json")),
     nations: await readJson(join(dataDir, "nations.json")),
   });
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
   }
   const bundle = await validateGeneratedData(cli.dataDir);
   console.log(
-    `Valid data: ${bundle.manifest.leagues} league(s), ${bundle.manifest.teams} team(s), ${bundle.manifest.players} player(s), ${bundle.manifest.nations} nation(s).`,
+    `Valid data: ${bundle.manifest.leagues} league(s), ${bundle.manifest.teams} club(s), ${bundle.manifest.nationalTeams} national team(s), ${bundle.manifest.players} player(s), ${bundle.manifest.nations} nation(s).`,
   );
   if (bundle.manifest.sample) {
     console.log("Sample / fake dataset marker is present on every record.");

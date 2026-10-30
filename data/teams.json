@@ -1,9 +1,11 @@
 [
   {
     "id": "kingsport-united",
+    "kind": "club",
     "name": "Kingsport United",
     "short": "KPU",
     "leagueId": "sample-league",
+    "nationId": null,
     "colours": {
       "home": "#f0a202",
       "away": "#1b1b1b",
@@ -38,7 +40,39 @@
       "kpu-p17",
       "kpu-p18",
       "kpu-p19",
-      "kpu-p20"
+      "kpu-p20",
+      "kpu-p21",
+      "kpu-p22",
+      "kpu-p23",
+      "kpu-p24",
+      "kpu-p25",
+      "kpu-p26",
+      "kpu-p27",
+      "kpu-p28",
+      "kpu-p29",
+      "kpu-p30",
+      "kpu-p31",
+      "kpu-p32",
+      "kpu-p33",
+      "kpu-p34",
+      "kpu-p35",
+      "kpu-p36",
+      "kpu-p37",
+      "kpu-p38",
+      "kpu-p39",
+      "kpu-p40",
+      "kpu-p41",
+      "kpu-p42",
+      "kpu-p43",
+      "kpu-p44",
+      "kpu-p45",
+      "kpu-p46",
+      "kpu-p47",
+      "kpu-p48",
+      "kpu-p49",
+      "kpu-p50",
+      "kpu-p51",
+      "kpu-p52"
     ],
     "defaultSheet": {
       "formation": "4-3-3",
@@ -52,7 +86,7 @@
         {
           "slot": 1,
           "role": "RB",
-          "playerId": "kpu-p04"
+          "playerId": "kpu-p28"
         },
         {
           "slot": 2,
@@ -62,12 +96,12 @@
         {
           "slot": 3,
           "role": "CB",
-          "playerId": "kpu-p06"
+          "playerId": "kpu-p39"
         },
         {
           "slot": 4,
           "role": "LB",
-          "playerId": "kpu-p07"
+          "playerId": "kpu-p34"
         },
         {
           "slot": 5,
@@ -82,17 +116,17 @@
         {
           "slot": 7,
           "role": "CM",
-          "playerId": "kpu-p13"
+          "playerId": "kpu-p29"
         },
         {
           "slot": 8,
           "role": "RW",
-          "playerId": "kpu-p17"
+          "playerId": "kpu-p49"
         },
         {
           "slot": 9,
           "role": "ST",
-          "playerId": "kpu-p19"
+          "playerId": "kpu-p44"
         },
         {
           "slot": 10,
@@ -102,22 +136,54 @@
       ],
       "bench": [
         "kpu-p02",
+        "kpu-p24",
+        "kpu-p38",
+        "kpu-p48",
         "kpu-p12",
-        "kpu-p20",
-        "kpu-p15",
-        "kpu-p10",
-        "kpu-p14",
-        "kpu-p05"
+        "kpu-p19",
+        "kpu-p20"
       ],
       "reserves": [
         "kpu-p01",
-        "kpu-p09"
+        "kpu-p04",
+        "kpu-p05",
+        "kpu-p06",
+        "kpu-p07",
+        "kpu-p09",
+        "kpu-p10",
+        "kpu-p13",
+        "kpu-p14",
+        "kpu-p15",
+        "kpu-p17",
+        "kpu-p21",
+        "kpu-p22",
+        "kpu-p23",
+        "kpu-p25",
+        "kpu-p26",
+        "kpu-p27",
+        "kpu-p30",
+        "kpu-p31",
+        "kpu-p32",
+        "kpu-p33",
+        "kpu-p35",
+        "kpu-p36",
+        "kpu-p37",
+        "kpu-p40",
+        "kpu-p41",
+        "kpu-p42",
+        "kpu-p43",
+        "kpu-p45",
+        "kpu-p46",
+        "kpu-p47",
+        "kpu-p50",
+        "kpu-p51",
+        "kpu-p52"
       ],
-      "captain": "kpu-p19",
+      "captain": "kpu-p44",
       "penaltyTaker": "kpu-p18",
-      "freeKickTaker": "kpu-p13",
-      "cornerLeft": "kpu-p13",
-      "cornerRight": "kpu-p13",
+      "freeKickTaker": "kpu-p29",
+      "cornerLeft": "kpu-p29",
+      "cornerRight": "kpu-p29",
       "tactics": {
         "defensiveDepth": 50,
         "width": 55,
@@ -129,9 +195,11 @@
   },
   {
     "id": "northbridge-athletic",
+    "kind": "club",
     "name": "Northbridge Athletic",
     "short": "NBR",
     "leagueId": "sample-league",
+    "nationId": null,
     "colours": {
       "home": "#1f4fd1",
       "away": "#f2f5ff",
@@ -166,7 +234,39 @@
       "nbr-p17",
       "nbr-p18",
       "nbr-p19",
-      "nbr-p20"
+      "nbr-p20",
+      "nbr-p21",
+      "nbr-p22",
+      "nbr-p23",
+      "nbr-p24",
+      "nbr-p25",
+      "nbr-p26",
+      "nbr-p27",
+      "nbr-p28",
+      "nbr-p29",
+      "nbr-p30",
+      "nbr-p31",
+      "nbr-p32",
+      "nbr-p33",
+      "nbr-p34",
+      "nbr-p35",
+      "nbr-p36",
+      "nbr-p37",
+      "nbr-p38",
+      "nbr-p39",
+      "nbr-p40",
+      "nbr-p41",
+      "nbr-p42",
+      "nbr-p43",
+      "nbr-p44",
+      "nbr-p45",
+      "nbr-p46",
+      "nbr-p47",
+      "nbr-p48",
+      "nbr-p49",
+      "nbr-p50",
+      "nbr-p51",
+      "nbr-p52"
     ],
     "defaultSheet": {
       "formation": "4-3-3",
@@ -180,7 +280,7 @@
         {
           "slot": 1,
           "role": "RB",
-          "playerId": "nbr-p04"
+          "playerId": "nbr-p34"
         },
         {
           "slot": 2,
@@ -190,12 +290,12 @@
         {
           "slot": 3,
           "role": "CB",
-          "playerId": "nbr-p06"
+          "playerId": "nbr-p39"
         },
         {
           "slot": 4,
           "role": "LB",
-          "playerId": "nbr-p07"
+          "playerId": "nbr-p28"
         },
         {
           "slot": 5,
@@ -210,17 +310,17 @@
         {
           "slot": 7,
           "role": "CM",
-          "playerId": "nbr-p13"
+          "playerId": "nbr-p29"
         },
         {
           "slot": 8,
           "role": "RW",
-          "playerId": "nbr-p17"
+          "playerId": "nbr-p43"
         },
         {
           "slot": 9,
           "role": "ST",
-          "playerId": "nbr-p19"
+          "playerId": "nbr-p44"
         },
         {
           "slot": 10,
@@ -230,19 +330,51 @@
       ],
       "bench": [
         "nbr-p02",
+        "nbr-p24",
+        "nbr-p38",
+        "nbr-p48",
         "nbr-p12",
-        "nbr-p20",
-        "nbr-p15",
-        "nbr-p10",
-        "nbr-p14",
-        "nbr-p05"
+        "nbr-p19",
+        "nbr-p20"
       ],
       "reserves": [
         "nbr-p01",
-        "nbr-p09"
+        "nbr-p04",
+        "nbr-p05",
+        "nbr-p06",
+        "nbr-p07",
+        "nbr-p09",
+        "nbr-p10",
+        "nbr-p13",
+        "nbr-p14",
+        "nbr-p15",
+        "nbr-p17",
+        "nbr-p21",
+        "nbr-p22",
+        "nbr-p23",
+        "nbr-p25",
+        "nbr-p26",
+        "nbr-p27",
+        "nbr-p30",
+        "nbr-p31",
+        "nbr-p32",
+        "nbr-p33",
+        "nbr-p35",
+        "nbr-p36",
+        "nbr-p37",
+        "nbr-p40",
+        "nbr-p41",
+        "nbr-p42",
+        "nbr-p45",
+        "nbr-p46",
+        "nbr-p47",
+        "nbr-p49",
+        "nbr-p50",
+        "nbr-p51",
+        "nbr-p52"
       ],
-      "captain": "nbr-p19",
-      "penaltyTaker": "nbr-p17",
+      "captain": "nbr-p44",
+      "penaltyTaker": "nbr-p18",
       "freeKickTaker": "nbr-p11",
       "cornerLeft": "nbr-p16",
       "cornerRight": "nbr-p16",
@@ -257,9 +389,11 @@
   },
   {
     "id": "riverside-rovers",
+    "kind": "club",
     "name": "Riverside Rovers",
     "short": "RVR",
     "leagueId": "sample-league",
+    "nationId": null,
     "colours": {
       "home": "#c0392b",
       "away": "#fff1e6",
@@ -294,7 +428,39 @@
       "rvr-p17",
       "rvr-p18",
       "rvr-p19",
-      "rvr-p20"
+      "rvr-p20",
+      "rvr-p21",
+      "rvr-p22",
+      "rvr-p23",
+      "rvr-p24",
+      "rvr-p25",
+      "rvr-p26",
+      "rvr-p27",
+      "rvr-p28",
+      "rvr-p29",
+      "rvr-p30",
+      "rvr-p31",
+      "rvr-p32",
+      "rvr-p33",
+      "rvr-p34",
+      "rvr-p35",
+      "rvr-p36",
+      "rvr-p37",
+      "rvr-p38",
+      "rvr-p39",
+      "rvr-p40",
+      "rvr-p41",
+      "rvr-p42",
+      "rvr-p43",
+      "rvr-p44",
+      "rvr-p45",
+      "rvr-p46",
+      "rvr-p47",
+      "rvr-p48",
+      "rvr-p49",
+      "rvr-p50",
+      "rvr-p51",
+      "rvr-p52"
     ],
     "defaultSheet": {
       "formation": "4-3-3",
@@ -308,7 +474,7 @@
         {
           "slot": 1,
           "role": "RB",
-          "playerId": "rvr-p04"
+          "playerId": "rvr-p28"
         },
         {
           "slot": 2,
@@ -318,12 +484,12 @@
         {
           "slot": 3,
           "role": "CB",
-          "playerId": "rvr-p06"
+          "playerId": "rvr-p39"
         },
         {
           "slot": 4,
           "role": "LB",
-          "playerId": "rvr-p07"
+          "playerId": "rvr-p34"
         },
         {
           "slot": 5,
@@ -338,17 +504,17 @@
         {
           "slot": 7,
           "role": "CM",
-          "playerId": "rvr-p13"
+          "playerId": "rvr-p29"
         },
         {
           "slot": 8,
           "role": "RW",
-          "playerId": "rvr-p17"
+          "playerId": "rvr-p49"
         },
         {
           "slot": 9,
           "role": "ST",
-          "playerId": "rvr-p19"
+          "playerId": "rvr-p44"
         },
         {
           "slot": 10,
@@ -358,22 +524,54 @@
       ],
       "bench": [
         "rvr-p02",
+        "rvr-p24",
+        "rvr-p38",
+        "rvr-p48",
         "rvr-p12",
-        "rvr-p20",
-        "rvr-p15",
-        "rvr-p10",
-        "rvr-p14",
-        "rvr-p05"
+        "rvr-p19",
+        "rvr-p20"
       ],
       "reserves": [
         "rvr-p01",
-        "rvr-p09"
+        "rvr-p04",
+        "rvr-p05",
+        "rvr-p06",
+        "rvr-p07",
+        "rvr-p09",
+        "rvr-p10",
+        "rvr-p13",
+        "rvr-p14",
+        "rvr-p15",
+        "rvr-p17",
+        "rvr-p21",
+        "rvr-p22",
+        "rvr-p23",
+        "rvr-p25",
+        "rvr-p26",
+        "rvr-p27",
+        "rvr-p30",
+        "rvr-p31",
+        "rvr-p32",
+        "rvr-p33",
+        "rvr-p35",
+        "rvr-p36",
+        "rvr-p37",
+        "rvr-p40",
+        "rvr-p41",
+        "rvr-p42",
+        "rvr-p43",
+        "rvr-p45",
+        "rvr-p46",
+        "rvr-p47",
+        "rvr-p50",
+        "rvr-p51",
+        "rvr-p52"
       ],
-      "captain": "rvr-p19",
+      "captain": "rvr-p44",
       "penaltyTaker": "rvr-p18",
-      "freeKickTaker": "rvr-p13",
-      "cornerLeft": "rvr-p13",
-      "cornerRight": "rvr-p13",
+      "freeKickTaker": "rvr-p44",
+      "cornerLeft": "rvr-p44",
+      "cornerRight": "rvr-p44",
       "tactics": {
         "defensiveDepth": 50,
         "width": 55,

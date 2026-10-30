@@ -2,10 +2,10 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 8**:
+both devices are thin clients. This repository is at **Milestone 9**:
 server-authoritative matches, a live two-player team editor, the referee laws,
-the data pipeline and a layered, attribute-driven AI with tactics, difficulty
-profiles, set-piece routines and soak-tuned match averages.
+the data pipeline, a layered attribute-driven AI, and selectable club and
+national teams backed by a validated 26-man call-up registry.
 
 ## Requirements
 
@@ -113,6 +113,55 @@ Useful environment overrides:
 | `FB_STATIC_DIR` | `packages/client/dist` | Built client directory |
 | `FB_DATA_DIR` | `data` | Generated public football data |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
+
+## Milestone 9 scope
+
+Implemented:
+
+- `callups.csv` supplies each nation's ordered 26-man call-up squad and wider
+  reserve pool. The file is optional for legacy inputs, which fall back to the
+  strongest 26 players by overall; supplying it enables explicit selection and
+  validation
+- The normaliser rejects unknown nations/players, duplicate call-ups, wrong
+  nationalities, squads that are not exactly 26 and squads with fewer than two
+  goalkeepers
+- `national-teams.json` contains playable national `TeamData`: 26-player squad,
+  generated 4-3-3 default sheet, generated crest and home/away/third kits,
+  nation colours, `kind: "nation"` and a `nationId`
+- `nations.json` keeps the 26 call-ups and reserve pool separate; the reserve
+  pool is available for future call-ups but is not part of the matchday sheet
+- Data schema v3 adds `kind`, nullable league membership, `nationId`, national
+  team and manifest arrays, and cross-file validation for call-ups and national
+  squads
+- The server registry indexes clubs and national teams together for room
+  selection, sheet validation and match creation. National sheets skip the
+  club-ownership check while still enforcing 26-player coverage, one keeper in
+  the XI and a bench keeper
+- The team editor adds a **Team type** filter (`Clubs`, `National teams`,
+  `All teams`), national cards, generated nation crests/kits and the live
+  opponent summary. Club and national team IDs are mutually exclusive within a
+  room
+- National starting XI shirt numbers are assigned 1-11 by slot because the
+  source kit number is club-specific; this keeps the match roster unique
+- The sample dataset is expanded to 156 fictional players across three clubs
+  and five nations, with 26 call-ups plus a reserve pool per nation, so all
+  national teams are playable without inventing a second player-supply path
+- Tests cover call-up parsing/validation, 26-man squad generation, national
+  assets, schema/cross-file checks, registry validation and a headless
+  nation-versus-club match start
+
+Known M9 limitations (by design):
+
+- The wider national reserve pool is not selectable in the pre-match editor;
+  the matchday squad is the 26 call-ups
+- No national-team competitions, friendlies, call-up changes or eligibility
+  rules yet; national teams are selected directly in the friendly room
+- National shirt numbers are generated from the starting-slot order rather than
+  authored per nation
+- The sample data remains clearly labelled fake data; the real CSV registry is
+  still supplied by the user
+- Match substitutions and injuries remain M10 work, so the national bench is
+  drafted and validated but only the starting XI enters the simulation
 
 ## Milestone 8 scope
 
@@ -241,14 +290,15 @@ Implemented:
 
 - `packages/data-tools`: strict CSV ingestion, normalisation, cross-file
   validation, generated JSON, deterministic name mutation and an audit report
-- `pnpm data:build` writes `data/leagues.json`, `teams.json`, `players.json`,
-  `nations.json`, `manifest.json`, placeholder SVG crests/kits/faces and
-  `reports/name-mutations.csv`
+- `pnpm data:build` writes `data/leagues.json`, `teams.json`,
+  `national-teams.json`, `players.json`, `nations.json`, `manifest.json`,
+  placeholder SVG crests/kits/faces and `reports/name-mutations.csv`
 - Zod schemas reject unknown fields, out-of-range ratings, duplicate squad
   players, malformed sheets and inconsistent cross-file references; `realRef`
   cannot leak into generated JSON
-- One **fake** sample league: three fictional clubs, 60 fictional players, five
-  fictional nations, clearly marked in every generated record and in
+- One **fake** sample league: three fictional clubs, five fictional nations and
+  156 fictional players (expanded in M9 so every nation can field the required
+  26 call-ups), clearly marked in every generated record and in
   `data/input/sample/README.md`
 - Deterministic, ID-seeded name mutation using phonetic confusion, vowel
   shifts, consonant-cluster tweaks and a small curated pun list; it preserves
@@ -293,9 +343,13 @@ copied unchanged. Detailed stats are never rescaled.
 be `1`; club IDs are derived from the clubs' `league_id`.
 
 **`nations.csv`**: `nation_id`, `name`, `short`, `primary_color`,
-`secondary_color`, `third_color`, `goalkeeper_color`. M6 derives national
-squads from the player nation IDs; M9 replaces this with the supplied call-up
-registry.
+`secondary_color`, `third_color`, `goalkeeper_color`.
+
+**`callups.csv`** (optional, required for an explicit national registry):
+`nation_id`, `player_id`, `group`. `group` is `squad` or `reserve`; row order is
+preserved. Every nation needs exactly 26 `squad` rows, at least two
+goalkeepers, unique players and matching `nation_id` values. Missing files fall
+back to the strongest 26 players by overall.
 
 **`name_overrides.csv`**: `player_id`, `override_name` (optional file, required
 header when present).
@@ -401,9 +455,9 @@ Not implemented yet (by milestone design):
 - Skill moves, charged/driven passes, first-time pass modifiers, manual pause
   and controller vibration
 - Gamepad rebinding; only the standard mapping is wired
-- National-team selection and call-ups (M9); M7 consumes the club registry
-- Real CSV registry and national call-ups (M9); M6 ships only clearly marked
-  fake sample data
+- Real CSV registry and further national-team competition modes; M9 ships the
+  call-up pipeline and playable national teams, but the bundled dataset is
+  still clearly marked fake sample data
 - Three.js, animation, replays, audio (M11)
 - Local prediction/reconciliation; controls feel the RTT on a LAN
 - Authentication. The server is intended for a trusted private LAN only.
@@ -476,17 +530,21 @@ pnpm data:validate
 pnpm data:preview
 ```
 
-Expect one league, three teams, 60 players, five nations, 72 generated SVG
-assets and 60 audit rows; every record must report the sample marker. The
-preview must print a `Kingsport United` 4-3-3 XI with mapped sim ratings. Load
-the lobby and verify all 16 formations can be selected and auto-picked.
+Expect one league, three clubs, five national teams, 156 players, five nations,
+188 generated SVG assets and 156 audit rows; every record must report the
+sample marker. The preview must print a `Kingsport United` 4-3-3 XI with mapped
+sim ratings. Load the lobby, switch **Team type** to National teams, select a
+nation, and verify the 26-player call-up sheet and generated nation crest/kit;
+all 16 formations must remain selectable and auto-pickable.
 
 The two-minute match check:
 
 1. `pnpm certs`, `pnpm build`, `pnpm start`.
 2. Open the printed LAN URL on the host; trust the certificate.
 3. Host **Create room**; verify the terminal prints a room URL, a phone
-   controller URL and a room QR, and the team editor loads Kingsport United.
+   controller URL and a room QR, and the team editor loads a club by default.
+   Switch **Team type** to National teams, pick a nation, and verify the squad
+   editor and generated national crest/kit.
 4. The guest either opens the room URL (desktop controls) or the controller URL
    (touch controls). Change the host formation and bench size; verify the guest
    opponent summary updates. Then ready both; verify both canvases show the same room and

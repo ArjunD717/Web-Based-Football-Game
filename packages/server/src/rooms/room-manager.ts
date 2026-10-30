@@ -675,7 +675,11 @@ export class RoomManager {
   }
 
   private assignTeam(seat: Seat, excluded: ReadonlySet<string>): void {
-    const team = this.registry.teams.find((item) => !excluded.has(item.id));
+    const available = this.registry.teams.filter(
+      (item) => !excluded.has(item.id),
+    );
+    const team =
+      available.find((item) => item.kind === "club") ?? available[0];
     if (team === undefined) {
       seat.teamId = null;
       seat.sheet = null;

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 148" role="img" aria-label="Westvale placeholder crest">
+  <path d="M64 4 120 24v54c0 30-22 54-56 66C30 132 8 108 8 78V24Z" fill="#b45309" stroke="#fef3c7" stroke-width="6"/>
+  <path d="M64 18 106 33v43c0 22-16 41-42 52-26-11-42-30-42-52V33Z" fill="#fef3c7" opacity=".35"/>
+  <circle cx="64" cy="68" r="31" fill="#0369a1" opacity=".9"/>
+  <text x="64" y="79" text-anchor="middle" font-family="system-ui, sans-serif" font-size="30" font-weight="700" fill="#b45309">W</text>
+</svg>
