@@ -89,6 +89,25 @@ export interface ClientUpdateSheetMessage {
   readonly sheet: TeamSheet;
 }
 
+export const REFEREE_STRICTNESS_LEVELS = [
+  "lenient",
+  "standard",
+  "strict",
+] as const;
+
+export type MatchRefereeStrictness =
+  (typeof REFEREE_STRICTNESS_LEVELS)[number];
+
+export const AI_DIFFICULTY_LEVELS = [
+  "beginner",
+  "amateur",
+  "professional",
+  "worldClass",
+  "legendary",
+] as const;
+
+export type MatchAiDifficulty = (typeof AI_DIFFICULTY_LEVELS)[number];
+
 /** Host-only competition options chosen in the draft room. */
 export interface MatchSettingsWire {
   /** Real-time half length in minutes: one of 4, 6, 8 or 10. */
@@ -96,6 +115,8 @@ export interface MatchSettingsWire {
   readonly extraTime: boolean;
   readonly shootout: boolean;
   readonly varEnabled: boolean;
+  readonly refereeStrictness: MatchRefereeStrictness;
+  readonly aiDifficulty: MatchAiDifficulty;
 }
 
 export const DEFAULT_MATCH_SETTINGS: MatchSettingsWire = {
@@ -103,6 +124,8 @@ export const DEFAULT_MATCH_SETTINGS: MatchSettingsWire = {
   extraTime: false,
   shootout: false,
   varEnabled: false,
+  refereeStrictness: "standard",
+  aiDifficulty: "professional",
 };
 
 export interface ClientUpdateSettingsMessage {
@@ -125,6 +148,15 @@ export interface ClientResyncMessage {
   readonly t: "resync";
 }
 
+/** Host-only control; both seats receive `matchPaused` / `matchResumed`. */
+export interface ClientPauseMatchMessage {
+  readonly t: "pauseMatch";
+}
+
+export interface ClientResumeMatchMessage {
+  readonly t: "resumeMatch";
+}
+
 export type ClientMessage =
   | ClientHelloMessage
   | ClientPingMessage
@@ -135,6 +167,8 @@ export type ClientMessage =
   | ClientUpdateSheetMessage
   | ClientUpdateSettingsMessage
   | ClientSubstituteMessage
+  | ClientPauseMatchMessage
+  | ClientResumeMatchMessage
   | ClientLeaveRoomMessage
   | ClientResyncMessage;
 
@@ -269,6 +303,8 @@ export interface ServerMatchPausedMessage {
   readonly t: "matchPaused";
   readonly reason: string;
   readonly reconnectSeconds: number;
+  /** True when the host paused play; false when a seat disconnected. */
+  readonly manual: boolean;
 }
 
 export interface ServerMatchResumedMessage {
@@ -429,6 +465,10 @@ export function parseClientMessage(text: string): ClientMessage | null {
       return isPlayerRef(value.outId) && isPlayerRef(value.inId)
         ? { t: "substitute", outId: value.outId, inId: value.inId }
         : null;
+    case "pauseMatch":
+      return { t: "pauseMatch" };
+    case "resumeMatch":
+      return { t: "resumeMatch" };
     case "leaveRoom":
       return { t: "leaveRoom" };
     case "resync":
@@ -500,11 +540,14 @@ export function parseServerMessage(text: string): ServerMessage | null {
       return setup === null ? null : { t: "matchStart", setup };
     }
     case "matchPaused":
-      return typeof value.reason === "string" && isCount(value.reconnectSeconds)
+      return typeof value.reason === "string" &&
+        isCount(value.reconnectSeconds) &&
+        typeof value.manual === "boolean"
         ? {
             t: "matchPaused",
             reason: value.reason,
             reconnectSeconds: value.reconnectSeconds,
+            manual: value.manual,
           }
         : null;
     case "matchResumed":
@@ -836,7 +879,9 @@ function parseMatchSettings(value: unknown): MatchSettingsWire | null {
       record.halfRealMinutes !== 10) ||
     typeof record.extraTime !== "boolean" ||
     typeof record.shootout !== "boolean" ||
-    typeof record.varEnabled !== "boolean"
+    typeof record.varEnabled !== "boolean" ||
+    !isRefereeStrictness(record.refereeStrictness) ||
+    !isMatchAiDifficulty(record.aiDifficulty)
   ) {
     return null;
   }
@@ -845,7 +890,25 @@ function parseMatchSettings(value: unknown): MatchSettingsWire | null {
     extraTime: record.extraTime,
     shootout: record.shootout,
     varEnabled: record.varEnabled,
+    refereeStrictness: record.refereeStrictness,
+    aiDifficulty: record.aiDifficulty,
   };
+}
+
+function isRefereeStrictness(value: unknown): value is MatchRefereeStrictness {
+  return (
+    value === "lenient" || value === "standard" || value === "strict"
+  );
+}
+
+function isMatchAiDifficulty(value: unknown): value is MatchAiDifficulty {
+  return (
+    value === "beginner" ||
+    value === "amateur" ||
+    value === "professional" ||
+    value === "worldClass" ||
+    value === "legendary"
+  );
 }
 
 function parseTeamStats(value: unknown): WireTeamMatchStats | null {

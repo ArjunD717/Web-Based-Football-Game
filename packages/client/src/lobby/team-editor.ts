@@ -126,6 +126,10 @@ export class TeamEditor {
   private readonly importFile = byId<HTMLInputElement>("import-file");
   private readonly halfLength =
     byId<HTMLSelectElement>("match-half-length");
+  private readonly strictness =
+    byId<HTMLSelectElement>("match-strictness");
+  private readonly aiDifficulty =
+    byId<HTMLSelectElement>("match-ai-difficulty");
   private readonly extraTime =
     byId<HTMLInputElement>("match-extra-time");
   private readonly shootout =
@@ -264,13 +268,27 @@ export class TeamEditor {
     this.bindTakerSelects();
     for (const control of [
       this.halfLength,
+      this.strictness,
+      this.aiDifficulty,
       this.extraTime,
       this.shootout,
       this.varEnabled,
     ]) {
       control.addEventListener("change", () => {
         const half = Number(this.halfLength.value);
-        if (half !== 4 && half !== 6 && half !== 8 && half !== 10) {
+        const strictness = this.strictness.value;
+        const aiDifficulty = this.aiDifficulty.value;
+        if (
+          (half !== 4 && half !== 6 && half !== 8 && half !== 10) ||
+          (strictness !== "lenient" &&
+            strictness !== "standard" &&
+            strictness !== "strict") ||
+          (aiDifficulty !== "beginner" &&
+            aiDifficulty !== "amateur" &&
+            aiDifficulty !== "professional" &&
+            aiDifficulty !== "worldClass" &&
+            aiDifficulty !== "legendary")
+        ) {
           return;
         }
         this.callbacks.onUpdateSettings({
@@ -278,6 +296,8 @@ export class TeamEditor {
           extraTime: this.extraTime.checked,
           shootout: this.shootout.checked,
           varEnabled: this.varEnabled.checked,
+          refereeStrictness: strictness,
+          aiDifficulty,
         });
       });
     }
@@ -1119,11 +1139,15 @@ export class TeamEditor {
   private renderSettings(room: LobbyRoomWire): void {
     const settings = room.settings;
     this.halfLength.value = String(settings.halfRealMinutes);
+    this.strictness.value = settings.refereeStrictness;
+    this.aiDifficulty.value = settings.aiDifficulty;
     this.extraTime.checked = settings.extraTime;
     this.shootout.checked = settings.shootout;
     this.varEnabled.checked = settings.varEnabled;
     const host = this.self?.host === true;
     this.halfLength.disabled = !host;
+    this.strictness.disabled = !host;
+    this.aiDifficulty.disabled = !host;
     this.extraTime.disabled = !host;
     this.shootout.disabled = !host;
     this.varEnabled.disabled = !host;

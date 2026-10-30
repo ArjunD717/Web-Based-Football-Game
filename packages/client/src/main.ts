@@ -51,6 +51,7 @@ import "./style.css";
 import "./ui/components.css";
 import "./ui/menu.css";
 import "./ui/squad.css";
+import "./ui/match.css";
 import { installConsoleMenu } from "./ui/menu";
 
 const TOAST_DURATION_MS = 2_600;
@@ -123,6 +124,7 @@ const statsNote = byId<HTMLElement>("stats-note");
 const statsRows = byId<HTMLElement>("stats-rows");
 const matchEvent = byId<HTMLElement>("match-event");
 const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
+const pauseMatchButton = byId<HTMLButtonElement>("pause-match");
 const rendererToggleButton =
   byId<HTMLButtonElement>("renderer-toggle");
 const replayButton = byId<HTMLButtonElement>("replay-button");
@@ -131,6 +133,7 @@ const replayBanner = byId<HTMLElement>("replay-banner");
 const replayProgress = byId<HTMLElement>("replay-progress");
 const audioToggleButton = byId<HTMLButtonElement>("audio-toggle");
 const bufferChip = byId<HTMLElement>("buffer-chip");
+const matchRulesChip = byId<HTMLElement>("match-rules");
 const controlPlayerChip = byId<HTMLElement>("control-player");
 const hudRoom = byId<HTMLElement>("hud-room");
 const hudPing = byId<HTMLElement>("hud-ping");
@@ -145,6 +148,7 @@ const powerMeter = byId<HTMLElement>("power-meter");
 const powerFill = byId<HTMLElement>("power-fill");
 const powerValue = byId<HTMLElement>("power-value");
 const openBindingsButton = byId<HTMLButtonElement>("open-bindings");
+const matchBindingsButton = byId<HTMLButtonElement>("match-bindings");
 const controlsDialog = byId<HTMLDialogElement>("controls-dialog");
 const closeBindingsButton = byId<HTMLButtonElement>("close-bindings");
 const resetBindingsButton = byId<HTMLButtonElement>("reset-bindings");
@@ -283,6 +287,14 @@ leaveMatchButton.addEventListener("click", () => {
   client.leaveRoom();
 });
 
+pauseMatchButton.addEventListener("click", () => {
+  if (currentState?.pausedManual === true) {
+    client.resumeMatch();
+  } else {
+    client.pauseMatch();
+  }
+});
+
 rendererToggleButton.addEventListener("click", () => {
   const next: RendererMode = rendererMode === "3d" ? "2d" : "3d";
   switchRenderer(next);
@@ -330,7 +342,7 @@ window.addEventListener("pagehide", () => {
   audio.destroy();
 });
 
-openBindingsButton.addEventListener("click", () => {
+function openBindingsDialog(): void {
   controls?.destroy();
   controls = null;
   lastControlFrame = null;
@@ -338,7 +350,10 @@ openBindingsButton.addEventListener("click", () => {
   hidePowerMeter();
   renderBindings();
   controlsDialog.showModal();
-});
+}
+
+openBindingsButton.addEventListener("click", openBindingsDialog);
+matchBindingsButton.addEventListener("click", openBindingsDialog);
 
 closeBindingsButton.addEventListener("click", () => {
   controlsDialog.close();
@@ -689,6 +704,8 @@ function updatePowerMeter(charge: number): void {
   }
   const percent = Math.round(charge * 100);
   powerMeter.hidden = false;
+  powerMeter.dataset.level =
+    percent >= 85 ? "max" : percent >= 55 ? "high" : "normal";
   powerFill.style.width = `${percent}%`;
   powerValue.textContent = `${percent}%`;
 }
@@ -869,8 +886,13 @@ function renderMatchIdentity(state: GameClientState): void {
   }
   homeName.textContent = setup.home.name;
   awayName.textContent = setup.away.name;
+  homeName.title = setup.home.name;
+  awayName.title = setup.away.name;
   homeSwatch.style.backgroundColor = setup.home.colors.primary;
   awaySwatch.style.backgroundColor = setup.away.colors.primary;
+  matchView.style.setProperty("--home-color", setup.home.colors.primary);
+  matchView.style.setProperty("--away-color", setup.away.colors.primary);
+  document.title = `${setup.home.name} v ${setup.away.name} | Web Football`;
   const code = state.lobby?.room?.code ?? "----";
   matchRoom.textContent = code;
   hudRoom.textContent = code;
@@ -966,11 +988,13 @@ function updateHud(state: GameClientState): void {
   updateScoreboard();
   updateControlPlayerChip(state);
   updateStatsScreen(state);
+  updateRuleChip(state);
 
   const paused = state.pausedReason !== null;
   const online = state.status === "online";
   const frame = client.latestSnapshot();
   const phase = frame?.match.phase ?? null;
+  updatePauseControl(state, phase);
   matchChip.textContent = !online
     ? "Offline"
     : paused
@@ -989,6 +1013,54 @@ function updateHud(state: GameClientState): void {
       : "live";
 }
 
+function updateRuleChip(state: GameClientState): void {
+  const settings = state.lobby?.room?.settings;
+  matchRulesChip.hidden = settings === undefined;
+  if (settings === undefined) {
+    return;
+  }
+  const difficulty = settings.aiDifficulty
+    .replace("worldClass", "world class")
+    .replace(/^./, (letter) => letter.toUpperCase());
+  matchRulesChip.textContent = `Ref ${settings.refereeStrictness} · AI ${difficulty}`;
+}
+
+function updatePauseControl(
+  state: GameClientState,
+  phase: SnapshotFrame["match"]["phase"] | null,
+): void {
+  const host = state.lobby?.you?.host === true;
+  const room = state.lobby?.room;
+  const bothConnected =
+    room !== undefined &&
+    room !== null &&
+    room.players.length === 2 &&
+    room.players.every((player) => player.connected);
+  const intermission = phase === "halfTime";
+  const available =
+    state.setup !== null &&
+    phase !== null &&
+    phase !== "fullTime" &&
+    (!intermission || state.pausedManual);
+  pauseMatchButton.hidden = !host || !available;
+  if (pauseMatchButton.hidden) {
+    return;
+  }
+  pauseMatchButton.textContent = state.pausedManual ? "Resume" : "Pause";
+  pauseMatchButton.disabled =
+    !bothConnected ||
+    state.status !== "online" ||
+    (!state.pausedManual &&
+      (state.pausedReason !== null || intermission));
+  pauseMatchButton.title = state.pausedManual
+    ? "Resume play for both seats"
+    : "Pause play for both seats";
+  pauseMatchButton.setAttribute(
+    "aria-label",
+    state.pausedManual ? "Resume match" : "Pause match",
+  );
+}
+
 function updateStatsScreen(state: GameClientState): void {
   const stats = state.matchStats;
   if (stats === null) {
@@ -997,14 +1069,9 @@ function updateStatsScreen(state: GameClientState): void {
     return;
   }
   const setup = state.setup;
-  const title = setup === null
-    ? "Match statistics"
-    : `${setup.home.name} v ${setup.away.name}`;
   const score = setup === null
     ? ""
-    : `${setup.home.name} ${latestScore("home")} – ${latestScore(
-        "away",
-      )} ${setup.away.name}`;
+    : `${latestScore("home")} – ${latestScore("away")}`;
   const notes: string[] = [];
   if (stats.shootout !== null) {
     notes.push(
@@ -1067,7 +1134,7 @@ function updateStatsScreen(state: GameClientState): void {
     statsTitle,
     statsScore,
     statsNote,
-    { title, score, note, rows },
+    { title: "Match statistics", score, note, rows },
   );
 }
 
@@ -1109,7 +1176,7 @@ function updateOverlay(state: GameClientState): void {
     return;
   }
   if (state.status === "fatal" || state.status === "offline") {
-    showOverlay("Connection failed", state.detail);
+    showOverlay("Connection failed", state.detail, "danger");
     return;
   }
 
@@ -1117,6 +1184,7 @@ function updateOverlay(state: GameClientState): void {
     showOverlay(
       "Connection lost",
       "Reconnecting to the host. Your seat is held for 60 seconds.",
+      "warning",
     );
     return;
   }
@@ -1145,11 +1213,22 @@ function updateOverlay(state: GameClientState): void {
       review.decision === "checking"
         ? `Reviewing the ${subject} for ${review.side}.`
         : `The ${subject} decision was ${review.decision}.`,
+      "review",
     );
     return;
   }
 
   if (state.pausedReason !== null) {
+    if (state.pausedManual) {
+      showOverlay(
+        "Match paused",
+        state.lobby?.you?.host === true
+          ? "You paused play. Use Resume when both seats are ready."
+          : "The host paused play. The match resumes when the host is ready.",
+        "warning",
+      );
+      return;
+    }
     const seconds =
       state.pausedUntilMs === null
         ? 0
@@ -1162,6 +1241,7 @@ function updateOverlay(state: GameClientState): void {
       `${state.pausedReason}. ${
         seconds > 0 ? `Reconnect window: ${seconds}s.` : "Waiting for server."
       }`,
+      "warning",
     );
     return;
   }
@@ -1180,17 +1260,22 @@ function updateOverlay(state: GameClientState): void {
       shootout === null
         ? "Penalties are starting."
         : `Penalties ${shootout.homeScore}–${shootout.awayScore}.`;
-    showOverlay("Penalty shootout", `${pens} ${score} after extra time.`);
+    showOverlay(
+      "Penalty shootout",
+      `${pens} ${score} after extra time.`,
+      "final",
+    );
     return;
   }
   if (match.phase === "fullTime") {
-    showOverlay("Full time", `${score}. The match is complete.`);
+    showOverlay("Full time", `${score}. The match is complete.`, "final");
     return;
   }
   if (match.phase === "halfTime") {
     showOverlay(
       match.half >= 3 ? "Extra-time break" : "Half time",
       `${score}. The next period starts shortly.`,
+      "interval",
     );
     return;
   }
@@ -1230,8 +1315,21 @@ function updateOverlay(state: GameClientState): void {
   matchOverlay.hidden = true;
 }
 
-function showOverlay(title: string, detail: string): void {
+type OverlayTone =
+  | "info"
+  | "warning"
+  | "danger"
+  | "review"
+  | "interval"
+  | "final";
+
+function showOverlay(
+  title: string,
+  detail: string,
+  tone: OverlayTone = "info",
+): void {
   matchOverlay.hidden = false;
+  matchOverlay.dataset.tone = tone;
   overlayTitle.textContent = title;
   overlayDetail.textContent = detail;
 }
@@ -1304,6 +1402,7 @@ function updateRendererControl(): void {
 }
 
 function showMatch(): void {
+  document.body.dataset.view = "match";
   lobbyView.hidden = true;
   matchView.hidden = false;
   window.requestAnimationFrame(() => {
@@ -1312,6 +1411,8 @@ function showMatch(): void {
 }
 
 function showLobby(): void {
+  delete document.body.dataset.view;
+  document.title = "Web Football | LAN Lobby";
   matchView.hidden = true;
   lobbyView.hidden = false;
 }

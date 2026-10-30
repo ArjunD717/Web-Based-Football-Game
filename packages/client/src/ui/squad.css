@@ -1373,6 +1373,13 @@
   margin-top: var(--ui-space-4);
 }
 
+.squad-rule-selects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-4);
+  margin-top: var(--ui-space-4);
+}
+
 .squad-checks {
   display: flex;
   align-items: center;
@@ -1873,6 +1880,11 @@
   }
 
   .squad-rules-controls {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--ui-space-3);
+  }
+
+  .squad-rule-selects {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--ui-space-3);
   }

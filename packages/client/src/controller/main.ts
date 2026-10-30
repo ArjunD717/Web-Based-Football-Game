@@ -373,6 +373,13 @@ function updateOverlay(state: GameClientState): void {
     return;
   }
   if (state.pausedReason !== null) {
+    if (state.pausedManual) {
+      showOverlay(
+        "Match paused",
+        "The host paused play. Keep the controller connected; play resumes when the host is ready.",
+      );
+      return;
+    }
     const seconds =
       state.pausedUntilMs === null
         ? 0
