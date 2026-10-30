@@ -60,6 +60,11 @@ export const TUNING = {
     addedTimeRoundingSeconds: 60,
     /** Upper bound on a single period's added time, seconds. */
     addedTimeCapSeconds: 300,
+    /**
+     * Safety whistle after the board expires when play never reaches a natural
+     * pause (for example an idle player holding the ball), game seconds.
+     */
+    periodHardStopGraceSeconds: 120,
     /** Stoppage allowances added to the board, seconds of game clock. */
     addedTimeGoalSeconds: 30,
     addedTimeCardSeconds: 10,

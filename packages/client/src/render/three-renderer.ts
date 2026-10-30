@@ -25,6 +25,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.resize();
   };
   private readonly players = new Map<string, PlayerRig>();
+  private readonly seenPlayers = new Set<string>();
   private readonly ball: THREE.Mesh;
   private readonly ballShadow: THREE.Mesh;
   private readonly ballShadowMaterial: THREE.MeshBasicMaterial;
@@ -122,8 +123,6 @@ export class ThreeMatchRenderer implements MatchRenderer {
     if (this.pitch === null || this.pitchKey !== pitchKey(view.pitch)) {
       this.installPitch(view.pitch);
     }
-    this.camera.aspect = this.width / Math.max(1, this.height);
-    this.camera.updateProjectionMatrix();
     const fitKey = `${this.pitchKey}:${this.camera.aspect.toFixed(3)}`;
     if (fitKey !== this.lastFitKey) {
       this.fitCamera(view.pitch);
@@ -164,6 +163,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.width / Math.max(1, this.height),
     );
     this.camera.fov = pose.fovDegrees;
+    this.camera.updateProjectionMatrix();
     const target = new THREE.Vector3(
       pose.target.x,
       pose.target.y,
@@ -215,7 +215,8 @@ export class ThreeMatchRenderer implements MatchRenderer {
   }
 
   private syncPlayers(view: MatchView): void {
-    const seen = new Set<string>();
+    const seen = this.seenPlayers;
+    seen.clear();
     for (const team of [view.away, view.home]) {
       for (const player of team.players) {
         seen.add(player.id);

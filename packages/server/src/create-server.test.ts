@@ -25,6 +25,7 @@ import {
   type RunningGameServer,
 } from "./create-server";
 import type { HealthPayload } from "./http/request-handler";
+import { ServerTickMetrics } from "./performance";
 
 const silentLogger: Logger = {
   info: () => undefined,
@@ -169,6 +170,23 @@ describe("game server", () => {
     }
 
     await client.close();
+  });
+
+  it("exposes optional loop timing metrics on the health endpoint", async () => {
+    const metrics = new ServerTickMetrics();
+    metrics.record(2.5);
+    const server = await startTestServer({
+      getRuntimeMetrics: () => metrics.snapshot(),
+    });
+
+    const response = await fetch(baseUrl(server) + "/healthz");
+    const health = (await response.json()) as HealthPayload;
+    expect(health.simulation).toMatchObject({
+      loopHz: 60,
+      ticks: 1,
+      maxTickMs: 2.5,
+      overBudgetTicks: 0,
+    });
   });
 
   it("broadcasts presence as clients join and leave", async () => {

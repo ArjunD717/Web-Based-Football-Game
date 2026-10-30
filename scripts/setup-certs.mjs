@@ -10,7 +10,9 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const certDir = path.join(repoRoot, "certs");
+const certDir = process.env.FB_CERT_DIR
+  ? path.resolve(process.env.FB_CERT_DIR)
+  : path.join(repoRoot, "certs");
 const certPath = path.join(certDir, "dev-cert.pem");
 const keyPath = path.join(certDir, "dev-key.pem");
 const skipCaInstall = process.argv.includes("--no-ca-install");

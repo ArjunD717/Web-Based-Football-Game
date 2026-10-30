@@ -11,6 +11,7 @@ import { loadServerConfig } from "./config";
 import { loadTeamRegistry } from "./data/registry";
 import { formatHttpsUrl, listLanIpv4Addresses } from "./lan";
 import { RoomManager } from "./rooms/room-manager";
+import { ServerTickMetrics } from "./performance";
 import { loadTlsMaterial } from "./tls";
 
 async function main(): Promise<void> {
@@ -19,6 +20,8 @@ async function main(): Promise<void> {
   const registry = await loadTeamRegistry(config.dataDir);
   const lanAddresses = listLanIpv4Addresses();
   const primaryAddress = lanAddresses[0] ?? "localhost";
+  const tickMetrics = new ServerTickMetrics();
+  const tickBudgetMs = 1_000 / TUNING.sim.tickHz;
   let runtimePort = config.port;
 
   const roomManager = new RoomManager({
@@ -42,6 +45,7 @@ async function main(): Promise<void> {
     staticDir: config.staticDir,
     dataDir: config.dataDir,
     tls,
+    getRuntimeMetrics: () => tickMetrics.snapshot(),
     handlers: {
       onReady: (client) => {
         roomManager.onReady(client);
@@ -60,6 +64,9 @@ async function main(): Promise<void> {
   runtimePort = running.port;
 
   let lastFrameAt = performance.now();
+  let lastSlowTickLogAt = 0;
+  // Drive the accumulator at the simulated rate instead of waking four times
+  // as often. The accumulator still absorbs ordinary timer jitter.
   const simulationLoop = setInterval(() => {
     const now = performance.now();
     const dt = Math.min(
@@ -67,8 +74,17 @@ async function main(): Promise<void> {
       TUNING.presentation.maxFrameDeltaSeconds,
     );
     lastFrameAt = now;
+    const tickStartedAt = performance.now();
     roomManager.tick(dt);
-  }, 4);
+    const elapsed = performance.now() - tickStartedAt;
+    tickMetrics.record(elapsed);
+    if (elapsed > tickBudgetMs && now - lastSlowTickLogAt >= 5_000) {
+      lastSlowTickLogAt = now;
+      console.warn(
+        `Server tick over budget: ${elapsed.toFixed(1)} ms > ${tickBudgetMs.toFixed(1)} ms`,
+      );
+    }
+  }, 1_000 / TUNING.sim.tickHz);
   simulationLoop.unref();
 
   const localUrl = formatHttpsUrl("localhost", running.port);
@@ -84,7 +100,7 @@ async function main(): Promise<void> {
     console.log("LAN:           no non-loopback IPv4 address found");
   }
   console.log(
-    `WebSocket:     ${WS_PATH} (${TUNING.network.snapshotHz} Hz snapshots)`,
+    `WebSocket:     ${WS_PATH} (${TUNING.network.snapshotHz} Hz snapshots, ${TUNING.sim.tickHz} Hz loop)`,
   );
   console.log(`Client dist:   ${config.staticDir}`);
   console.log(`Match data:    ${config.dataDir} (${registry.teams.length} teams)`);

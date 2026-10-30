@@ -33,6 +33,14 @@ export function recordShot(state: MatchState, side: TeamSide): void {
   statsFor(state, side).shots += 1;
 }
 
+export function recordPassAttempt(state: MatchState, side: TeamSide): void {
+  statsFor(state, side).passes += 1;
+}
+
+export function recordPassCompleted(state: MatchState, side: TeamSide): void {
+  statsFor(state, side).passesCompleted += 1;
+}
+
 export function recordShotOnTarget(
   state: MatchState,
   side: TeamSide,

@@ -86,6 +86,21 @@ describe("stepMatch", () => {
     expect(hashMatchState(a)).not.toBe(hashMatchState(b));
   });
 
+  it("reaches full time within a generous real-time bound", () => {
+    const match = createMatch({ seed: 20261030 });
+    // Twenty real minutes covers both halves, half-time, added time and the
+    // period safety whistle; a live match must never exceed this bound.
+    const limit = TUNING.sim.tickHz * 60 * 20;
+    let ticks = 0;
+    while (match.referee.phase !== "fullTime" && ticks < limit) {
+      stepMatch(match);
+      ticks += 1;
+    }
+    expect(match.referee.phase).toBe("fullTime");
+    expect(ticks).toBeLessThan(limit);
+    assertFiniteMatch(match);
+  });
+
   it("stays finite and bounded through a simulated minute", () => {
     const match = createMatch({ seed: 424242 });
     for (let i = 0; i < 3_600; i += 1) {

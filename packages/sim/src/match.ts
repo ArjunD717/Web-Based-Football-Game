@@ -149,6 +149,7 @@ function initialiseMatch(
     tick: 0,
     elapsedSeconds: 0,
     lastTouch: null,
+    passInFlight: null,
     offsidePassTargetId: null,
     referee: createReferee("home"),
   };

@@ -2,12 +2,14 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 11**:
+both devices are thin clients. This repository is at **Milestone 12**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
-time, extra time, shootouts, VAR-lite and full-time statistics, plus an
-animated Three.js match presentation, local goal replays and procedural audio.
+time, extra time, shootouts, VAR-lite and full-time statistics, an animated
+Three.js match presentation, local goal replays and procedural audio. M12 is
+the release pass: one-command packaging, full-match balance validation,
+server/client performance profiling, bug fixes and final documentation.
 
 ## Requirements
 
@@ -30,10 +32,14 @@ If corepack cannot write its shims (common on Windows without admin rights), use
 
 ```bash
 pnpm install
-pnpm certs
-pnpm build
 pnpm start
 ```
+
+`pnpm start` builds the client, creates the mkcert certificate when missing,
+builds the sample dataset when missing, then serves HTTPS/WSS. The first run may
+prompt to trust the mkcert local CA. Use `pnpm certs` whenever the LAN IP
+changes or the certificate needs refreshing; use `pnpm start --skip-build` for a
+fast restart of an already-built client.
 
 The server prints its local/LAN HTTPS URLs and a lobby QR. On the host:
 
@@ -66,8 +72,12 @@ as a trusted CA profile.
 ## Development
 
 ```bash
+pnpm certs
 pnpm dev
 ```
+
+`pnpm certs` writes the Vite HTTPS certificate. If it is already present,
+`pnpm dev` can be run directly.
 
 - Lobby/match via Vite: **https://localhost:5173/**
 - The match opens in the 3D renderer by default; append `?renderer=2d` to force
@@ -97,7 +107,8 @@ pnpm preview
 | `pnpm dev` | Server + Vite with HTTPS/WSS proxy |
 | `pnpm build` | Build lobby, match, controller, practice and link pages |
 | `pnpm preview` | Preview built lobby over local HTTP |
-| `pnpm start` | Serve built pages + WSS from Node over HTTPS |
+| `pnpm start` | Build/cert-check, then serve packaged pages + WSS over HTTPS |
+| `pnpm start:server` | Serve the existing build without the launcher checks |
 | `pnpm certs` | Generate mkcert certificate for localhost + LAN |
 | `pnpm data:build` | Ingest sample CSV, mutate names, generate JSON/assets |
 | `pnpm data:validate` | Validate generated JSON + cross-file references |
@@ -106,6 +117,7 @@ pnpm preview
 | `pnpm typecheck` | Root + every workspace package |
 | `pnpm test` | Vitest unit/integration tests |
 | `pnpm test:soak` | 1,000 headless AI-vs-AI matches; fails if averages miss targets |
+| `pnpm perf` | 100-match deterministic simulation throughput benchmark |
 | `pnpm check` | Lint + typecheck + tests |
 
 Useful environment overrides:
@@ -119,6 +131,71 @@ Useful environment overrides:
 | `FB_STATIC_DIR` | `packages/client/dist` | Built client directory |
 | `FB_DATA_DIR` | `data` | Generated public football data |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
+| `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
+| `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
+| `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 12 scope
+
+Implemented:
+
+- `pnpm start` is the release one-liner. It builds the client, creates mkcert
+  material when absent, builds sample data when absent, then starts the HTTPS/WSS
+  host. `pnpm start:server` remains available for an existing build
+- The server loop now runs at the simulation rate (60 Hz) instead of waking at
+  250 Hz; the fixed-step accumulator absorbs ordinary timer jitter. `/healthz`
+  reports rolling tick count, budget, p95, max and over-budget count
+- A deterministic 100-match benchmark (`pnpm perf`) reports simulation steps per
+  second, real-time factor, average step cost and heap delta. On the development
+  machine (Node 24, Windows): **89,984 ticks/s**, **0.011 ms/step** and
+  **25.0 simulated minutes per second**; the server measured **0.72 ms p95**
+  and **3.08 ms max** during a live packaged 3D match, with zero over-budget
+  ticks at the 16.67 ms budget. A two-second headless Chromium sample at
+  1280x900 rendered the 3D match at 78.6 fps (p95 18.2 ms/frame); real GPU
+  hardware will differ
+- Full-match soak accounting now includes both halves, half-time, added time
+  and the safety margin; the old cap could stop a run while still live. Every
+  match must reach `fullTime`
+- A period normally still ends at the next natural pause after the added-time
+  board. If play never pauses, a 120-game-second safety whistle ends the period
+  instead of allowing an unbounded clock
+- Pass statistics now count attempts and completions from the first teammate
+  touch or kick; previously the stats screen always showed `0/0`
+- The release bug-bash fixed Windows launcher spawning (`EINVAL` on `pnpm.cmd`),
+  custom `FB_CERT_DIR` handling during auto-generation, and the soak cap that
+  hid matches running beyond full time
+- Tests now cover pass completion/incompletion/restart clearing, full-match
+  termination, the safety whistle, server tick metrics and health reporting
+
+Balance baseline over **1,000 deterministic full matches** (`pnpm test:soak`):
+
+| Metric | Result | Target |
+| --- | ---: | ---: |
+| Goals per match | 2.588 | 2.5–3.0 |
+| Shots per team | 8.56 | 8–14 |
+| Fouls per team | 11.93 | 10–12 |
+| Offsides per team | 2.37 | 2–4 |
+| Yellow cards per match | 1.85 | 1.5–2.0 |
+
+All 1,000 matches reached `fullTime`; the run took 556 s and reported zero
+target misses.
+
+Known M12 limitations (by design):
+
+- Balance targets are validated with the default professional AI in AI-vs-AI
+  matches; human matches and other difficulty profiles can differ
+- The safety whistle is a liveness guard, not a law variant: in the pathological
+  case where no natural pause arrives, it can cut a live attack two game minutes
+  after the board
+- Pass completion is a first-touch proxy. Deflections, rebounds and intended
+  receiver identity are not modelled, so completion percentages are lower than
+  a commercial stats feed
+- Performance numbers are from one development machine; there is no CI
+  performance gate, and low-end GPUs may prefer `?renderer=2d`
+- `pnpm start` still requires Node, pnpm and mkcert plus guest CA trust; it is
+  not a standalone binary or container
+- The Three.js client bundle is still loaded with the lobby and exceeds Vite's
+  500 kB chunk warning threshold (about 157 kB gzip)
 
 ## Milestone 11 scope
 
@@ -177,7 +254,8 @@ Implemented:
   a sent-off player and broadcasts the updated roster to both clients
 - The game clock scales real-half minutes to 45/90/105/120 game minutes. Stoppages
   accumulate an added-time board (goals, cards, substitutions, injuries, VAR);
-  the period ends at the next natural pause after the board expires
+  the period ends at the next natural pause after the board expires, with a
+  safety whistle if play never pauses
 - Extra time and a best-of-five penalty shootout (sudden death when required)
   are implemented as referee state, with deterministic taker selection,
   conversion/save checks and shootout events
@@ -566,7 +644,7 @@ Not implemented yet (by milestone design):
 
 ## Protocol and reconnect notes
 
-- `PROTOCOL_VERSION = 6`. Hello accepts an optional `sessionToken`; the welcome
+- `PROTOCOL_VERSION = 8`. Hello accepts an optional `sessionToken`; the welcome
   returns the stable token as `sessionId`. The browser keeps it in
   `sessionStorage`.
 - Lobby JSON carries each seat's selected club and full `TeamSheet`;
@@ -625,7 +703,9 @@ sheet construction, schema/cross-file rejection, asset/report generation,
 byte-deterministic rebuilds, fuzzy club renaming, and sim attribute/team mapping.
 M10 adds substitution windows/limits, injury risk, shootouts, extra time, VAR,
 settings/roster/statistics protocol flow and the full-time client state. M11
-adds Three.js pose/camera/pitch tests and the client replay buffer.
+adds Three.js pose/camera/pitch tests and the client replay buffer. M12 adds
+full-time soak accounting, the safety whistle, pass completion stats and server
+tick metrics.
 
 The two-minute data check:
 
@@ -644,7 +724,7 @@ all 16 formations must remain selectable and auto-pickable.
 
 The two-minute match check:
 
-1. `pnpm certs`, `pnpm build`, `pnpm start`.
+1. `pnpm start` (it builds the client and creates missing certificates/data).
 2. Open the printed LAN URL on the host; trust the certificate.
 3. Host **Create room**; verify the terminal prints a room URL, a phone
    controller URL and a room QR, and the team editor loads a club by default.
@@ -674,7 +754,7 @@ The two-minute match check:
 10. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 11. Guest **Leave**: host returns to the room lobby with the code intact.
-12. `pnpm check`: expect 44 test files and 468 tests passing.
+12. `pnpm check`: expect 46 test files and 477 tests passing.
 13. Verify the 3D presentation: the match opens in 3D, the whole pitch fits
     after resizing the window, players animate and carry numbers, and the
     **2D view** button switches renderers. Reload and confirm the mode persisted.
@@ -683,6 +763,10 @@ The two-minute match check:
     replay banner, progress and stop control. Toggle **Sound** and confirm the
     whistle/kick/goal effects and crowd bed respect the setting. Disable WebGL
     in a test browser to verify the automatic 2D fallback toast.
+15. Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
+    16.67 ms and `p95TickMs` stays below the budget during a live match.
+16. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish
+    without a target miss or unfinished match.
 
 ## Layout
 
@@ -697,6 +781,6 @@ packages/client      LAN lobby, match client/interpolation, canvas + Three.js re
   └── link.html      M0 transport diagnostics
 data                 generated JSON registry, placeholder assets and reports
   └── input/sample   clearly marked fake 3-club sample CSV
-scripts              mkcert setup
+scripts              one-command start and mkcert setup
 certs                generated locally; ignored by git
 ```

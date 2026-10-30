@@ -64,6 +64,8 @@ export function hashMatchState(state: MatchState): number {
     mixInt(stats.yellowCards);
     mixInt(stats.redCards);
     mixInt(stats.saves);
+    mixInt(stats.passes);
+    mixInt(stats.passesCompleted);
     mixInt(stats.possessionTicks);
   }
   if (state.referee.restart !== null) {
@@ -131,6 +133,12 @@ export function hashMatchState(state: MatchState): number {
     mixPlayer(player);
   }
 
+  if (state.passInFlight !== null) {
+    mixString(state.passInFlight.side);
+    mixString(state.passInFlight.passerId);
+  } else {
+    mixString("");
+  }
   mixString(state.offsidePassTargetId ?? "");
   if (state.lastTouch !== null) {
     mixString(state.lastTouch.team);

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Private LAN football game. M9: club and national-team selection with a validated 26-man call-up registry.",
+  "description": "Private LAN football game. M12: balance, performance, packaging and final documentation.",
   "packageManager": "pnpm@10.18.3",
   "engines": {
     "node": ">=20.19.0",
@@ -13,7 +13,8 @@
     "dev": "pnpm --parallel --filter @fb/server --filter @fb/client dev",
     "build": "pnpm --filter @fb/client build",
     "preview": "pnpm --filter @fb/client preview",
-    "start": "pnpm --filter @fb/server start",
+    "start": "node scripts/start.mjs",
+    "start:server": "pnpm --filter @fb/server start",
     "data:build": "pnpm --filter @fb/data-tools build",
     "data:validate": "pnpm --filter @fb/data-tools validate",
     "data:preview": "pnpm --filter @fb/data-tools preview",
@@ -23,7 +24,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
-    "test:soak": "pnpm --filter @fb/sim soak 1000"
+    "test:soak": "pnpm --filter @fb/sim soak 1000",
+    "perf": "pnpm --filter @fb/sim perf"
   },
   "devDependencies": {
     "@eslint/js": "9.19.0",

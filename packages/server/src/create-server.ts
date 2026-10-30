@@ -25,6 +25,7 @@ import type {
 } from "./client";
 import {
   createRequestHandler,
+  type HealthSimulationMetrics,
   type RequestHandler,
 } from "./http/request-handler";
 import type { TlsMaterial } from "./tls";
@@ -52,6 +53,8 @@ export interface GameServerOptions {
   /** Test seams; default to TUNING.network values. */
   readonly helloTimeoutMs?: number;
   readonly heartbeatIntervalMs?: number;
+  /** Exposes the server loop's rolling timing sample on /healthz. */
+  readonly getRuntimeMetrics?: () => HealthSimulationMetrics;
 }
 
 export interface RunningGameServer {
@@ -105,6 +108,9 @@ export async function startGameServer(
     startedAtMs: Date.now(),
     secure: options.tls !== undefined,
     getConnectedClients: countConnected,
+    ...(options.getRuntimeMetrics === undefined
+      ? {}
+      : { getRuntimeMetrics: options.getRuntimeMetrics }),
     onError: (error) => {
       logger.error("HTTP request failed", error);
     },

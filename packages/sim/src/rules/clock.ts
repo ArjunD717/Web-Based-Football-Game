@@ -72,6 +72,20 @@ export function isPastAddedTime(state: MatchState): boolean {
   );
 }
 
+/**
+ * A period normally ends at the next natural pause. A safety whistle prevents
+ * an idle or stuck passage of play from running forever after the board.
+ */
+export function isPastHardStop(state: MatchState): boolean {
+  const referee = state.referee;
+  return (
+    referee.clockSeconds >=
+    periodNominalEndSeconds(referee.half) +
+      referee.addedTimeSeconds +
+      TUNING.match.periodHardStopGraceSeconds
+  );
+}
+
 /** Natural pauses are dead-ball restarts and completed goals. */
 export function isNaturalPause(state: MatchState): boolean {
   return state.referee.phase === "deadBall";
@@ -102,7 +116,7 @@ export function updateMatchClock(state: MatchState, dt: number): boolean {
   return (
     referee.regulationExpired &&
     isPastAddedTime(state) &&
-    isNaturalPause(state)
+    (isNaturalPause(state) || isPastHardStop(state))
   );
 }
 

@@ -480,6 +480,14 @@ export interface MatchState {
   tick: number;
   elapsedSeconds: number;
   lastTouch: LastTouch | null;
+  /**
+   * Most recent deliberate pass waiting for the next touch. It lets stats
+   * distinguish a completed pass from a loose ball without changing physics.
+   */
+  passInFlight: {
+    readonly side: TeamSide;
+    readonly passerId: string;
+  } | null;
   /** Receiver of a deliberately played offside run, cleared on any touch. */
   offsidePassTargetId: string | null;
   referee: RefereeState;

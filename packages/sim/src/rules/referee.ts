@@ -26,6 +26,8 @@ import { assessInjury } from "./injuries";
 import { createShootout, takeShootoutKick } from "./shootout";
 import {
   recordGoal,
+  recordPassAttempt,
+  recordPassCompleted,
   recordShot,
   statsFor,
 } from "../stats";
@@ -796,8 +798,24 @@ export function beginKick(
     };
     captureOffside(state, player);
   }
+  const previousPass = state.passInFlight;
+  if (previousPass !== null) {
+    if (
+      previousPass.side === player.team &&
+      previousPass.passerId !== player.id
+    ) {
+      recordPassCompleted(state, previousPass.side);
+    }
+    // A kick is a definite end to the previous pass, whether it found a
+    // teammate or was cut out; loose-ball physical contacts are handled by
+    // registerTouch.
+    state.passInFlight = null;
+  }
   if (kind === "shot") {
     recordShot(state, player.team);
+  } else if (kind === "pass") {
+    recordPassAttempt(state, player.team);
+    state.passInFlight = { side: player.team, passerId: player.id };
   }
   return true;
 }
@@ -821,6 +839,16 @@ export function registerTouch(
       }
     }
     referee.offside = null;
+  }
+
+  // Offside involvement is not a completed pass; check it before crediting
+  // the next touch. A restart or the next kick clears any unfinished pass.
+  const pass = state.passInFlight;
+  if (pass !== null && contact.playerId !== pass.passerId) {
+    if (contact.team === pass.side) {
+      recordPassCompleted(state, pass.side);
+    }
+    state.passInFlight = null;
   }
 
   const setPiece = referee.setPiece;
@@ -1286,6 +1314,7 @@ function prepareRestart(
   state.referee.offside = null;
   state.referee.pendingFoul = null;
   state.referee.goalkeeperHold = null;
+  state.passInFlight = null;
   state.offsidePassTargetId = null;
 }
 
@@ -1765,6 +1794,7 @@ function clearTransient(state: MatchState): void {
   state.referee.offside = null;
   state.referee.pendingFoul = null;
   state.referee.goalkeeperHold = null;
+  state.passInFlight = null;
   state.offsidePassTargetId = null;
 }
 

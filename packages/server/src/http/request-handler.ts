@@ -6,6 +6,15 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { APP_VERSION, PROTOCOL_VERSION, TUNING } from "@fb/shared";
 
+export interface HealthSimulationMetrics {
+  readonly loopHz: number;
+  readonly tickBudgetMs: number;
+  readonly ticks: number;
+  readonly p95TickMs: number;
+  readonly maxTickMs: number;
+  readonly overBudgetTicks: number;
+}
+
 export interface HealthPayload {
   readonly status: "ok";
   readonly app: "web-football";
@@ -14,6 +23,7 @@ export interface HealthPayload {
   readonly secure: boolean;
   readonly uptimeSeconds: number;
   readonly connectedClients: number;
+  readonly simulation?: HealthSimulationMetrics;
 }
 
 export interface RequestHandlerOptions {
@@ -23,6 +33,7 @@ export interface RequestHandlerOptions {
   readonly startedAtMs: number;
   readonly secure: boolean;
   readonly getConnectedClients: () => number;
+  readonly getRuntimeMetrics?: () => HealthSimulationMetrics;
   readonly onError?: (error: unknown) => void;
 }
 
@@ -244,6 +255,9 @@ function sendHealth(
       Math.floor((Date.now() - options.startedAtMs) / 1_000),
     ),
     connectedClients: options.getConnectedClients(),
+    ...(options.getRuntimeMetrics === undefined
+      ? {}
+      : { simulation: options.getRuntimeMetrics() }),
   };
 
   const body = JSON.stringify(payload);

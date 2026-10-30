@@ -8,6 +8,7 @@ import {
   addedTimeRemainingSeconds,
   finaliseAddedTime,
   isPastAddedTime,
+  isPastHardStop,
   periodNominalEndSeconds,
   periodStartSeconds,
   updateMatchClock,
@@ -77,5 +78,22 @@ describe("match clock", () => {
     expect(updateMatchClock(state, 1 / 60)).toBe(true);
     state.referee.phase = "fullTime";
     expect(updateMatchClock(state, 1)).toBe(false);
+  });
+
+  it("uses a safety whistle if play never reaches a natural pause", () => {
+    const state = createMatch({ seed: 104 });
+    state.referee.phase = "live";
+    state.referee.regulationExpired = true;
+    state.referee.addedTimeSeconds = 0;
+    const end = periodNominalEndSeconds(1);
+    state.referee.clockSeconds =
+      end + TUNING.match.periodHardStopGraceSeconds - 0.1;
+    expect(isPastHardStop(state)).toBe(false);
+    expect(updateMatchClock(state, 0.001)).toBe(false);
+
+    state.referee.clockSeconds =
+      end + TUNING.match.periodHardStopGraceSeconds;
+    expect(isPastHardStop(state)).toBe(true);
+    expect(updateMatchClock(state, 0.001)).toBe(true);
   });
 });
