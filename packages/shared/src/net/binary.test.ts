@@ -28,6 +28,7 @@ function makeFrame(seq: number, tick = seq): SnapshotFrame {
       state: "jog",
       stamina: 0.8,
       sentOff: false,
+      unavailable: false,
       yellowCards: 0,
     }),
   );
@@ -41,6 +42,7 @@ function makeFrame(seq: number, tick = seq): SnapshotFrame {
       phase: "live",
       half: 1,
       clockSeconds: 754,
+      addedTimeSeconds: 0,
       scoreHome: 0,
       scoreAway: 0,
       restartType: null,
@@ -113,7 +115,7 @@ describe("snapshot encoding", () => {
     const decoded = decodeSnapshot(encoded, baseline);
     expect(decoded.baseSeq).toBe(20);
     expect(decoded.players).toEqual(baseline.players);
-    expect(encoded.byteLength).toBe(44);
+    expect(encoded.byteLength).toBe(46);
   });
 
   it("round-trips score, clock and restart state", () => {
@@ -123,6 +125,7 @@ describe("snapshot encoding", () => {
         phase: "deadBall",
         half: 2,
         clockSeconds: 3210,
+        addedTimeSeconds: 180,
         scoreHome: 2,
         scoreAway: 1,
         restartType: "corner",
@@ -281,7 +284,7 @@ describe("snapshot validation", () => {
     expect(() =>
       encodeSnapshot({
         ...frame,
-        match: { ...frame.match, half: 3 as 1 | 2 },
+        match: { ...frame.match, half: 5 as 1 | 2 },
       }),
     ).toThrow(BinaryProtocolError);
   });

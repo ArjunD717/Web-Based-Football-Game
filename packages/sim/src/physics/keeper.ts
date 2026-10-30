@@ -25,7 +25,10 @@ export function resolveGoalkeeperSave(state: MatchState): boolean {
   for (const side of ["home", "away"] as const) {
     const team = side === "home" ? state.home : state.away;
     const keeper = team.players.find(
-      (player) => player.role === "GK" && !player.sentOff,
+      (player) =>
+        player.role === "GK" &&
+        !player.sentOff &&
+        !player.unavailable,
     );
     if (keeper === undefined) {
       continue;

@@ -9,6 +9,22 @@ import {
 import type { BallContact } from "../physics/ball";
 import { eventRng } from "../random";
 import {
+  addStoppage,
+  periodNominalEndSeconds,
+  periodStartSeconds,
+  updateMatchClock,
+} from "./clock";
+import {
+  activePlayerCount,
+  applySubstitutions,
+  ensureGoalkeeper,
+  resetSubstitutionWindows,
+  type SubstitutionChange,
+  type SubstitutionResult,
+} from "./management";
+import { assessInjury } from "./injuries";
+import { createShootout, takeShootoutKick } from "./shootout";
+import {
   recordGoal,
   recordShot,
   statsFor,
@@ -26,6 +42,7 @@ import type {
   RefereeState,
   SetPieceRuntime,
   TeamSide,
+  VarReview,
 } from "../types";
 import {
   assessPhysicalDuel,
@@ -61,6 +78,9 @@ const DEFAULT_RULES: MatchRules = {
   gameSecondsPerHalf: TUNING.match.gameMinutesPerHalf * 60,
   strictness: "standard",
   aiDifficulty: "professional",
+  extraTimeEnabled: false,
+  shootoutEnabled: false,
+  varEnabled: false,
 };
 
 export function createMatchRules(
@@ -69,6 +89,9 @@ export function createMatchRules(
   const rules: MatchRules = { ...DEFAULT_RULES, ...overrides };
   for (const [key, value] of Object.entries(rules)) {
     if (key === "strictness" || key === "aiDifficulty") {
+      continue;
+    }
+    if (typeof value === "boolean") {
       continue;
     }
     if (!Number.isFinite(value) || value <= 0) {
@@ -99,6 +122,9 @@ export function createReferee(firstKickoffSide: TeamSide): RefereeState {
     phase: "deadBall",
     half: 1,
     clockSeconds: 0,
+    addedTimeSeconds: 0,
+    stoppageSeconds: 0,
+    regulationExpired: false,
     scoreHome: 0,
     scoreAway: 0,
     restart: null,
@@ -109,6 +135,10 @@ export function createReferee(firstKickoffSide: TeamSide): RefereeState {
     pendingFoul: null,
     lastEvent: null,
     eventSeq: 0,
+    goalkeeperHold: null,
+    forfeitSide: null,
+    varReview: null,
+    shootout: null,
   };
 }
 
@@ -141,6 +171,36 @@ export function startThrowIn(
     state.rules.restartDelaySeconds,
     takerId,
   );
+}
+
+/**
+ * Drop ball for a non-foul stoppage (injury, external interference). No taker
+ * is reserved, so the nearest players contest it once the timer expires.
+ */
+export function startDropBall(
+  state: MatchState,
+  side: TeamSide,
+  x: number,
+  y: number,
+  delaySeconds = state.rules.restartDelaySeconds,
+): void {
+  const spotX = clamp(x, 0, state.pitch.lengthM);
+  const spotY = clamp(y, 0, state.pitch.widthM);
+  prepareRestart(
+    state,
+    { type: "dropBall", side, x: spotX, y: spotY },
+    delaySeconds,
+    null,
+  );
+  state.ball.x = spotX;
+  state.ball.y = spotY;
+  state.ball.z = TUNING.ball.radiusM;
+  state.ball.vx = 0;
+  state.ball.vy = 0;
+  state.ball.vz = 0;
+  state.ball.spinX = 0;
+  state.ball.spinY = 0;
+  state.ball.spinZ = 0;
 }
 
 export function startGoalKick(state: MatchState, side: TeamSide): void {
@@ -200,7 +260,11 @@ export function startFreeKick(
   );
 }
 
-export function startPenalty(state: MatchState, side: TeamSide): void {
+export function startPenalty(
+  state: MatchState,
+  side: TeamSide,
+  severity = 1,
+): void {
   const setup = setupPenalty(state, side);
   const team = side === "home" ? state.home : state.away;
   const goal = getAttackingGoalForDirection(
@@ -237,6 +301,17 @@ export function startPenalty(state: MatchState, side: TeamSide): void {
       taker?.number ?? null,
     );
   }
+  beginVarReview(state, {
+    kind: "penalty",
+    side,
+    playerId: setup.takerId,
+    playerNumber:
+      setup.takerId === null
+        ? null
+        : findPlayer(state, side, setup.takerId)?.number ?? null,
+    severity,
+    goal: null,
+  });
 }
 
 /**
@@ -246,34 +321,27 @@ export function startPenalty(state: MatchState, side: TeamSide): void {
 export function advanceReferee(state: MatchState, dt: number): boolean {
   const referee = state.referee;
 
-  if (referee.phase === "halfTime") {
-    referee.timerSeconds = Math.max(0, referee.timerSeconds - dt);
-    if (referee.timerSeconds <= 0) {
-      startSecondHalf(state);
-    }
-    return false;
-  }
   if (referee.phase === "fullTime") {
     return false;
   }
-
-  const scale =
-    state.rules.gameSecondsPerHalf / state.rules.realHalfSeconds;
-  const halfEnd =
-    referee.half === 1
-      ? state.rules.gameSecondsPerHalf
-      : state.rules.gameSecondsPerHalf * 2;
-  referee.clockSeconds = Math.min(
-    halfEnd,
-    referee.clockSeconds + dt * scale,
-  );
-
-  if (referee.clockSeconds >= halfEnd) {
-    if (referee.half === 1) {
-      enterHalfTime(state);
-    } else {
-      enterFullTime(state);
+  if (referee.phase === "shootout") {
+    advanceShootout(state, dt);
+    return false;
+  }
+  if (referee.varReview !== null) {
+    advanceVarReview(state, dt);
+    return false;
+  }
+  if (referee.phase === "halfTime") {
+    referee.timerSeconds = Math.max(0, referee.timerSeconds - dt);
+    if (referee.timerSeconds <= 0) {
+      resumeAfterBreak(state);
     }
+    return false;
+  }
+
+  if (updateMatchClock(state, dt)) {
+    endPeriod(state);
     return false;
   }
 
@@ -282,6 +350,7 @@ export function advanceReferee(state: MatchState, dt: number): boolean {
     if (referee.timerSeconds <= 0) {
       referee.phase = "live";
       referee.restart = null;
+      resetSubstitutionWindows(state);
     }
     return referee.phase === "live";
   }
@@ -301,6 +370,329 @@ export function advanceReferee(state: MatchState, dt: number): boolean {
     }
   }
 
+  if (updateGoalkeeperHold(state, dt)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function maybeEnterVarReview(
+  state: MatchState,
+  review: Omit<VarReview, "timerSeconds" | "decision">,
+): boolean {
+  return beginVarReview(state, review);
+}
+
+function beginVarReview(
+  state: MatchState,
+  review: Omit<VarReview, "timerSeconds" | "decision">,
+): boolean {
+  if (!state.rules.varEnabled || state.referee.varReview !== null) {
+    return false;
+  }
+  state.referee.varReview = {
+    ...review,
+    timerSeconds: TUNING.var.reviewSeconds,
+    decision: "checking",
+  };
+  if (review.kind === "goal") {
+    state.referee.phase = "deadBall";
+    state.referee.restart = null;
+    state.referee.timerSeconds = 0;
+    freezeBall(state);
+  } else if (state.referee.phase === "live") {
+    state.referee.phase = "deadBall";
+    state.referee.timerSeconds = 0;
+  }
+  addStoppage(state, TUNING.match.addedTimeVarSeconds);
+  emitEvent(
+    state,
+    "varReview",
+    review.side,
+    review.playerId,
+    review.playerNumber,
+  );
+  return true;
+}
+
+function advanceVarReview(state: MatchState, dt: number): void {
+  const stateReview = state.referee.varReview;
+  if (stateReview === null) {
+    return;
+  }
+  stateReview.timerSeconds = Math.max(0, stateReview.timerSeconds - dt);
+  if (stateReview.timerSeconds > 0) {
+    return;
+  }
+  if (stateReview.decision === "checking") {
+    stateReview.decision = decideVarReview(stateReview);
+    stateReview.timerSeconds = TUNING.var.decisionDisplaySeconds;
+    return;
+  }
+  resolveVarReview(state, stateReview);
+}
+
+function decideVarReview(review: VarReview): "confirmed" | "overturned" {
+  if (review.decision !== "checking") {
+    return review.decision;
+  }
+  if (
+    review.kind === "penalty" &&
+    review.severity < TUNING.var.penaltyOverturnSeverity
+  ) {
+    return "overturned";
+  }
+  if (
+    review.kind === "redCard" &&
+    review.severity < TUNING.var.redOverturnSeverity
+  ) {
+    return "overturned";
+  }
+  return "confirmed";
+}
+
+function resolveVarReview(state: MatchState, review: VarReview): void {
+  state.referee.varReview = null;
+  if (review.kind === "goal" && review.goal !== null) {
+    if (review.decision === "confirmed") {
+      applyConfirmedGoal(
+        state,
+        review.goal.scoringSide,
+        review.goal.ownGoal,
+        state.rules.goalRestartDelaySeconds,
+      );
+    } else {
+      startGoalKick(state, otherSide(review.goal.scoringSide));
+    }
+    return;
+  }
+  if (review.kind === "penalty") {
+    if (review.decision === "overturned") {
+      const restart = state.referee.restart;
+      const x = restart?.x ?? state.ball.x;
+      const y = restart?.y ?? state.ball.y;
+      startFreeKick(
+        state,
+        otherSide(review.side),
+        "indirectFreeKick",
+        x,
+        y,
+      );
+    }
+    return;
+  }
+  if (review.kind === "redCard" && review.decision === "confirmed") {
+    const player = findPlayer(state, review.side, review.playerId ?? "");
+    if (player !== null && !player.sentOff) {
+      sendOff(state, player);
+    }
+  }
+}
+
+/** VAR-lite decisions are exposed for deterministic rule tests and server flow. */
+export function setVarDecision(
+  state: MatchState,
+  decision: "confirmed" | "overturned",
+): void {
+  if (state.referee.varReview !== null) {
+    state.referee.varReview.decision = decision;
+    state.referee.varReview.timerSeconds =
+      TUNING.var.decisionDisplaySeconds;
+  }
+}
+
+function endPeriod(state: MatchState): void {
+  const referee = state.referee;
+  const needsBreak =
+    referee.half === 1 ||
+    referee.half === 3 ||
+    (referee.half === 2 &&
+      state.rules.extraTimeEnabled &&
+      referee.scoreHome === referee.scoreAway);
+  if (!needsBreak) {
+    finishMatch(state);
+    return;
+  }
+  clearTransient(state);
+  referee.phase = "halfTime";
+  referee.restart = null;
+  referee.goalkeeperHold = null;
+  referee.timerSeconds =
+    referee.half === 2
+      ? TUNING.match.extraTimeBreakSeconds
+      : state.rules.halfTimeSeconds;
+  freezeBall(state);
+}
+
+function resumeAfterBreak(state: MatchState): void {
+  const referee = state.referee;
+  if (referee.half === 1) {
+    startPeriod(state, 2);
+    return;
+  }
+  if (referee.half === 2) {
+    if (
+      state.rules.extraTimeEnabled &&
+      referee.scoreHome === referee.scoreAway
+    ) {
+      startPeriod(state, 3);
+      return;
+    }
+    finishMatch(state);
+    return;
+  }
+  if (referee.half === 3) {
+    startPeriod(state, 4);
+    return;
+  }
+  finishMatch(state);
+}
+
+function finishMatch(state: MatchState): void {
+  const referee = state.referee;
+  if (
+    state.rules.shootoutEnabled &&
+    referee.scoreHome === referee.scoreAway
+  ) {
+    startShootout(state);
+    return;
+  }
+  enterFullTime(state);
+}
+
+function startPeriod(state: MatchState, half: 2 | 3 | 4): void {
+  const referee = state.referee;
+  if (half === 2 || half === 4) {
+    state.home.attackDirection =
+      state.home.attackDirection === 1 ? -1 : 1;
+    state.away.attackDirection =
+      state.away.attackDirection === 1 ? -1 : 1;
+  }
+  referee.half = half;
+  referee.clockSeconds = periodStartSeconds(half);
+  referee.addedTimeSeconds = 0;
+  referee.stoppageSeconds = 0;
+  referee.regulationExpired = false;
+  referee.restart = null;
+  referee.timerSeconds = 0;
+  referee.goalkeeperHold = null;
+  referee.varReview = null;
+  resetSubstitutionWindows(state);
+  const kickoffSide: TeamSide =
+    half === 2 || half === 4
+      ? otherSide(referee.firstKickoffSide)
+      : referee.firstKickoffSide;
+  startKickoff(state, kickoffSide, state.rules.kickoffDelaySeconds);
+}
+
+function startShootout(state: MatchState): void {
+  const referee = state.referee;
+  clearTransient(state);
+  referee.phase = "shootout";
+  referee.restart = null;
+  referee.timerSeconds = 0;
+  referee.goalkeeperHold = null;
+  referee.shootout = createShootout(state);
+  referee.clockSeconds = periodNominalEndSeconds(referee.half);
+  freezeBall(state);
+}
+
+function advanceShootout(state: MatchState, dt: number): void {
+  const referee = state.referee;
+  const shootout = referee.shootout;
+  if (shootout === null) {
+    enterFullTime(state);
+    return;
+  }
+  shootout.timerSeconds = Math.max(0, shootout.timerSeconds - dt);
+  if (shootout.timerSeconds > 0) {
+    return;
+  }
+  if (shootout.winner !== null) {
+    enterFullTime(state);
+    return;
+  }
+  const kick = takeShootoutKick(state);
+  if (kick === null) {
+    if (shootout.winner !== null) {
+      shootout.timerSeconds = TUNING.shootout.finishDelaySeconds;
+    }
+    return;
+  }
+  emitEvent(
+    state,
+    kick.scored ? "shootoutGoal" : "shootoutMiss",
+    kick.side,
+    kick.playerId,
+    kick.playerNumber,
+  );
+}
+
+function updateGoalkeeperHold(state: MatchState, dt: number): boolean {
+  const referee = state.referee;
+  let holder: { side: TeamSide; player: PlayerState } | null = null;
+  for (const side of ["home", "away"] as const) {
+    const team = side === "home" ? state.home : state.away;
+    const keeper = team.players.find(
+      (player) =>
+        player.role === "GK" &&
+        !player.sentOff &&
+        !player.unavailable,
+    );
+    if (keeper === undefined) {
+      continue;
+    }
+    const ballSpeed = Math.hypot(state.ball.vx, state.ball.vy);
+    const distance = Math.hypot(
+      state.ball.x - keeper.x,
+      state.ball.y - keeper.y,
+    );
+    if (
+      distance <= TUNING.referee.goalkeeperHoldRadiusM &&
+      ballSpeed <= TUNING.referee.goalkeeperHoldMaxBallSpeedMps &&
+      isInsideOwnPenaltyArea(
+        state.pitch,
+        team.attackDirection,
+        keeper.x,
+        keeper.y,
+      )
+    ) {
+      holder = { side, player: keeper };
+      break;
+    }
+  }
+  if (holder === null) {
+    referee.goalkeeperHold = null;
+    return false;
+  }
+  const current = referee.goalkeeperHold;
+  if (current === null || current.playerId !== holder.player.id) {
+    referee.goalkeeperHold = {
+      side: holder.side,
+      playerId: holder.player.id,
+      seconds: 0,
+    };
+    return false;
+  }
+  current.seconds += dt;
+  if (current.seconds < TUNING.referee.goalkeeperHoldSeconds) {
+    return false;
+  }
+  referee.goalkeeperHold = null;
+  emitEvent(
+    state,
+    "goalkeeperHold",
+    holder.side,
+    holder.player.id,
+    holder.player.number,
+  );
+  startCorner(
+    state,
+    otherSide(holder.side),
+    state.ball.x,
+    state.ball.y,
+  );
   return true;
 }
 
@@ -333,11 +725,18 @@ export function beginKick(
   player: PlayerState,
   kind: "pass" | "shot" | "clear" | "dribble",
 ): boolean {
-  if (state.referee.phase !== "live" || player.sentOff) {
+  if (
+    state.referee.phase !== "live" ||
+    player.sentOff ||
+    player.unavailable
+  ) {
     return false;
   }
 
   const referee = state.referee;
+  if (referee.goalkeeperHold?.playerId === player.id) {
+    referee.goalkeeperHold = null;
+  }
   const previousOffside = referee.offside;
   if (previousOffside !== null) {
     if (previousOffside.playerIds.includes(player.id)) {
@@ -480,7 +879,7 @@ export function checkOffsideInvolvement(state: MatchState): boolean {
     offside.side === "home" ? state.away : state.home;
   for (const id of offside.playerIds) {
     const player = findPlayer(state, offside.side, id);
-    if (player === null || player.sentOff) {
+    if (player === null || player.sentOff || player.unavailable) {
       continue;
     }
     const ballDistance = Math.hypot(
@@ -493,6 +892,7 @@ export function checkOffsideInvolvement(state: MatchState): boolean {
     const challenges = opponents.players.some(
       (opponent) =>
         !opponent.sentOff &&
+        !opponent.unavailable &&
         Math.hypot(opponent.x - player.x, opponent.y - player.y) <=
           TUNING.referee.offsideChallengeRadiusM &&
         Math.hypot(state.ball.x - opponent.x, state.ball.y - opponent.y) <=
@@ -525,7 +925,15 @@ export function commitTackleFoul(
     dogso,
   );
   const assessment = assessTackle(contact, state.rules.strictness);
-  return applyFoulAssessment(state, tackler, victim, assessment);
+  resolveContactInjury(
+    state,
+    victim,
+    assessment.severity,
+    contact.fromBehind,
+  );
+  const fouled = applyFoulAssessment(state, tackler, victim, assessment);
+  extendInjuryRestart(state, victim);
+  return fouled;
 }
 
 /**
@@ -557,7 +965,92 @@ export function commitPhysicalFoul(
     dogso,
   };
   const assessment = assessPhysicalDuel(contact, state.rules.strictness);
-  return applyFoulAssessment(state, offender, victim, assessment);
+  resolveContactInjury(
+    state,
+    victim,
+    assessment.severity,
+    contact.fromBehind,
+  );
+  const fouled = applyFoulAssessment(state, offender, victim, assessment);
+  extendInjuryRestart(state, victim);
+  return fouled;
+}
+
+function resolveContactInjury(
+  state: MatchState,
+  player: PlayerState,
+  severity: number,
+  fromBehind: boolean,
+): void {
+  if (player.sentOff || player.unavailable || player.injury !== null) {
+    return;
+  }
+  const assessment = assessInjury(
+    state.seed,
+    state.tick,
+    player,
+    severity,
+    fromBehind,
+  );
+  if (!assessment.injured) {
+    return;
+  }
+  const tuning = TUNING.injury;
+  player.injury = {
+    severity: assessment.canPlayOn ? "minor" : "serious",
+    canPlayOn: assessment.canPlayOn,
+    speedFactor: assessment.canPlayOn ? tuning.minorSpeedFactor : 1,
+    staminaFactor: assessment.canPlayOn ? tuning.minorStaminaFactor : 1,
+    treatmentSeconds: assessment.canPlayOn
+      ? tuning.minorFallSeconds
+      : tuning.stretcherSeconds,
+  };
+  player.state = "injured";
+  player.actionTimer = player.injury.treatmentSeconds;
+  player.vx *= 0.2;
+  player.vy *= 0.2;
+  addStoppage(state, TUNING.match.addedTimeInjurySeconds);
+  emitEvent(state, "injury", player.team, player.id, player.number);
+
+  if (!assessment.canPlayOn) {
+    player.unavailable = true;
+    player.targetX = player.x;
+    player.targetY = player.y;
+    player.targetSpeed = 0;
+    if (state.referee.phase === "live") {
+      startDropBall(
+        state,
+        player.team,
+        state.ball.x,
+        state.ball.y,
+        tuning.stretcherSeconds,
+      );
+    } else if (state.referee.phase === "deadBall") {
+      state.referee.timerSeconds = Math.max(
+        state.referee.timerSeconds,
+        tuning.stretcherSeconds,
+      );
+    }
+  }
+  if (player.role === "GK") {
+    ensureGoalkeeper(state, player.team);
+  }
+  checkForfeit(state, player.team);
+}
+
+function extendInjuryRestart(
+  state: MatchState,
+  player: PlayerState,
+): void {
+  if (
+    player.injury?.severity === "serious" &&
+    state.referee.phase === "deadBall"
+  ) {
+    state.referee.timerSeconds = Math.max(
+      state.referee.timerSeconds,
+      player.injury.treatmentSeconds,
+    );
+  }
 }
 
 function applyFoulAssessment(
@@ -597,6 +1090,7 @@ function applyFoulAssessment(
     offenderId: offender.id,
     offenderNumber: offender.number,
     restartType,
+    severity: assessment.severity,
     x: clamp(victim.x, 0, state.pitch.lengthM),
     y: clamp(victim.y, 0, state.pitch.widthM),
     expiresTick:
@@ -610,7 +1104,7 @@ function applyFoulAssessment(
   ) {
     state.referee.pendingFoul = pending;
     if (assessment.card !== null) {
-      issueCard(state, offender, assessment.card);
+      issueCard(state, offender, assessment.card, assessment.severity);
     } else {
       emitEvent(state, "advantage", victim.team, victim.id, victim.number);
     }
@@ -620,7 +1114,7 @@ function applyFoulAssessment(
     // penalty, while the event feed keeps the disciplinary outcome.
     restartFromPendingFoul(state, pending);
     if (assessment.card !== null) {
-      issueCard(state, offender, assessment.card);
+      issueCard(state, offender, assessment.card, assessment.severity);
     }
   }
   return true;
@@ -699,6 +1193,42 @@ export function evaluateHandball(
   return true;
 }
 
+/**
+ * Apply a queued substitution request and record its stoppage cost/event.
+ * Rules validation lives in `management.ts`; this wrapper keeps the referee's
+ * clock and event feed authoritative.
+ */
+export function substitutePlayers(
+  state: MatchState,
+  side: TeamSide,
+  changes: readonly SubstitutionChange[],
+): SubstitutionResult {
+  const result = applySubstitutions(state, side, changes);
+  if (!result.ok) {
+    return result;
+  }
+  addStoppage(
+    state,
+    TUNING.match.addedTimeSubstitutionSeconds * result.applied,
+  );
+  const team = side === "home" ? state.home : state.away;
+  for (const change of changes) {
+    const entered = team.players.find(
+      (player) => player.id === change.inId,
+    );
+    if (entered !== undefined) {
+      emitEvent(
+        state,
+        "substitution",
+        side,
+        entered.id,
+        entered.number,
+      );
+    }
+  }
+  return result;
+}
+
 export function isRefereePlayable(state: MatchState): boolean {
   return state.referee.phase === "live";
 }
@@ -755,6 +1285,7 @@ function prepareRestart(
   };
   state.referee.offside = null;
   state.referee.pendingFoul = null;
+  state.referee.goalkeeperHold = null;
   state.offsidePassTargetId = null;
 }
 
@@ -785,19 +1316,51 @@ function applyGoal(
     return;
   }
 
-  if (event.scoringSide === "home") {
+  const ownGoal =
+    state.lastTouch !== null &&
+    state.lastTouch.team !== event.scoringSide;
+  if (
+    beginVarReview(state, {
+      kind: "goal",
+      side: event.scoringSide,
+      playerId: state.lastTouch?.playerId ?? null,
+      playerNumber: state.lastTouch?.playerNumber ?? null,
+      severity: 1,
+      goal: {
+        scoringSide: event.scoringSide,
+        restartSide: otherSide(event.scoringSide),
+        ownGoal,
+      },
+    })
+  ) {
+    return;
+  }
+  applyConfirmedGoal(
+    state,
+    event.scoringSide,
+    ownGoal,
+    TUNING.match.goalRestartDelaySeconds,
+  );
+}
+
+function applyConfirmedGoal(
+  state: MatchState,
+  scoringSide: TeamSide,
+  ownGoal: boolean,
+  restartDelaySeconds: number,
+): void {
+  const referee = state.referee;
+  if (scoringSide === "home") {
     referee.scoreHome = Math.min(255, referee.scoreHome + 1);
   } else {
     referee.scoreAway = Math.min(255, referee.scoreAway + 1);
   }
-  const ownGoal =
-    state.lastTouch !== null &&
-    state.lastTouch.team !== event.scoringSide;
-  recordGoal(state, event.scoringSide, ownGoal);
+  recordGoal(state, scoringSide, ownGoal);
+  addStoppage(state, TUNING.match.addedTimeGoalSeconds);
   startKickoff(
     state,
-    event.scoringSide === "home" ? "away" : "home",
-    state.rules.goalRestartDelaySeconds,
+    otherSide(scoringSide),
+    restartDelaySeconds,
   );
 }
 
@@ -878,7 +1441,7 @@ function restartFromPendingFoul(
 ): void {
   state.referee.pendingFoul = null;
   if (pending.restartType === "penalty") {
-    startPenalty(state, pending.side);
+    startPenalty(state, pending.side, pending.severity);
     return;
   }
   startFreeKick(
@@ -949,6 +1512,7 @@ function penaltyEncroachment(
     for (const player of team.players) {
       if (
         player.sentOff ||
+        player.unavailable ||
         player.id === penalty.takerId ||
         player.id === penalty.goalkeeperId
       ) {
@@ -1052,7 +1616,7 @@ function advantageAvailable(state: MatchState, side: TeamSide): boolean {
   const team = side === "home" ? state.home : state.away;
   let nearest = Infinity;
   for (const player of team.players) {
-    if (player.sentOff) {
+    if (player.sentOff || player.unavailable) {
       continue;
     }
     nearest = Math.min(
@@ -1067,8 +1631,22 @@ function issueCard(
   state: MatchState,
   player: PlayerState,
   card: CardKind,
+  severity = 1,
 ): void {
+  addStoppage(state, TUNING.match.addedTimeCardSeconds);
   if (card === "red") {
+    if (
+      beginVarReview(state, {
+        kind: "redCard",
+        side: player.team,
+        playerId: player.id,
+        playerNumber: player.number,
+        severity,
+        goal: null,
+      })
+    ) {
+      return;
+    }
     sendOff(state, player);
     return;
   }
@@ -1101,6 +1679,37 @@ function sendOff(state: MatchState, player: PlayerState): void {
     player.id,
     player.number,
   );
+  if (player.role === "GK") {
+    ensureGoalkeeper(state, player.team);
+  }
+  checkForfeit(state, player.team);
+}
+
+function checkForfeit(state: MatchState, side: TeamSide): void {
+  const team = side === "home" ? state.home : state.away;
+  if (
+    state.referee.phase !== "fullTime" &&
+    activePlayerCount(team) < TUNING.management.minimumPlayers
+  ) {
+    finishForfeit(state, side);
+  }
+}
+
+function finishForfeit(state: MatchState, side: TeamSide): void {
+  const referee = state.referee;
+  if (referee.forfeitSide !== null) {
+    return;
+  }
+  clearTransient(state);
+  referee.phase = "fullTime";
+  referee.forfeitSide = side;
+  referee.timerSeconds = 0;
+  referee.restart = null;
+  referee.goalkeeperHold = null;
+  referee.varReview = null;
+  referee.shootout = null;
+  freezeBall(state);
+  emitEvent(state, "forfeit", side, null, null);
 }
 
 function emitEvent(
@@ -1140,33 +1749,14 @@ function emitEvent(
   }
 }
 
-function enterHalfTime(state: MatchState): void {
-  clearTransient(state);
-  state.referee.phase = "halfTime";
-  state.referee.half = 1;
-  state.referee.clockSeconds = state.rules.gameSecondsPerHalf;
-  state.referee.timerSeconds = state.rules.halfTimeSeconds;
-  state.referee.restart = null;
-  freezeBall(state);
-}
-
-function startSecondHalf(state: MatchState): void {
-  state.home.attackDirection = state.home.attackDirection === 1 ? -1 : 1;
-  state.away.attackDirection = state.away.attackDirection === 1 ? -1 : 1;
-  state.referee.half = 2;
-  state.referee.clockSeconds = state.rules.gameSecondsPerHalf;
-  state.referee.restart = null;
-  const kickoffSide: TeamSide =
-    state.referee.firstKickoffSide === "home" ? "away" : "home";
-  startKickoff(state, kickoffSide, state.rules.kickoffDelaySeconds);
-}
-
 function enterFullTime(state: MatchState): void {
+  const referee = state.referee;
   clearTransient(state);
-  state.referee.phase = "fullTime";
-  state.referee.clockSeconds = state.rules.gameSecondsPerHalf * 2;
-  state.referee.timerSeconds = 0;
-  state.referee.restart = null;
+  referee.phase = "fullTime";
+  referee.timerSeconds = 0;
+  referee.restart = null;
+  referee.goalkeeperHold = null;
+  referee.varReview = null;
   freezeBall(state);
 }
 
@@ -1174,6 +1764,7 @@ function clearTransient(state: MatchState): void {
   state.referee.setPiece = null;
   state.referee.offside = null;
   state.referee.pendingFoul = null;
+  state.referee.goalkeeperHold = null;
   state.offsidePassTargetId = null;
 }
 

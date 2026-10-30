@@ -21,6 +21,7 @@ function makeFrame(
       state: "jog",
       stamina: 1,
       sentOff: false,
+      unavailable: false,
       yellowCards: 0,
     }),
   );
@@ -34,6 +35,7 @@ function makeFrame(
       phase: "live",
       half: 1,
       clockSeconds: seq * 30,
+      addedTimeSeconds: 0,
       scoreHome: 0,
       scoreAway: 0,
       restartType: null,

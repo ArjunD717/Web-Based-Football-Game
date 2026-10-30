@@ -2,6 +2,7 @@
 
 import type {
   GoalkeeperAttributes,
+  PlayerPosition,
   PlayerStateName,
   TeamTactics,
 } from "@fb/shared";
@@ -72,12 +73,27 @@ export interface PlayerAttributes {
   readonly weakFoot: number;
   /** Present only for players authored as goalkeepers. */
   readonly goalkeeper: GoalkeeperAttributes | null;
+  /** Authored 1..99 risk; omitted synthetic/legacy players use a neutral value. */
+  readonly injuryProneness?: number;
+}
+
+export type InjurySeverity = "minor" | "serious";
+
+export interface InjuryState {
+  readonly severity: InjurySeverity;
+  /** Minor injuries allow play at a reduced movement/stamina multiplier. */
+  readonly canPlayOn: boolean;
+  readonly speedFactor: number;
+  readonly staminaFactor: number;
+  readonly treatmentSeconds: number;
 }
 
 export interface PlayerState {
   readonly id: string;
+  readonly name: string;
   readonly team: TeamSide;
-  readonly role: PlayerRole;
+  /** Mutable so an emergency outfielder can take the goalkeeper role. */
+  role: PlayerRole;
   readonly number: number;
   readonly attributes: PlayerAttributes;
   /** 0..1 multiplier for technical decisions from the authored position fit. */
@@ -101,6 +117,9 @@ export interface PlayerState {
   yellowCards: number;
   /** Sent-off players remain in the roster for stable snapshot slots. */
   sentOff: boolean;
+  /** Injured players can be unavailable for the rest of the match. */
+  unavailable: boolean;
+  injury: InjuryState | null;
   /** True while a network client owns this body; AI leaves movement/actions alone. */
   isUserControlled: boolean;
 
@@ -129,10 +148,16 @@ export interface Formation {
 
 /** Simulation IDs of the authored set-piece takers; null when not authored. */
 export interface TeamSetPieceTakers {
-  readonly penalty: string | null;
-  readonly freeKick: string | null;
-  readonly cornerLeft: string | null;
-  readonly cornerRight: string | null;
+  penalty: string | null;
+  freeKick: string | null;
+  cornerLeft: string | null;
+  cornerRight: string | null;
+}
+
+export interface SubstitutePlayer {
+  readonly player: PlayerState;
+  readonly positions: readonly PlayerPosition[];
+  readonly preferredPosition: PlayerPosition;
 }
 
 export interface TeamState {
@@ -142,10 +167,17 @@ export interface TeamState {
   readonly formation: Formation;
   /** Authored team instructions; all values are validated 0..100 or enums. */
   readonly tactics: TeamTactics;
-  readonly takers: TeamSetPieceTakers;
+  /** Mutable because a substituted taker must resolve to the new player. */
+  takers: TeamSetPieceTakers;
   /** Flipped at half-time when the teams change ends. */
   attackDirection: AttackDirection;
-  readonly players: PlayerState[];
+  players: PlayerState[];
+  /** Eligible matchday substitutes; reserves do not enter the match. */
+  readonly bench: SubstitutePlayer[];
+  substitutionsUsed: number;
+  substitutionWindowsUsed: number;
+  /** True while the current dead-ball interval has already used a window. */
+  substitutionWindowUsed: boolean;
 }
 
 export interface BallState {
@@ -167,7 +199,15 @@ export interface LastTouch {
   readonly playerNumber: number;
 }
 
-export type MatchPhase = "deadBall" | "live" | "halfTime" | "fullTime";
+export type MatchPhase =
+  | "deadBall"
+  | "live"
+  | "halfTime"
+  | "fullTime"
+  | "shootout";
+
+/** 1/2 are regulation halves; 3/4 are the two extra-time periods. */
+export type MatchHalf = 1 | 2 | 3 | 4;
 
 export type RestartType =
   | "kickoff"
@@ -176,7 +216,8 @@ export type RestartType =
   | "corner"
   | "directFreeKick"
   | "indirectFreeKick"
-  | "penalty";
+  | "penalty"
+  | "dropBall";
 
 export type FoulStrictness = "lenient" | "standard" | "strict";
 
@@ -189,7 +230,14 @@ export type MatchEventType =
   | "redCard"
   | "offside"
   | "handball"
-  | "penalty";
+  | "penalty"
+  | "injury"
+  | "substitution"
+  | "goalkeeperHold"
+  | "varReview"
+  | "shootoutGoal"
+  | "shootoutMiss"
+  | "forfeit";
 
 export interface MatchEvent {
   readonly seq: number;
@@ -217,6 +265,12 @@ export interface MatchRules {
   readonly strictness: FoulStrictness;
   /** Behaviour profile used by every non-user-controlled player. */
   readonly aiDifficulty: AiDifficulty;
+  /** Knockout option: two 15-minute extra-time periods. */
+  readonly extraTimeEnabled: boolean;
+  /** Knockout option: penalty shootout when the score is level. */
+  readonly shootoutEnabled: boolean;
+  /** Optional VAR-lite checks for goals, penalties and direct reds. */
+  readonly varEnabled: boolean;
 }
 
 /** Cumulative, per-team match facts used by soak tests and the HUD. */
@@ -229,6 +283,9 @@ export interface TeamMatchStats {
   yellowCards: number;
   redCards: number;
   saves: number;
+  /** Attempted passes; completed passes are a subset. */
+  passes: number;
+  passesCompleted: number;
   /** Simulation ticks in which this team was the nearest team to the ball. */
   possessionTicks: number;
 }
@@ -286,17 +343,71 @@ export interface PendingFoul {
   readonly offenderId: string;
   readonly offenderNumber: number;
   readonly restartType: "directFreeKick" | "penalty";
+  readonly severity: number;
   readonly x: number;
   readonly y: number;
   readonly expiresTick: number;
 }
 
+export interface GoalkeeperHold {
+  readonly side: TeamSide;
+  readonly playerId: string;
+  seconds: number;
+}
+
+export type VarReviewKind = "goal" | "penalty" | "redCard";
+export type VarReviewDecision = "checking" | "confirmed" | "overturned";
+
+export interface VarReview {
+  readonly kind: VarReviewKind;
+  readonly side: TeamSide;
+  readonly playerId: string | null;
+  readonly playerNumber: number | null;
+  timerSeconds: number;
+  decision: VarReviewDecision;
+  /** Contact/offence severity used for the deterministic VAR check. */
+  readonly severity: number;
+  /** Goal review payload; null for penalties and red cards. */
+  readonly goal: {
+    readonly scoringSide: TeamSide;
+    readonly restartSide: TeamSide;
+    readonly ownGoal: boolean;
+  } | null;
+}
+
+export interface ShootoutKick {
+  readonly side: TeamSide;
+  readonly playerId: string;
+  readonly playerNumber: number;
+  readonly scored: boolean;
+}
+
+export interface ShootoutState {
+  readonly firstSide: TeamSide;
+  /** Zero-based kick index across both sides. */
+  index: number;
+  homeScore: number;
+  awayScore: number;
+  timerSeconds: number;
+  winner: TeamSide | null;
+  /** True after the first five kicks per side have been taken. */
+  suddenDeath: boolean;
+  lastKick: ShootoutKick | null;
+  kicks: ShootoutKick[];
+}
+
 export interface RefereeState {
   phase: MatchPhase;
-  /** 1 or 2; meaningful until full-time. */
-  half: 1 | 2;
-  /** Continuous game clock, 0..90 minutes in seconds. */
+  /** 1/2 regulation, 3/4 extra time; meaningful until full-time. */
+  half: MatchHalf;
+  /** Continuous game clock; extra time starts at 90 and 105 minutes. */
   clockSeconds: number;
+  /** Board allowance for the current period, seconds. */
+  addedTimeSeconds: number;
+  /** Stoppage allowance accumulated but not yet shown on the board. */
+  stoppageSeconds: number;
+  /** Set once the regulation clock has expired for this period. */
+  regulationExpired: boolean;
   scoreHome: number;
   scoreAway: number;
   restart: RestartState | null;
@@ -312,6 +423,14 @@ export interface RefereeState {
   /** Most recent disciplinary/rule event, mirrored into snapshots. */
   lastEvent: MatchEvent | null;
   eventSeq: number;
+  /** Active goalkeeper possession clock; null while nobody is holding it. */
+  goalkeeperHold: GoalkeeperHold | null;
+  /** Match abandoned/forfeited below seven players. */
+  forfeitSide: TeamSide | null;
+  /** VAR-lite review currently freezing the match. */
+  varReview: VarReview | null;
+  /** Penalty shootout runtime; null outside a shootout. */
+  shootout: ShootoutState | null;
 }
 
 export interface PitchConfig {

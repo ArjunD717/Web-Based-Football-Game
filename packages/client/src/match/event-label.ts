@@ -53,5 +53,19 @@ export function describeMatchEvent(
       return `Handball — ${player}`;
     case "penalty":
       return `Penalty — ${teamName}`;
+    case "injury":
+      return `Injury — ${player}`;
+    case "substitution":
+      return `Substitution — ${player}`;
+    case "goalkeeperHold":
+      return `Goalkeeper hold — ${player}`;
+    case "varReview":
+      return `VAR review — ${teamName}`;
+    case "shootoutGoal":
+      return `Shootout goal — ${player}`;
+    case "shootoutMiss":
+      return `Shootout miss — ${player}`;
+    case "forfeit":
+      return `Forfeit — ${teamName}`;
   }
 }

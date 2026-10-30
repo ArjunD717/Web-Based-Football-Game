@@ -3,6 +3,7 @@
 import { TUNING, clamp } from "@fb/shared";
 import { baseFormationPositionNormalized } from "../formations";
 import { heldBySetPiece } from "../rules/referee";
+import { isAvailablePlayer } from "../rules/management";
 import type {
   AttackDirection,
   MatchState,
@@ -57,7 +58,7 @@ export function nearestPlayerTo(
   let best: NearestPlayer | null = null;
   for (const player of team.players) {
     if (
-      player.sentOff ||
+      !isAvailablePlayer(player) ||
       (!includeKeeper && player.role === "GK") ||
       heldBySetPiece(state, player)
     ) {
@@ -127,7 +128,7 @@ export function offsideLineFor(
   const opponents =
     team.side === "home" ? state.away : state.home;
   const xs = opponents.players
-    .filter((player) => !player.sentOff)
+    .filter(isAvailablePlayer)
     .map((player) => player.x)
     .sort((a, b) =>
       team.attackDirection === 1 ? b - a : a - b,
@@ -155,7 +156,7 @@ export function planTeam(
         ? "attack"
         : "defend";
   const outfield = team.players.filter(
-    (player) => !player.sentOff && player.role !== "GK",
+    (player) => isAvailablePlayer(player) && player.role !== "GK",
   );
   const nearest = nearestOutfieldTo(
     state,
@@ -183,7 +184,7 @@ export function planTeam(
     state.offsidePassTargetId !== null &&
     team.players.some(
       (player) =>
-        player.id === state.offsidePassTargetId && !player.sentOff,
+        player.id === state.offsidePassTargetId && isAvailablePlayer(player),
     )
       ? state.offsidePassTargetId
       : null;
@@ -296,7 +297,7 @@ function secondNearestOutfield(
   let best: NearestPlayer | null = null;
   for (const player of team.players) {
     if (
-      player.sentOff ||
+      !isAvailablePlayer(player) ||
       player.role === "GK" ||
       player.id === excludedId ||
       heldBySetPiece(state, player)
@@ -324,7 +325,7 @@ function selectCover(
   let bestScore = -Infinity;
   for (const player of team.players) {
     if (
-      player.sentOff ||
+      !isAvailablePlayer(player) ||
       player.role === "GK" ||
       player.id === presserId ||
       player.id === secondPresserId ||
@@ -356,7 +357,7 @@ function selectRunners(
   return team.players
     .filter(
       (player) =>
-        !player.sentOff &&
+        isAvailablePlayer(player) &&
         player.role !== "GK" &&
         player.id !== ownerId &&
         roleProfile(player.role).runInBehind >= 0.4,
@@ -379,7 +380,7 @@ function selectOverlap(
 ): string | null {
   const fullbacks = team.players.filter(
     (player) =>
-      !player.sentOff &&
+      isAvailablePlayer(player) &&
       player.id !== ownerId &&
       (player.role === "RB" || player.role === "LB"),
   );
@@ -399,9 +400,11 @@ function defensiveLineX(
   phase: AiPhase,
 ): number {
   const backs = team.players.filter(
-    (player) => !player.sentOff && isDefensiveRole(player.role),
+    (player) => isAvailablePlayer(player) && isDefensiveRole(player.role),
   );
-  const fallback = team.players.find((player) => player.role === "GK");
+  const fallback = team.players.find(
+    (player) => player.role === "GK" && isAvailablePlayer(player),
+  );
   const basePositions = (backs.length > 0 ? backs : fallback === undefined ? [] : [fallback])
     .map((player) =>
       baseFormationPositionNormalized(

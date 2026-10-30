@@ -12,6 +12,7 @@ import type {
   TeamSide,
   TeamState,
 } from "../types";
+import { isAvailablePlayer } from "./management";
 
 /**
  * Position players and the ball for a restart. These functions are deliberately
@@ -331,7 +332,9 @@ export function setupFreeKick(
           proximity,
     );
     const candidates = opponents.players
-      .filter((player) => player.role !== "GK" && !player.sentOff)
+      .filter(
+        (player) => player.role !== "GK" && isAvailablePlayer(player),
+      )
       .sort(
         (a, b) =>
           Math.hypot(a.x - spotX, a.y - spotY) -
@@ -393,7 +396,7 @@ export function setupPenalty(
     goal.lineX - goal.netDirection * state.pitch.penaltySpotDistanceM;
   const spotY = goal.centreY;
   const outfield = team.players.filter(
-    (player) => player.role !== "GK" && !player.sentOff,
+    (player) => player.role !== "GK" && isAvailablePlayer(player),
   );
   const taker =
     authoredTaker(team, team.takers.penalty) ??
@@ -403,7 +406,7 @@ export function setupPenalty(
     null;
   const goalkeeper =
     opponents.players.find(
-      (player) => player.role === "GK" && !player.sentOff,
+      (player) => player.role === "GK" && isAvailablePlayer(player),
     ) ?? null;
 
   if (taker !== null) {
@@ -426,7 +429,11 @@ export function setupPenalty(
 
   for (const player of [state.home, state.away]) {
     for (const body of player.players) {
-      if (body === taker || body === goalkeeper || body.sentOff) {
+      if (
+        body === taker ||
+        body === goalkeeper ||
+        !isAvailablePlayer(body)
+      ) {
         continue;
       }
       const dy = body.y - spotY;
@@ -478,7 +485,11 @@ function authoredTaker(
     return null;
   }
   const player = team.players.find((candidate) => candidate.id === id);
-  return player !== undefined && player.role !== "GK" && !player.sentOff
+  return (
+    player !== undefined &&
+    player.role !== "GK" &&
+    isAvailablePlayer(player)
+  )
     ? player
     : null;
 }

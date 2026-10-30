@@ -219,6 +219,12 @@ describe("M2 lobby messages", () => {
           },
         ],
         reconnectSeconds: null,
+        settings: {
+          halfRealMinutes: 6 as const,
+          extraTime: false,
+          shootout: false,
+          varEnabled: false,
+        },
       },
       you: {
         seat: 0,
@@ -309,6 +315,156 @@ describe("M2 lobby messages", () => {
   });
 });
 
+describe("M10 match management messages", () => {
+  it("parses host settings and substitution commands", () => {
+    const settings = {
+      halfRealMinutes: 8 as const,
+      extraTime: true,
+      shootout: true,
+      varEnabled: true,
+    };
+    expect(
+      parseClientMessage(
+        JSON.stringify({ t: "updateSettings", settings }),
+      ),
+    ).toEqual({ t: "updateSettings", settings });
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          t: "updateSettings",
+          settings: { ...settings, halfRealMinutes: 5 },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          t: "substitute",
+          outId: "home:p1",
+          inId: "home:p12",
+        }),
+      ),
+    ).toEqual({
+      t: "substitute",
+      outId: "home:p1",
+      inId: "home:p12",
+    });
+    expect(
+      parseClientMessage(JSON.stringify({ t: "substitute", outId: "", inId: "x" })),
+    ).toBeNull();
+  });
+
+  it("round-trips roster, notice, statistics, VAR and shootout messages", () => {
+    const roster = {
+      t: "roster" as const,
+      side: "home" as const,
+      players: [
+        { id: "home:p1", name: "Keeper", number: 1, goalkeeper: true },
+      ],
+      bench: [{ id: "home:p12", name: "Sub", number: 12, goalkeeper: false }],
+    };
+    expect(parseServerMessage(encodeServerMessage(roster))).toEqual(roster);
+
+    const notice = {
+      t: "substitution" as const,
+      status: "applied" as const,
+      message: "1 substitution applied",
+    };
+    expect(parseServerMessage(encodeServerMessage(notice))).toEqual(notice);
+
+    const stats = {
+      home: {
+        goals: 2,
+        shots: 9,
+        shotsOnTarget: 5,
+        fouls: 10,
+        offsides: 3,
+        yellowCards: 1,
+        redCards: 0,
+        saves: 4,
+        passes: 400,
+        passesCompleted: 350,
+        possessionTicks: 1800,
+      },
+      away: {
+        goals: 1,
+        shots: 7,
+        shotsOnTarget: 3,
+        fouls: 12,
+        offsides: 1,
+        yellowCards: 2,
+        redCards: 0,
+        saves: 6,
+        passes: 380,
+        passesCompleted: 320,
+        possessionTicks: 1200,
+      },
+      shootout: {
+        firstSide: "away" as const,
+        homeScore: 4,
+        awayScore: 3,
+        index: 7,
+        suddenDeath: false,
+        winner: "home" as const,
+      },
+      forfeitSide: null,
+      winner: "home" as const,
+    };
+    const statsMessage = { t: "matchStats" as const, stats };
+    expect(parseServerMessage(encodeServerMessage(statsMessage))).toEqual(
+      statsMessage,
+    );
+
+    const varMessage = {
+      t: "varReview" as const,
+      review: {
+        kind: "goal" as const,
+        side: "home" as const,
+        decision: "checking" as const,
+      },
+    };
+    expect(parseServerMessage(encodeServerMessage(varMessage))).toEqual(
+      varMessage,
+    );
+
+    const shootoutMessage = {
+      t: "shootout" as const,
+      shootout: stats.shootout,
+    };
+    expect(
+      parseServerMessage(encodeServerMessage(shootoutMessage)),
+    ).toEqual(shootoutMessage);
+  });
+
+  it("rejects malformed management payloads", () => {
+    expect(
+      parseServerMessage(
+        JSON.stringify({
+          t: "substitution",
+          status: "waiting",
+          message: "x",
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseServerMessage(
+        JSON.stringify({
+          t: "varReview",
+          review: { kind: "throwIn", side: "home", decision: "checking" },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseServerMessage(
+        JSON.stringify({
+          t: "matchStats",
+          stats: { home: {}, away: {} },
+        }),
+      ),
+    ).toBeNull();
+  });
+});
+
 function makeSheet(): TeamSheet {
   const roles = [
     "GK",
@@ -352,6 +508,7 @@ function makeSetup() {
   const players = (side: "home" | "away") =>
     Array.from({ length: 11 }, (_, index) => ({
       id: `${side}-${index + 1}`,
+      name: `${side} ${index + 1}`,
       number: index + 1,
       goalkeeper: index === 0,
     }));
@@ -380,12 +537,14 @@ function makeSetup() {
       name: "Home XI",
       colors: { primary: "#2f6bff", secondary: "#dce7ff", keeper: "#f2c94c" },
       players: players("home"),
+      bench: [],
     },
     away: {
       side: "away" as const,
       name: "Away XI",
       colors: { primary: "#e95252", secondary: "#ffe1e1", keeper: "#9be564" },
       players: players("away"),
+      bench: [],
     },
   };
 }

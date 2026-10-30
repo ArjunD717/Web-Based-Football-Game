@@ -9,6 +9,7 @@ import {
 } from "../pitch";
 import { topSpeedFor } from "../physics/players";
 import { heldBySetPiece } from "../rules/referee";
+import { isAvailablePlayer } from "../rules/management";
 import type {
   GoalGeometry,
   MatchState,
@@ -41,7 +42,7 @@ export function assignTeamTargets(
   );
 
   for (const player of team.players) {
-    if (player.isUserControlled || player.sentOff) {
+    if (player.isUserControlled || !isAvailablePlayer(player)) {
       continue;
     }
     if (heldBySetPiece(state, player)) {
@@ -307,7 +308,7 @@ function markNearestOpponent(
   let best: PlayerState | null = null;
   let bestDistance = Infinity;
   for (const opponent of opponents.players) {
-    if (opponent.sentOff || opponent.role === "GK") {
+    if (!isAvailablePlayer(opponent) || opponent.role === "GK") {
       continue;
     }
     const distance = Math.hypot(
@@ -413,7 +414,7 @@ function assignDefenderTarget(
     : state.home
   ).players) {
     if (
-      opponent.sentOff ||
+      !isAvailablePlayer(opponent) ||
       opponent.role === "GK" ||
       opponent.id === plan.owner?.id ||
       marked.has(opponent.id)
@@ -688,7 +689,7 @@ function applySeparation(team: TeamState): void {
   for (const player of team.players) {
     if (
       player.role === "GK" ||
-      player.sentOff ||
+      !isAvailablePlayer(player) ||
       player.isUserControlled
     ) {
       continue;

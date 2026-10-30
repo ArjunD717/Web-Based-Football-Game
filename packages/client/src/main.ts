@@ -5,6 +5,7 @@ import {
   normalizeRoomCode,
   type LobbyPlayerWire,
   type LobbyRoomWire,
+  type MatchSetupWire,
   type ServerLobbyStateMessage,
   type SnapshotFrame,
 } from "@fb/shared";
@@ -27,6 +28,11 @@ import { TeamEditor } from "./lobby/team-editor";
 import { createCanvasRenderer } from "./render/canvas-renderer";
 import type { MatchView } from "./render/view";
 import { describeMatchEvent, formatCardCounts } from "./match/event-label";
+import { SubstitutionPanel } from "./match/substitution-panel";
+import {
+  renderMatchStatsScreen,
+  type MatchStatsViewRow,
+} from "./match/stats-screen";
 import "./style.css";
 
 const TOAST_DURATION_MS = 2_600;
@@ -73,7 +79,14 @@ const scoreHome = byId<HTMLElement>("score-home");
 const scoreAway = byId<HTMLElement>("score-away");
 const scoreClock = byId<HTMLElement>("score-clock");
 const scorePhase = byId<HTMLElement>("score-phase");
+const scoreAdded = byId<HTMLElement>("score-added");
+const scorePens = byId<HTMLElement>("score-pens");
 const matchCards = byId<HTMLElement>("match-cards");
+const statsScreen = byId<HTMLElement>("stats-screen");
+const statsTitle = byId<HTMLElement>("stats-title");
+const statsScore = byId<HTMLElement>("stats-score");
+const statsNote = byId<HTMLElement>("stats-note");
+const statsRows = byId<HTMLElement>("stats-rows");
 const matchEvent = byId<HTMLElement>("match-event");
 const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
 const bufferChip = byId<HTMLElement>("buffer-chip");
@@ -97,9 +110,14 @@ const resetBindingsButton = byId<HTMLButtonElement>("reset-bindings");
 const bindingsGrid = byId<HTMLElement>("bindings-grid");
 const toast = byId<HTMLElement>("toast");
 
+const substitutionPanel = new SubstitutionPanel({
+  onSubstitute: (outId, inId) => client.substitute(outId, inId),
+});
+
 const teamEditor = new TeamEditor({
   onSetTeam: (teamId) => client.setTeam(teamId),
   onUpdateSheet: (sheet) => client.updateSheet(sheet),
+  onUpdateSettings: (settings) => client.updateSettings(settings),
   onToast: showToast,
   onAvailabilityChange: () => {
     if (currentState !== null) {
@@ -117,7 +135,9 @@ let currentState: GameClientState | null = null;
 let lastLobby: ServerLobbyStateMessage | null | undefined;
 let lastStatus: GameLinkStatus | null = null;
 let lastNotice: string | null = null;
+let lastSubstitutionNotice: string | null = null;
 let lastSetupId: string | null = null;
+let lastSetupRef: MatchSetupWire | null | undefined;
 let builder: WireViewBuilder | null = null;
 let latestView: MatchView | null = null;
 let autoJoinAttempted = false;
@@ -357,14 +377,19 @@ function applyState(state: GameClientState): void {
   }
 
   const setupId = state.setup?.matchId ?? null;
-  if (setupId !== lastSetupId) {
-    lastSetupId = setupId;
-    lastMatchEventSeq = 0;
-    if (matchEventTimer !== null) {
-      window.clearTimeout(matchEventTimer);
-      matchEventTimer = null;
+  const newMatch = setupId !== lastSetupId;
+  const setupChanged = state.setup !== lastSetupRef;
+  lastSetupId = setupId;
+  lastSetupRef = state.setup;
+  if (newMatch || setupChanged) {
+    if (newMatch) {
+      lastMatchEventSeq = 0;
+      if (matchEventTimer !== null) {
+        window.clearTimeout(matchEventTimer);
+        matchEventTimer = null;
+      }
+      matchEvent.hidden = true;
     }
-    matchEvent.hidden = true;
     builder =
       state.setup === null
         ? null
@@ -378,24 +403,40 @@ function applyState(state: GameClientState): void {
       hidePowerMeter();
       showLobby();
     } else {
-      if (controls === null && !controlsDialog.open) {
+      if (newMatch && controls === null && !controlsDialog.open) {
         controls = new DesktopControls(bindings);
         lastLoopAt = performance.now();
         controlAccumulator = 0;
       }
-      showMatch();
+      if (newMatch) {
+        showMatch();
+      }
       renderMatchIdentity(state);
     }
   }
   if (state.setup !== null) {
     renderMatchIdentity(state);
   }
+  const framePhase = client.latestSnapshot()?.match.phase ?? "deadBall";
+  substitutionPanel.render(
+    state.setup,
+    selfTeam,
+    framePhase !== "fullTime" && framePhase !== "shootout",
+  );
+  substitutionPanel.updateNotice(state.substitutionNotice);
 
   if (state.notice !== null && state.notice !== lastNotice) {
     showToast(state.notice);
     lastNotice = state.notice;
   } else if (state.notice === null) {
     lastNotice = null;
+  }
+
+  if (state.substitutionNotice !== lastSubstitutionNotice) {
+    lastSubstitutionNotice = state.substitutionNotice;
+    if (state.substitutionNotice !== null) {
+      showToast(state.substitutionNotice);
+    }
   }
 
   maybeAutoJoin(state);
@@ -630,16 +671,32 @@ function updateScoreboard(): void {
   scoreAway.textContent = String(match.scoreAway);
   scoreClock.textContent = formatMatchClock(match.clockSeconds);
   matchCards.textContent = formatCardCounts(frame);
+  scoreAdded.hidden =
+    match.addedTimeSeconds <= 0 || match.phase === "shootout";
+  if (match.addedTimeSeconds > 0) {
+    scoreAdded.textContent = `+${Math.ceil(match.addedTimeSeconds / 60)}`;
+  }
+  const shootout = currentState?.shootout ?? null;
+  scorePens.hidden = shootout === null;
+  if (shootout !== null) {
+    scorePens.textContent = `PENS ${shootout.homeScore}–${shootout.awayScore}`;
+  }
   scorePhase.textContent =
-    match.phase === "live"
-      ? match.half === 1
-        ? "1st half"
-        : "2nd half"
-      : match.phase === "halfTime"
-        ? "Half time"
-        : match.phase === "fullTime"
-          ? "Full time"
-          : "Dead ball";
+    match.phase === "shootout"
+      ? "Shootout"
+      : match.phase === "live"
+        ? match.half === 1
+          ? "1st half"
+          : match.half === 2
+            ? "2nd half"
+            : match.half === 3
+              ? "ET 1"
+              : "ET 2"
+        : match.phase === "halfTime"
+          ? "Half time"
+          : match.phase === "fullTime"
+            ? "Full time"
+            : "Dead ball";
   updateMatchEvent(match);
 }
 
@@ -687,6 +744,7 @@ function updateHud(state: GameClientState): void {
 
   updateScoreboard();
   updateControlPlayerChip(state);
+  updateStatsScreen(state);
 
   const paused = state.pausedReason !== null;
   const online = state.status === "online";
@@ -708,6 +766,96 @@ function updateHud(state: GameClientState): void {
     : paused
       ? "paused"
       : "live";
+}
+
+function updateStatsScreen(state: GameClientState): void {
+  const stats = state.matchStats;
+  if (stats === null) {
+    statsScreen.hidden = true;
+    statsRows.replaceChildren();
+    return;
+  }
+  const setup = state.setup;
+  const title = setup === null
+    ? "Match statistics"
+    : `${setup.home.name} v ${setup.away.name}`;
+  const score = setup === null
+    ? ""
+    : `${setup.home.name} ${latestScore("home")} – ${latestScore(
+        "away",
+      )} ${setup.away.name}`;
+  const notes: string[] = [];
+  if (stats.shootout !== null) {
+    notes.push(
+      `Penalties ${stats.shootout.homeScore}–${stats.shootout.awayScore}`,
+    );
+  }
+  if (stats.forfeitSide !== null) {
+    const side = stats.forfeitSide === "home" ? setup?.home.name : setup?.away.name;
+    notes.push(`${side ?? stats.forfeitSide} forfeited`);
+  } else if (stats.winner !== null) {
+    const side = stats.winner === "home" ? setup?.home.name : setup?.away.name;
+    notes.push(`${side ?? stats.winner} won`);
+  } else {
+    notes.push("Draw");
+  }
+  const note = notes.join(" · ");
+  const homeTicks = stats.home.possessionTicks;
+  const awayTicks = stats.away.possessionTicks;
+  const totalTicks = homeTicks + awayTicks;
+  const homePossession =
+    totalTicks === 0 ? 50 : Math.round((homeTicks / totalTicks) * 100);
+  const rows: readonly MatchStatsViewRow[] = [
+    {
+      label: "Possession",
+      home: `${homePossession}%`,
+      away: `${100 - homePossession}%`,
+    },
+    { label: "Shots", home: String(stats.home.shots), away: String(stats.away.shots) },
+    {
+      label: "On target",
+      home: String(stats.home.shotsOnTarget),
+      away: String(stats.away.shotsOnTarget),
+    },
+    { label: "Saves", home: String(stats.home.saves), away: String(stats.away.saves) },
+    {
+      label: "Passes",
+      home: `${stats.home.passesCompleted}/${stats.home.passes}`,
+      away: `${stats.away.passesCompleted}/${stats.away.passes}`,
+    },
+    { label: "Fouls", home: String(stats.home.fouls), away: String(stats.away.fouls) },
+    {
+      label: "Offsides",
+      home: String(stats.home.offsides),
+      away: String(stats.away.offsides),
+    },
+    {
+      label: "Yellow",
+      home: String(stats.home.yellowCards),
+      away: String(stats.away.yellowCards),
+    },
+    {
+      label: "Red",
+      home: String(stats.home.redCards),
+      away: String(stats.away.redCards),
+    },
+  ];
+  renderMatchStatsScreen(
+    statsScreen,
+    statsRows,
+    statsTitle,
+    statsScore,
+    statsNote,
+    { title, score, note, rows },
+  );
+}
+
+function latestScore(side: "home" | "away"): number {
+  const frame = client.latestSnapshot();
+  if (frame === null) {
+    return 0;
+  }
+  return side === "home" ? frame.match.scoreHome : frame.match.scoreAway;
 }
 
 function updateControlPlayerChip(state: GameClientState): void {
@@ -748,6 +896,34 @@ function updateOverlay(state: GameClientState): void {
     return;
   }
 
+  if (state.matchStats !== null) {
+    matchOverlay.hidden = true;
+    return;
+  }
+
+  if (state.varReview !== null) {
+    const review = state.varReview;
+    const subject =
+      review.kind === "goal"
+        ? "goal"
+        : review.kind === "penalty"
+          ? "penalty"
+          : "red card";
+    const title =
+      review.decision === "checking"
+        ? "VAR check"
+        : review.decision === "confirmed"
+          ? "Decision confirmed"
+          : "Decision overturned";
+    showOverlay(
+      title,
+      review.decision === "checking"
+        ? `Reviewing the ${subject} for ${review.side}.`
+        : `The ${subject} decision was ${review.decision}.`,
+    );
+    return;
+  }
+
   if (state.pausedReason !== null) {
     const seconds =
       state.pausedUntilMs === null
@@ -773,12 +949,24 @@ function updateOverlay(state: GameClientState): void {
 
   const match = frame.match;
   const score = `${match.scoreHome} – ${match.scoreAway}`;
+  if (match.phase === "shootout") {
+    const shootout = state.shootout;
+    const pens =
+      shootout === null
+        ? "Penalties are starting."
+        : `Penalties ${shootout.homeScore}–${shootout.awayScore}.`;
+    showOverlay("Penalty shootout", `${pens} ${score} after extra time.`);
+    return;
+  }
   if (match.phase === "fullTime") {
     showOverlay("Full time", `${score}. The match is complete.`);
     return;
   }
   if (match.phase === "halfTime") {
-    showOverlay("Half time", `${score}. The second half starts shortly.`);
+    showOverlay(
+      match.half >= 3 ? "Extra-time break" : "Half time",
+      `${score}. The next period starts shortly.`,
+    );
     return;
   }
   if (match.phase === "deadBall") {
@@ -802,7 +990,9 @@ function updateOverlay(state: GameClientState): void {
                 ? "Penalty"
                 : restart === "indirectFreeKick"
                   ? "Indirect free kick"
-                  : "Free kick";
+                  : restart === "dropBall"
+                    ? "Drop ball"
+                    : "Free kick";
     showOverlay(title, `${sideName} restart. ${score}.`);
     return;
   }

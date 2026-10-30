@@ -10,6 +10,7 @@ import {
   type FormationName,
   type LobbyPlayerWire,
   type LobbyRoomWire,
+  type MatchSettingsWire,
   type PlayerData,
   type PlayerPosition,
   type TeamSheet,
@@ -26,6 +27,7 @@ interface Selection {
 interface EditorCallbacks {
   readonly onSetTeam: (teamId: string) => void;
   readonly onUpdateSheet: (sheet: TeamSheet) => void;
+  readonly onUpdateSettings: (settings: MatchSettingsWire) => void;
   readonly onToast: (message: string) => void;
   readonly onAvailabilityChange: () => void;
 }
@@ -113,6 +115,15 @@ export class TeamEditor {
   private readonly buildUpSelect =
     byId<HTMLSelectElement>("tactics-build-up");
   private readonly importFile = byId<HTMLInputElement>("import-file");
+  private readonly halfLength =
+    byId<HTMLSelectElement>("match-half-length");
+  private readonly extraTime =
+    byId<HTMLInputElement>("match-extra-time");
+  private readonly shootout =
+    byId<HTMLInputElement>("match-shootout");
+  private readonly varEnabled = byId<HTMLInputElement>("match-var");
+  private readonly settingsOwner =
+    byId<HTMLElement>("settings-owner");
 
   private catalog: Catalog | null = null;
   private catalogError: string | null = null;
@@ -236,6 +247,25 @@ export class TeamEditor {
 
     this.bindTactics();
     this.bindTakerSelects();
+    for (const control of [
+      this.halfLength,
+      this.extraTime,
+      this.shootout,
+      this.varEnabled,
+    ]) {
+      control.addEventListener("change", () => {
+        const half = Number(this.halfLength.value);
+        if (half !== 4 && half !== 6 && half !== 8 && half !== 10) {
+          return;
+        }
+        this.callbacks.onUpdateSettings({
+          halfRealMinutes: half,
+          extraTime: this.extraTime.checked,
+          shootout: this.shootout.checked,
+          varEnabled: this.varEnabled.checked,
+        });
+      });
+    }
 
     void this.loadCatalog();
   }
@@ -268,6 +298,7 @@ export class TeamEditor {
       this.teamKind.value = this.entry.team.kind;
     }
     this.sheet = this.self?.sheet ?? null;
+    this.renderSettings(room);
     this.syncChip.textContent = "Synced with host";
     this.syncChip.dataset.state = "ok";
 
@@ -862,6 +893,23 @@ export class TeamEditor {
     this.renderTactics();
     this.renderPlayerDetail();
     this.callbacks.onUpdateSheet(sheet);
+  }
+
+  private renderSettings(room: LobbyRoomWire): void {
+    const settings = room.settings;
+    this.halfLength.value = String(settings.halfRealMinutes);
+    this.extraTime.checked = settings.extraTime;
+    this.shootout.checked = settings.shootout;
+    this.varEnabled.checked = settings.varEnabled;
+    const host = this.self?.host === true;
+    this.halfLength.disabled = !host;
+    this.extraTime.disabled = !host;
+    this.shootout.disabled = !host;
+    this.varEnabled.disabled = !host;
+    this.settingsOwner.textContent = host
+      ? "Host controls"
+      : "Set by host";
+    this.settingsOwner.dataset.state = host ? "ok" : "pending";
   }
 
   private renderPlayerDetail(): void {

@@ -61,7 +61,7 @@ export function tickPlayerTimers(
   dt: number,
 ): void {
   for (const player of players) {
-    if (player.sentOff) {
+    if (player.sentOff || player.unavailable) {
       continue;
     }
     player.kickCooldown = Math.max(0, player.kickCooldown - dt);
@@ -76,10 +76,13 @@ export function updateTeamMovement(
   dt: number,
 ): void {
   for (const player of team.players) {
-    if (player.sentOff) {
+    if (player.sentOff || player.unavailable) {
       continue;
     }
-    const staminaFactor = staminaSpeedFactor(player);
+    const injuryFactor = player.injury?.canPlayOn
+      ? player.injury.speedFactor
+      : 1;
+    const staminaFactor = staminaSpeedFactor(player) * injuryFactor;
     const maxSpeed = topSpeedFor(player.attributes) * staminaFactor;
     const baseAcceleration = accelerationFor(player.attributes) * staminaFactor;
     const brakingAcceleration =
@@ -174,9 +177,16 @@ function updateStamina(player: PlayerState, speed: number, dt: number): void {
       TUNING.player.staminaDrainScaleAtRating99,
       rating,
     );
+    const injuryFactor = player.injury?.canPlayOn
+      ? player.injury.staminaFactor
+      : 1;
     player.stamina = Math.max(
       0,
-      player.stamina - TUNING.player.staminaDrainPerSecond * scale * dt,
+      player.stamina -
+        TUNING.player.staminaDrainPerSecond *
+          scale *
+          injuryFactor *
+          dt,
     );
     return;
   }
@@ -231,7 +241,7 @@ export function resolvePlayerCollisions(
 }
 
 function resolvePair(a: PlayerState, b: PlayerState): void {
-  if (a.sentOff || b.sentOff) {
+  if (a.sentOff || b.sentOff || a.unavailable || b.unavailable) {
     return;
   }
   const dx = b.x - a.x;

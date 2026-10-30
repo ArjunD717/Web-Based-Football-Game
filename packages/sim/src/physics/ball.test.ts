@@ -58,6 +58,7 @@ const attributes: PlayerAttributes = {
 function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
   return {
     id: "home-9",
+    name: "Test Striker",
     team: "home",
     role: "ST",
     number: 9,
@@ -76,6 +77,8 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
     stamina: 1,
     yellowCards: 0,
     sentOff: false,
+    unavailable: false,
+    injury: null,
     isUserControlled: false,
     targetX: 0,
     targetY: 0,

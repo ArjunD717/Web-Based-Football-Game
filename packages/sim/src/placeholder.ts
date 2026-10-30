@@ -99,6 +99,10 @@ export function createPlaceholderTeam(
     },
     attackDirection: side === "home" ? 1 : -1,
     players,
+    bench: [],
+    substitutionsUsed: 0,
+    substitutionWindowsUsed: 0,
+    substitutionWindowUsed: false,
   };
 }
 
@@ -119,6 +123,7 @@ function createPlaceholderPlayer(args: CreatePlayerArgs): PlayerState {
 
   return {
     id: `${side}-${number}`,
+    name: `${DEFAULT_NAMES[side]} #${number}`,
     team: side,
     role: slot.role,
     number,
@@ -137,6 +142,8 @@ function createPlaceholderPlayer(args: CreatePlayerArgs): PlayerState {
     stamina: 1,
     yellowCards: 0,
     sentOff: false,
+    unavailable: false,
+    injury: null,
     isUserControlled: false,
     targetX: position.x,
     targetY: position.y,

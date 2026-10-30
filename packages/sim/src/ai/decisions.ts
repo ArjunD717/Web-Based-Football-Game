@@ -8,6 +8,7 @@ import {
 import { kickBall } from "../physics/ball";
 import { decisionRng } from "../random";
 import { beginKick } from "../rules/referee";
+import { isAvailablePlayer } from "../rules/management";
 import type {
   GoalGeometry,
   MatchState,
@@ -41,7 +42,7 @@ export function decideAndExecute(
   player: PlayerState,
 ): boolean {
   if (
-    player.sentOff ||
+    !isAvailablePlayer(player) ||
     player.kickCooldown > 0 ||
     player.isUserControlled ||
     state.referee.phase !== "live"
@@ -219,7 +220,7 @@ function bestPassOption(
   const offsideLine = offsideLineFor(state, team);
   let best: PassOption | null = null;
   for (const target of teammates) {
-    if (target === player || target.sentOff) {
+    if (target === player || !isAvailablePlayer(target)) {
       continue;
     }
     const distance = Math.hypot(target.x - player.x, target.y - player.y);
@@ -410,7 +411,7 @@ function passLaneClearance(
     from.team === "home" ? state.away.players : state.home.players;
   let minimum = Infinity;
   for (const opponent of opponents) {
-    if (opponent.sentOff) {
+    if (!isAvailablePlayer(opponent)) {
       continue;
     }
     minimum = Math.min(
@@ -436,7 +437,7 @@ function nearestOpponentDistance(
   const opponents =
     player.team === "home" ? state.away.players : state.home.players;
   for (const opponent of opponents) {
-    if (opponent.sentOff) {
+    if (!isAvailablePlayer(opponent)) {
       continue;
     }
     nearest = Math.min(
@@ -456,7 +457,7 @@ function nearestOpponentDistanceTo(
   const opponents = team.side === "home" ? state.away.players : state.home.players;
   let nearest = Infinity;
   for (const opponent of opponents) {
-    if (opponent.sentOff) {
+    if (!isAvailablePlayer(opponent)) {
       continue;
     }
     nearest = Math.min(
@@ -561,7 +562,7 @@ function executeOffsideIntent(
   const candidates = team.players.filter((candidate) => {
     if (
       candidate === player ||
-      candidate.sentOff ||
+      !isAvailablePlayer(candidate) ||
       candidate.role === "GK"
     ) {
       return false;
@@ -1033,7 +1034,7 @@ function closestOpponentTo(
     player.team === "home" ? state.away.players : state.home.players;
   let best: { player: PlayerState; distance: number } | null = null;
   for (const opponent of opponents) {
-    if (opponent.sentOff) {
+    if (!isAvailablePlayer(opponent)) {
       continue;
     }
     const distance = Math.hypot(

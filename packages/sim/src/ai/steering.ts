@@ -77,7 +77,11 @@ export function separatedTarget(
   while (attempts < 2) {
     let blocked = false;
     for (const teammate of teammates) {
-      if (teammate === self || teammate.sentOff) {
+      if (
+        teammate === self ||
+        teammate.sentOff ||
+        teammate.unavailable
+      ) {
         continue;
       }
       const distance = Math.hypot(

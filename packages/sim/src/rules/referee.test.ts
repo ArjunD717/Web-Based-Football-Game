@@ -152,12 +152,15 @@ describe("referee match flow", () => {
         kickoffDelaySeconds: 0.01,
       },
     });
-    makeLive(state);
+    state.referee.phase = "deadBall";
+    state.referee.timerSeconds = 0;
     state.referee.clockSeconds = state.rules.gameSecondsPerHalf - 0.5;
 
     stepMatch(state);
     expect(state.referee.phase).toBe("halfTime");
-    expect(state.referee.clockSeconds).toBe(state.rules.gameSecondsPerHalf);
+    expect(state.referee.clockSeconds).toBeGreaterThanOrEqual(
+      state.rules.gameSecondsPerHalf,
+    );
 
     for (let i = 0; i < 7; i += 1) {
       stepMatch(state);
@@ -177,14 +180,15 @@ describe("referee match flow", () => {
       seed: 25,
       rules: { realHalfSeconds: 1 },
     });
-    makeLive(state);
+    state.referee.phase = "deadBall";
+    state.referee.timerSeconds = 0;
     state.referee.half = 2;
     state.referee.clockSeconds = state.rules.gameSecondsPerHalf * 2 - 0.5;
 
     stepMatch(state);
 
     expect(state.referee.phase).toBe("fullTime");
-    expect(state.referee.clockSeconds).toBe(
+    expect(state.referee.clockSeconds).toBeGreaterThanOrEqual(
       state.rules.gameSecondsPerHalf * 2,
     );
   });

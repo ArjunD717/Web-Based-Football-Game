@@ -17,6 +17,7 @@ import type { ClientConnection } from "../client";
 import type { Logger } from "../create-server";
 import { loadTeamRegistry, type TeamRegistry } from "../data/registry";
 import { RoomManager } from "./room-manager";
+import type { MatchState } from "@fb/sim";
 
 const silentLogger: Logger = {
   info: () => undefined,
@@ -472,6 +473,159 @@ describe("disconnect and reconnect", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("match management", () => {
+  it("applies host settings and rejects guest changes", () => {
+    const fixture = setupRoom();
+    fixture.manager.onMessage(fixture.host, { t: "setReady", ready: true });
+
+    fixture.manager.onMessage(fixture.host, {
+      t: "updateSettings",
+      settings: {
+        halfRealMinutes: 8,
+        extraTime: true,
+        shootout: true,
+        varEnabled: true,
+      },
+    });
+    expect(fixture.host.lastLobby().room?.settings).toEqual({
+      halfRealMinutes: 8,
+      extraTime: true,
+      shootout: true,
+      varEnabled: true,
+    });
+    expect(fixture.guest.lastLobby().room?.settings).toEqual({
+      halfRealMinutes: 8,
+      extraTime: true,
+      shootout: true,
+      varEnabled: true,
+    });
+    expect(
+      fixture.host.lastLobby().room?.players.find(
+        (player) => player.seat === 0,
+      )?.ready,
+    ).toBe(false);
+
+    fixture.manager.onMessage(fixture.guest, {
+      t: "updateSettings",
+      settings: {
+        halfRealMinutes: 4,
+        extraTime: false,
+        shootout: false,
+        varEnabled: false,
+      },
+    });
+    expect(fixture.guest.lastMessageType("error")?.code).toBe("not_host");
+    expect(fixture.host.lastLobby().room?.settings.halfRealMinutes).toBe(8);
+  });
+
+  it("applies a queued substitution at a stoppage and updates the roster", () => {
+    const fixture = setupRoom();
+    startReadyMatch(fixture);
+    const setup = fixture.host.lastMatchStart().setup;
+    const outgoing = setup.home.players[1];
+    const incoming = setup.home.bench[0];
+    if (outgoing === undefined || incoming === undefined) {
+      throw new Error("Match setup is missing players");
+    }
+
+    fixture.manager.onMessage(fixture.host, {
+      t: "substitute",
+      outId: outgoing.id,
+      inId: incoming.id,
+    });
+
+    const notice = fixture.host.lastMessageType("substitution");
+    expect(notice?.status).toBe("applied");
+    const roster = fixture.host.lastMessageType("roster");
+    expect(roster?.side).toBe("home");
+    expect(roster?.players.some((player) => player.id === incoming.id)).toBe(
+      true,
+    );
+    expect(roster?.players.some((player) => player.id === outgoing.id)).toBe(
+      false,
+    );
+    expect(roster?.bench.some((player) => player.id === incoming.id)).toBe(
+      false,
+    );
+    expect(fixture.guest.lastMessageType("roster")?.players).toEqual(
+      roster?.players,
+    );
+
+    fixture.manager.onMessage(fixture.host, { t: "resync" });
+    const homeRosters = fixture.host.json.filter(
+      (
+        message,
+      ): message is Extract<ServerMessage, { t: "roster" }> =>
+        message.t === "roster" && message.side === "home",
+    );
+    expect(homeRosters.at(-1)?.players).toEqual(
+      roster?.players,
+    );
+  });
+
+  it("rejects a substitution after the player has left the pitch", () => {
+    const fixture = setupRoom();
+    startReadyMatch(fixture);
+    const setup = fixture.host.lastMatchStart().setup;
+    const outgoing = setup.home.players[1];
+    const incoming = setup.home.bench[0];
+    if (outgoing === undefined || incoming === undefined) {
+      throw new Error("Match setup is missing players");
+    }
+    fixture.manager.onMessage(fixture.host, {
+      t: "substitute",
+      outId: outgoing.id,
+      inId: incoming.id,
+    });
+    fixture.manager.onMessage(fixture.host, {
+      t: "substitute",
+      outId: outgoing.id,
+      inId: incoming.id,
+    });
+    expect(fixture.host.lastMessageType("error")?.code).toBe(
+      "invalid_substitution",
+    );
+  });
+
+  it("broadcasts match statistics once at full time", () => {
+    const fixture = setupRoom();
+    startReadyMatch(fixture);
+    const internal = fixture.manager as unknown as {
+      rooms: Map<
+        string,
+        {
+          match: {
+            state: MatchState;
+            resultSent: boolean;
+            finished: boolean;
+          } | null;
+        }
+      >;
+    };
+    const match = [...internal.rooms.values()][0]?.match;
+    if (match === null || match === undefined) {
+      throw new Error("Room has no match");
+    }
+    match.state.referee.phase = "fullTime";
+    fixture.manager.tick(1 / 60);
+
+    const stats = fixture.host.lastMessageType("matchStats");
+    expect(stats).not.toBeNull();
+    expect(stats?.stats.home.shots).toBe(0);
+    expect(stats?.stats.away.shots).toBe(0);
+    expect(stats?.stats.winner).toBeNull();
+    expect(
+      fixture.host.json.filter((message) => message.t === "matchStats"),
+    ).toHaveLength(1);
+    expect(fixture.guest.lastMessageType("matchStats")).not.toBeNull();
+
+    fixture.manager.onMessage(fixture.host, { t: "resync" });
+    expect(
+      fixture.host.json.filter((message) => message.t === "matchStats"),
+    ).toHaveLength(2);
   });
 });
 

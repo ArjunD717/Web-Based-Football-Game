@@ -167,6 +167,43 @@
                 </div>
               </div>
 
+              <div class="match-options" aria-label="Match options">
+                <div class="match-options-head">
+                  <div>
+                    <p class="eyebrow">Match options</p>
+                    <h3>Competition rules</h3>
+                  </div>
+                  <span id="settings-owner" class="chip">Host controls</span>
+                </div>
+                <div class="match-options-grid">
+                  <label class="editor-select">
+                    <span>Half length</span>
+                    <select id="match-half-length">
+                      <option value="4">4 minutes</option>
+                      <option value="6">6 minutes</option>
+                      <option value="8">8 minutes</option>
+                      <option value="10">10 minutes</option>
+                    </select>
+                  </label>
+                  <label class="option-check">
+                    <input id="match-extra-time" type="checkbox" />
+                    <span>Extra time</span>
+                  </label>
+                  <label class="option-check">
+                    <input id="match-shootout" type="checkbox" />
+                    <span>Penalty shootout</span>
+                  </label>
+                  <label class="option-check">
+                    <input id="match-var" type="checkbox" />
+                    <span>VAR-lite</span>
+                  </label>
+                </div>
+                <p class="editor-rules">
+                  Knockout finish options apply when the score is level. VAR-lite
+                  checks goals, penalties and direct red cards for three seconds.
+                </p>
+              </div>
+
               <div id="club-preview" class="club-preview"></div>
               <p class="editor-rules">
                 Formation rules: exactly 1 goalkeeper in the XI; bench 5-9 with a
@@ -298,10 +335,13 @@
             <span class="score-sep" aria-hidden="true">–</span>
             <strong id="score-away">0</strong>
             <span id="score-clock" class="score-clock mono">00:00</span>
+            <span id="score-added" class="score-added mono" hidden></span>
             <span id="score-phase" class="score-phase">1st half</span>
+            <span id="score-pens" class="score-pens mono" hidden></span>
             <span id="match-cards" class="score-discipline mono">YC 0–0 · RC 0–0</span>
           </div>
           <div class="match-bar-actions">
+            <button id="open-subs" class="button small" type="button" hidden>Subs</button>
             <span id="match-chip" class="chip live" data-state="live">Live</span>
             <a class="ghost-link" href="/practice.html">Practice</a>
             <button id="leave-match" class="button" type="button">Leave</button>
@@ -339,6 +379,18 @@
                 <p id="overlay-detail">Waiting for the server.</p>
               </div>
             </div>
+
+            <section id="stats-screen" class="stats-screen" aria-label="Full-time match statistics" hidden>
+              <div class="stats-head">
+                <div>
+                  <p class="eyebrow">Full time</p>
+                  <h2 id="stats-title">Match statistics</h2>
+                </div>
+                <strong id="stats-score" class="stats-score">0 – 0</strong>
+              </div>
+              <p id="stats-note" class="stats-note"></p>
+              <div id="stats-rows" class="stats-rows"></div>
+            </section>
           </div>
 
           <div class="hud">
@@ -397,6 +449,36 @@
       </main>
 
       <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+      <dialog id="subs-dialog" class="controls-dialog subs-dialog">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">Matchday squad</p>
+            <h2>Substitutions</h2>
+          </div>
+          <button id="close-subs" class="button" type="button">Close</button>
+        </div>
+        <p class="dialog-copy">
+          Requests are queued and applied at the next stoppage or half-time.
+          Five substitutions are allowed in three windows, plus one in extra
+          time.
+        </p>
+        <div class="subs-form">
+          <label class="editor-select">
+            <span>Player off</span>
+            <select id="subs-out"></select>
+          </label>
+          <label class="editor-select">
+            <span>Player on</span>
+            <select id="subs-in"></select>
+          </label>
+          <button id="subs-submit" class="button primary" type="button">Queue substitution</button>
+        </div>
+        <p id="subs-status" class="editor-status" role="status"></p>
+        <div class="dialog-actions">
+          <span id="subs-bench-count" class="chip">Bench: 7</span>
+        </div>
+      </dialog>
 
       <dialog id="controls-dialog" class="controls-dialog">
         <div class="dialog-head">

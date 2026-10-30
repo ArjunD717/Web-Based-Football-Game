@@ -6,13 +6,16 @@ import {
   type TeamSheet,
   type MatchSetupWire,
   type SnapshotFrame,
+  type WireMatchStats,
   type WirePitch,
   type WireRosterPlayer,
+  type WireShootout,
   type WireTeam,
   TUNING,
 } from "@fb/shared";
 import {
   createMatchFromTeams,
+  type MatchRules,
   type MatchState,
   type Pitch,
   type TeamState,
@@ -31,6 +34,7 @@ export interface ServerMatchTeam {
 
 export interface CreateServerMatchOptions {
   readonly seed?: number;
+  readonly rules?: Partial<MatchRules>;
   readonly home: ServerMatchTeam;
   readonly away: ServerMatchTeam;
 }
@@ -41,6 +45,7 @@ export function createServerMatch(
   const seed = options.seed ?? randomBytes(4).readUInt32LE(0);
   const state = createMatchFromTeams({
     seed,
+    ...(options.rules === undefined ? {} : { rules: options.rules }),
     home: {
       team: options.home.team,
       sheet: options.home.sheet,
@@ -99,6 +104,7 @@ export function buildSnapshotFrame(
       phase: state.referee.phase,
       half: state.referee.half,
       clockSeconds: state.referee.clockSeconds,
+      addedTimeSeconds: state.referee.addedTimeSeconds,
       scoreHome: state.referee.scoreHome,
       scoreAway: state.referee.scoreAway,
       restartType: state.referee.restart?.type ?? null,
@@ -130,6 +136,7 @@ export function buildSnapshotFrame(
       state: player.state,
       stamina: player.stamina,
       sentOff: player.sentOff,
+      unavailable: player.unavailable,
       yellowCards: player.yellowCards,
     })),
   };
@@ -158,10 +165,66 @@ function buildTeam(team: TeamState): WireTeam {
     side: team.side,
     name: team.name,
     colors: { ...team.colors },
+    ...buildWireRoster(team),
+  };
+}
+
+export function buildWireRoster(team: TeamState): {
+  readonly players: WireRosterPlayer[];
+  readonly bench: WireRosterPlayer[];
+} {
+  return {
     players: team.players.map<WireRosterPlayer>((player) => ({
       id: player.id,
+      name: player.name,
       number: player.number,
       goalkeeper: player.role === "GK",
     })),
+    bench: team.bench.map<WireRosterPlayer>((substitute) => ({
+      id: substitute.player.id,
+      name: substitute.player.name,
+      number: substitute.player.number,
+      goalkeeper: substitute.player.role === "GK",
+    })),
+  };
+}
+
+export function buildShootoutWire(state: MatchState): WireShootout | null {
+  const shootout = state.referee.shootout;
+  if (shootout === null) {
+    return null;
+  }
+  return {
+    firstSide: shootout.firstSide,
+    homeScore: shootout.homeScore,
+    awayScore: shootout.awayScore,
+    index: shootout.index,
+    suddenDeath: shootout.suddenDeath,
+    winner: shootout.winner,
+  };
+}
+
+export function buildMatchStats(state: MatchState): WireMatchStats {
+  const home = state.stats.home;
+  const away = state.stats.away;
+  const shootout = buildShootoutWire(state);
+  const forfeit = state.referee.forfeitSide;
+  const winner =
+    forfeit !== null
+      ? forfeit === "home"
+        ? "away"
+        : "home"
+      : shootout?.winner ??
+        (state.referee.scoreHome === state.referee.scoreAway
+          ? null
+          : state.referee.scoreHome > state.referee.scoreAway
+            ? "home"
+            : "away");
+  return {
+    home: { ...home },
+    away: { ...away },
+    shootout,
+    forfeitSide: forfeit,
+    winner,
   };
 }

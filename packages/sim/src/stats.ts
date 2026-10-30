@@ -16,6 +16,8 @@ export function createTeamMatchStats(): TeamMatchStats {
     yellowCards: 0,
     redCards: 0,
     saves: 0,
+    passes: 0,
+    passesCompleted: 0,
     possessionTicks: 0,
   };
 }
@@ -64,7 +66,7 @@ export function recordPossessionTick(state: MatchState): void {
   for (const side of ["home", "away"] as const) {
     const team = side === "home" ? state.home : state.away;
     for (const player of team.players) {
-      if (player.sentOff) {
+      if (player.sentOff || player.unavailable) {
         continue;
       }
       const distance = Math.hypot(

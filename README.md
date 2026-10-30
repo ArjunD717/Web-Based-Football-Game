@@ -2,10 +2,11 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 9**:
+both devices are thin clients. This repository is at **Milestone 10**:
 server-authoritative matches, a live two-player team editor, the referee laws,
-the data pipeline, a layered attribute-driven AI, and selectable club and
-national teams backed by a validated 26-man call-up registry.
+the data pipeline, a layered attribute-driven AI, selectable club and national
+teams, and a complete match-management layer with substitutions, injuries,
+added time, extra time, shootouts, VAR-lite and full-time statistics.
 
 ## Requirements
 
@@ -114,6 +115,60 @@ Useful environment overrides:
 | `FB_DATA_DIR` | `data` | Generated public football data |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
 
+## Milestone 10 scope
+
+Implemented:
+
+- The draft room exposes host-only competition options: half length (4, 6, 8 or
+  10 real minutes), extra time, penalty shootout and VAR-lite. Settings are
+  validated, broadcast to both devices and reset both ready flags
+- Matchday benches enter the simulation. Requests are queued from the in-match
+  Substitutions dialog and applied at the next natural stoppage or half-time;
+  the server enforces five substitutions in three windows (plus one substitution
+  and one window in extra time), keeps a goalkeeper in goal, forbids replacing
+  a sent-off player and broadcasts the updated roster to both clients
+- The game clock scales real-half minutes to 45/90/105/120 game minutes. Stoppages
+  accumulate an added-time board (goals, cards, substitutions, injuries, VAR);
+  the period ends at the next natural pause after the board expires
+- Extra time and a best-of-five penalty shootout (sudden death when required)
+  are implemented as referee state, with deterministic taker selection,
+  conversion/save checks and shootout events
+- Goals, penalties and direct red cards can trigger a three-second VAR-lite
+  review. An overturned review restarts play correctly or cancels the penalty;
+  confirmed red cards are issued after the check
+- Injuries are assessed deterministically from tackle severity and
+  injury-proneness; minor knocks can be played through at reduced speed/stamina,
+  serious injuries use a stretcher delay, and drop balls restart non-foul
+  stoppages
+- Goalkeeper possession uses the configurable eight-second hold law; a team
+  below seven available players forfeits automatically
+- The protocol adds host settings commands, queued substitution commands,
+  roster/notice broadcasts, match statistics, VAR reviews and shootout state.
+  Snapshots carry the new dead-ball, half-time, shootout and full-time phases
+- The client renders added time, extra time period labels, shootout score,
+  VAR review boards, the substitution dialog and a full-time statistics screen
+  with possession, shots, saves, passes, fouls, offsides and cards
+- Tests cover substitution windows and limits, goalkeeper replacement, injury
+  risk, shootout alternation/clinching and extra-time-to-shootout transitions,
+  server settings/roster/statistics flow, and protocol parsing for every new
+  message
+
+Known M10 limitations (by design):
+
+- Substitutions are requested through the in-match dialog; the AI does not make
+  tactical substitutions or automatically replace an injured AI player
+- The goalkeeper eight-second hold target is tuned in `TUNING.referee`, not
+  exposed as a per-room setting
+- The match clock and added-time board are deterministic simulation state; there
+  is no fourth-official board animation or broadcast-style stoppage summary yet
+- VAR-lite freezes the simulation for a fixed three seconds and uses the
+  deterministic severity margins in `TUNING.var`; there is no pitch-side monitor
+  UI or animated review sequence
+- Shirt numbers for substitutes come from the authored squad data; squad-number
+  changes are not editable in the pre-match editor
+- Competition formats (two legs, aggregate, away goals and cross-match
+  suspensions) remain future work
+
 ## Milestone 9 scope
 
 Implemented:
@@ -160,8 +215,8 @@ Known M9 limitations (by design):
   authored per nation
 - The sample data remains clearly labelled fake data; the real CSV registry is
   still supplied by the user
-- Match substitutions and injuries remain M10 work, so the national bench is
-  drafted and validated but only the starting XI enters the simulation
+- National reserve players outside the 26-man call-up cannot be added to the
+  matchday bench in the editor
 
 ## Milestone 8 scope
 
@@ -218,8 +273,8 @@ Known M8 limitations (by design):
   exposed as a lobby selector
 - Set-piece routines are positional AI, not authored plays; the user cannot yet
   resize the defensive wall in-match
-- Substitutions, injuries, added time, extra time, shootouts and VAR remain
-  M10/M11 work; AI teams use the starting XI only
+- AI-controlled sides do not make tactical substitutions or injury
+  replacements automatically; user-controlled sides use the matchday bench
 - AI is server-authoritative and runs without local prediction; client
   reconciliation remains a later feature flag
 - Offside active involvement is modelled with a 2.1 m ball proximity plus a
@@ -274,9 +329,8 @@ Implemented:
 
 Known M7 limitations (by design):
 
-- In-match substitutions, injuries and send-off replacements remain M10 work;
-  the draft bench/reserves are validated now but only the starting XI enters the
-  simulation
+- The draft validates the bench and reserves; M10 adds in-match substitutions,
+  injuries, send-off replacements, added time, extra time, shootouts and VAR
 - Tactics and set-piece taker choices are stored and synced authoritatively;
   their AI/gameplay influence is implemented in the M8 tactical brain
 - Formation shapes are fixed by the chosen preset; free-form slot dragging and
@@ -448,10 +502,9 @@ Implemented:
 
 Not implemented yet (by milestone design):
 
-- Substitutions, added time, the "next natural pause" half-end law, injuries,
-  extra time and penalty shootouts (M10)
-- VAR-lite, competitions, suspensions carried across matches and referee
-  strictness exposed in the lobby UI (the sim API accepts it)
+- Competition structures, two-legged ties, aggregate scoring and suspensions
+  carried across matches
+- Referee strictness exposed in the lobby UI (the sim API accepts it)
 - Skill moves, charged/driven passes, first-time pass modifiers, manual pause
   and controller vibration
 - Gamepad rebinding; only the standard mapping is wired

@@ -1,5 +1,6 @@
 // packages/sim/src/data/team.ts
 import {
+  TUNING,
   positionFamiliarity,
   type PlayerData,
   type TeamData,
@@ -13,6 +14,7 @@ import {
 import type {
   Pitch,
   PlayerState,
+  SubstitutePlayer,
   TeamSetPieceTakers,
   TeamSide,
   TeamState,
@@ -104,6 +106,7 @@ export function createTeamFromData(
     const position = baseFormationPosition(pitch, side, formationSlot);
     return {
       id: `${side}:${player.id}`,
+      name: player.name,
       team: side,
       role: formationSlot.role,
       number: team.kind === "nation" ? index + 1 : player.kitNumber,
@@ -122,10 +125,59 @@ export function createTeamFromData(
       stamina: 1,
       yellowCards: 0,
       sentOff: false,
+      unavailable: false,
+      injury: null,
       isUserControlled: false,
       targetX: position.x,
       targetY: position.y,
       targetSpeed: 0,
+    };
+  });
+
+  const bench: SubstitutePlayer[] = sheet.bench.map((playerId, index) => {
+    if (seen.has(playerId)) {
+      throw new Error(`${team.id}: duplicate bench player ${playerId}`);
+    }
+    seen.add(playerId);
+    const player = players.get(playerId);
+    if (player === undefined) {
+      throw new Error(`${team.id}: missing bench player ${playerId}`);
+    }
+    if (team.kind === "club" && player.clubId !== team.id) {
+      throw new Error(`${team.id}: bench player ${player.id} belongs to ${player.clubId}`);
+    }
+    const role = simRole(player.preferredPosition);
+    return {
+      player: {
+        id: `${side}:${player.id}`,
+        name: player.name,
+        team: side,
+        role,
+        number: team.kind === "nation" ? 12 + index : player.kitNumber,
+        attributes: mapPlayerAttributes(player),
+        roleFamiliarity: positionFamiliarity(player, player.preferredPosition),
+        formationX: 0.5,
+        formationY: 0.5,
+        x: side === "home" ? -TUNING.player.radiusM : pitch.lengthM + TUNING.player.radiusM,
+        y: pitch.centreY,
+        vx: 0,
+        vy: 0,
+        facing: side === "home" ? 0 : Math.PI,
+        state: "idle",
+        actionTimer: 0,
+        kickCooldown: 0,
+        stamina: 1,
+        yellowCards: 0,
+        sentOff: false,
+        unavailable: false,
+        injury: null,
+        isUserControlled: false,
+        targetX: side === "home" ? -TUNING.player.radiusM : pitch.lengthM + TUNING.player.radiusM,
+        targetY: pitch.centreY,
+        targetSpeed: 0,
+      },
+      positions: player.positions,
+      preferredPosition: player.preferredPosition,
     };
   });
 
@@ -157,5 +209,9 @@ export function createTeamFromData(
     takers,
     attackDirection: side === "home" ? 1 : -1,
     players: playerStates,
+    bench,
+    substitutionsUsed: 0,
+    substitutionWindowsUsed: 0,
+    substitutionWindowUsed: false,
   };
 }

@@ -13,11 +13,15 @@ import {
   readSnapshotHeader,
   type ClientMessage,
   type InputFrame,
+  type MatchSettingsWire,
   type MatchSetupWire,
   type ServerLobbyStateMessage,
   type ServerMessage,
   type SnapshotFrame,
   type TeamSheet,
+  type WireMatchStats,
+  type WireShootout,
+  type WireVarReview,
 } from "@fb/shared";
 import { SnapshotInterpolator } from "./interpolation";
 
@@ -42,6 +46,10 @@ export interface GameClientState {
   readonly lastServerTick: number;
   readonly bufferedSnapshots: number;
   readonly notice: string | null;
+  readonly matchStats: WireMatchStats | null;
+  readonly varReview: WireVarReview | null;
+  readonly shootout: WireShootout | null;
+  readonly substitutionNotice: string | null;
 }
 
 const SESSION_TOKEN_KEY = "fb.session-token";
@@ -63,6 +71,10 @@ export class GameClient {
     lastServerTick: 0,
     bufferedSnapshots: 0,
     notice: null,
+    matchStats: null,
+    varReview: null,
+    shootout: null,
+    substitutionNotice: null,
   };
   private socket: WebSocket | null = null;
   private stopped = true;
@@ -122,6 +134,14 @@ export class GameClient {
 
   setTeam(teamId: string): void {
     this.send({ t: "setTeam", teamId });
+  }
+
+  updateSettings(settings: MatchSettingsWire): void {
+    this.send({ t: "updateSettings", settings });
+  }
+
+  substitute(outId: string, inId: string): void {
+    this.send({ t: "substitute", outId, inId });
   }
 
   updateSheet(sheet: TeamSheet): void {
@@ -282,6 +302,37 @@ export class GameClient {
           detail: "Match resumed",
         });
         break;
+      case "roster": {
+        const setup = this.state.setup;
+        if (setup === null) {
+          break;
+        }
+        this.update({
+          setup: {
+            ...setup,
+            [message.side]: {
+              ...setup[message.side],
+              players: message.players,
+              bench: message.bench,
+            },
+          },
+        });
+        break;
+      }
+      case "substitution":
+        this.update({
+          substitutionNotice: `${message.status}: ${message.message}`,
+        });
+        break;
+      case "matchStats":
+        this.update({ matchStats: message.stats });
+        break;
+      case "varReview":
+        this.update({ varReview: message.review });
+        break;
+      case "shootout":
+        this.update({ shootout: message.shootout });
+        break;
       case "roomClosed":
         this.clearMatch();
         this.update({
@@ -394,6 +445,10 @@ export class GameClient {
       pausedReason: null,
       pausedUntilMs: null,
       detail: "Match live",
+      matchStats: null,
+      varReview: null,
+      shootout: null,
+      substitutionNotice: null,
     });
   }
 
@@ -407,6 +462,10 @@ export class GameClient {
       bufferedSnapshots: 0,
       pausedReason: null,
       pausedUntilMs: null,
+      matchStats: null,
+      varReview: null,
+      shootout: null,
+      substitutionNotice: null,
     });
   }
 

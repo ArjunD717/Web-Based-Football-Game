@@ -360,7 +360,7 @@ function resolveContactsForTeam(
   let contact: BallContact | null = null;
 
   for (const player of players) {
-    if (player.sentOff) {
+    if (player.sentOff || player.unavailable) {
       continue;
     }
     if (ball.z - BALL_RADIUS > TUNING.player.heightM) {

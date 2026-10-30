@@ -6,6 +6,7 @@ import {
 } from "@fb/shared";
 import {
   heldBySetPiece,
+  isAvailablePlayer,
   isInsidePenaltyArea,
   playPass,
   playShot,
@@ -276,7 +277,9 @@ function findPlayer(
   if (id === null) {
     return null;
   }
-  return players.find((player) => player.id === id && !player.sentOff) ?? null;
+  return players.find(
+    (player) => player.id === id && isAvailablePlayer(player),
+  ) ?? null;
 }
 
 function nearestCandidate(
@@ -292,7 +295,7 @@ function nearestCandidate(
   for (const player of team.players) {
     if (
       player === exclude ||
-      player.sentOff ||
+      !isAvailablePlayer(player) ||
       heldBySetPiece(state, player)
     ) {
       continue;
@@ -322,7 +325,7 @@ function nextSwitchCandidate(
   const candidates = team.players
     .filter(
       (player) =>
-        !player.sentOff &&
+        isAvailablePlayer(player) &&
         !heldBySetPiece(state, player) &&
         (player.role !== "GK" || includeGoalkeeper),
     )
@@ -344,7 +347,7 @@ function chooseAutoSwitch(
   active: PlayerState | null,
   ballInOwnBox: boolean,
 ): PlayerState | null {
-  if (active === null || active.sentOff) {
+  if (active === null || !isAvailablePlayer(active)) {
     return nearestCandidate(state, side, ballInOwnBox, null);
   }
   if (active.role === "GK" && !ballInOwnBox) {

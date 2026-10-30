@@ -81,5 +81,6 @@ export function mapPlayerAttributes(player: PlayerData): PlayerAttributes {
     skillMoves: player.skillMoves,
     weakFoot: player.weakFoot,
     goalkeeper: player.goalkeeper,
+    injuryProneness: player.injuryProneness,
   };
 }

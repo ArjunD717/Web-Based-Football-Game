@@ -194,6 +194,7 @@ describe("attribute mapping", () => {
       skillMoves: 3,
       weakFoot: 3,
       goalkeeper: null,
+      injuryProneness: 40,
     });
     expect(topSpeedFor(mapped)).toBeCloseTo(10.2545, 3);
   });

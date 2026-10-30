@@ -30,6 +30,10 @@ export const SERVER_ERROR_CODES = [
   "not_in_room",
   "invalid_team",
   "invalid_sheet",
+  "invalid_substitution",
+  "invalid_settings",
+  "not_host",
+  "match_not_live",
 ] as const;
 
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
@@ -85,6 +89,34 @@ export interface ClientUpdateSheetMessage {
   readonly sheet: TeamSheet;
 }
 
+/** Host-only competition options chosen in the draft room. */
+export interface MatchSettingsWire {
+  /** Real-time half length in minutes: one of 4, 6, 8 or 10. */
+  readonly halfRealMinutes: 4 | 6 | 8 | 10;
+  readonly extraTime: boolean;
+  readonly shootout: boolean;
+  readonly varEnabled: boolean;
+}
+
+export const DEFAULT_MATCH_SETTINGS: MatchSettingsWire = {
+  halfRealMinutes: 6,
+  extraTime: false,
+  shootout: false,
+  varEnabled: false,
+};
+
+export interface ClientUpdateSettingsMessage {
+  readonly t: "updateSettings";
+  readonly settings: MatchSettingsWire;
+}
+
+export interface ClientSubstituteMessage {
+  readonly t: "substitute";
+  /** Simulation player ID, for example `home:p17`. */
+  readonly outId: string;
+  readonly inId: string;
+}
+
 export interface ClientLeaveRoomMessage {
   readonly t: "leaveRoom";
 }
@@ -101,6 +133,8 @@ export type ClientMessage =
   | ClientSetReadyMessage
   | ClientSetTeamMessage
   | ClientUpdateSheetMessage
+  | ClientUpdateSettingsMessage
+  | ClientSubstituteMessage
   | ClientLeaveRoomMessage
   | ClientResyncMessage;
 
@@ -150,6 +184,7 @@ export interface WireTeamColors {
 
 export interface WireRosterPlayer {
   readonly id: string;
+  readonly name: string;
   readonly number: number;
   readonly goalkeeper: boolean;
 }
@@ -159,6 +194,7 @@ export interface WireTeam {
   readonly name: string;
   readonly colors: WireTeamColors;
   readonly players: readonly WireRosterPlayer[];
+  readonly bench: readonly WireRosterPlayer[];
 }
 
 /** Pitch dimensions as sent over the wire; renderer rebuilds derived geometry. */
@@ -207,6 +243,7 @@ export interface LobbyRoomWire {
   readonly phase: LobbyPhase;
   readonly players: readonly LobbyPlayerWire[];
   readonly reconnectSeconds: number | null;
+  readonly settings: MatchSettingsWire;
 }
 
 export interface LobbyYouWire {
@@ -243,6 +280,71 @@ export interface ServerRoomClosedMessage {
   readonly reason: string;
 }
 
+export interface WireTeamMatchStats {
+  readonly goals: number;
+  readonly shots: number;
+  readonly shotsOnTarget: number;
+  readonly fouls: number;
+  readonly offsides: number;
+  readonly yellowCards: number;
+  readonly redCards: number;
+  readonly saves: number;
+  readonly passes: number;
+  readonly passesCompleted: number;
+  readonly possessionTicks: number;
+}
+
+export interface WireShootout {
+  readonly firstSide: WireTeamSide;
+  readonly homeScore: number;
+  readonly awayScore: number;
+  readonly index: number;
+  readonly suddenDeath: boolean;
+  readonly winner: WireTeamSide | null;
+}
+
+export interface WireMatchStats {
+  readonly home: WireTeamMatchStats;
+  readonly away: WireTeamMatchStats;
+  readonly shootout: WireShootout | null;
+  readonly forfeitSide: WireTeamSide | null;
+  readonly winner: WireTeamSide | null;
+}
+
+export interface ServerRosterMessage {
+  readonly t: "roster";
+  readonly side: WireTeamSide;
+  readonly players: readonly WireRosterPlayer[];
+  readonly bench: readonly WireRosterPlayer[];
+}
+
+export interface ServerSubstitutionMessage {
+  readonly t: "substitution";
+  readonly status: "queued" | "applied" | "rejected";
+  readonly message: string;
+}
+
+export interface ServerMatchStatsMessage {
+  readonly t: "matchStats";
+  readonly stats: WireMatchStats;
+}
+
+export interface WireVarReview {
+  readonly kind: "goal" | "penalty" | "redCard";
+  readonly side: WireTeamSide;
+  readonly decision: "checking" | "confirmed" | "overturned";
+}
+
+export interface ServerVarReviewMessage {
+  readonly t: "varReview";
+  readonly review: WireVarReview | null;
+}
+
+export interface ServerShootoutMessage {
+  readonly t: "shootout";
+  readonly shootout: WireShootout | null;
+}
+
 export type ServerMessage =
   | ServerWelcomeMessage
   | ServerPresenceMessage
@@ -252,7 +354,12 @@ export type ServerMessage =
   | ServerMatchStartMessage
   | ServerMatchPausedMessage
   | ServerMatchResumedMessage
-  | ServerRoomClosedMessage;
+  | ServerRoomClosedMessage
+  | ServerRosterMessage
+  | ServerSubstitutionMessage
+  | ServerMatchStatsMessage
+  | ServerVarReviewMessage
+  | ServerShootoutMessage;
 
 export function encodeClientMessage(message: ClientMessage): string {
   return JSON.stringify(message);
@@ -312,6 +419,16 @@ export function parseClientMessage(text: string): ClientMessage | null {
       const sheet = parseTeamSheet(value.sheet);
       return sheet === null ? null : { t: "updateSheet", sheet };
     }
+    case "updateSettings": {
+      const settings = parseMatchSettings(value.settings);
+      return settings === null
+        ? null
+        : { t: "updateSettings", settings };
+    }
+    case "substitute":
+      return isPlayerRef(value.outId) && isPlayerRef(value.inId)
+        ? { t: "substitute", outId: value.outId, inId: value.inId }
+        : null;
     case "leaveRoom":
       return { t: "leaveRoom" };
     case "resync":
@@ -396,6 +513,51 @@ export function parseServerMessage(text: string): ServerMessage | null {
       return typeof value.reason === "string"
         ? { t: "roomClosed", reason: value.reason }
         : null;
+    case "roster": {
+      if (!isWireTeamSide(value.side) || !Array.isArray(value.players) || !Array.isArray(value.bench)) {
+        return null;
+      }
+      const players = parseRosterList(value.players, MATCH_PLAYERS_PER_TEAM);
+      const bench = parseRosterList(value.bench, Number.POSITIVE_INFINITY);
+      return players === null || bench === null
+        ? null
+        : { t: "roster", side: value.side, players, bench };
+    }
+    case "substitution":
+      return (value.status === "queued" ||
+        value.status === "applied" ||
+        value.status === "rejected") &&
+        typeof value.message === "string"
+        ? {
+            t: "substitution",
+            status: value.status,
+            message: value.message,
+          }
+        : null;
+    case "matchStats": {
+      const stats = parseMatchStats(value.stats);
+      return stats === null ? null : { t: "matchStats", stats };
+    }
+    case "varReview": {
+      if (value.review === null) {
+        return { t: "varReview", review: null };
+      }
+      if (value.review === undefined) {
+        return null;
+      }
+      const review = parseVarReview(value.review);
+      return review === null ? null : { t: "varReview", review };
+    }
+    case "shootout": {
+      if (value.shootout === null) {
+        return { t: "shootout", shootout: null };
+      }
+      if (value.shootout === undefined) {
+        return null;
+      }
+      const shootout = parseShootout(value.shootout);
+      return shootout === null ? null : { t: "shootout", shootout };
+    }
     default:
       return null;
   }
@@ -436,11 +598,16 @@ function parseLobbyRoom(value: unknown): LobbyRoomWire | null | undefined {
   ) {
     return undefined;
   }
+  const settings = parseMatchSettings(record.settings);
+  if (settings === null) {
+    return undefined;
+  }
   return {
     code: record.code,
     phase: record.phase,
     players,
     reconnectSeconds,
+    settings,
   };
 }
 
@@ -582,7 +749,8 @@ function parseWireTeam(
     record.side !== side ||
     typeof record.name !== "string" ||
     !Array.isArray(record.players) ||
-    record.players.length !== MATCH_PLAYERS_PER_TEAM
+    record.players.length !== MATCH_PLAYERS_PER_TEAM ||
+    !Array.isArray(record.bench)
   ) {
     return null;
   }
@@ -590,15 +758,30 @@ function parseWireTeam(
   if (colors === null) {
     return null;
   }
+  const players = parseRosterList(record.players, MATCH_PLAYERS_PER_TEAM);
+  const bench = parseRosterList(record.bench, Number.POSITIVE_INFINITY);
+  if (players === null || bench === null) {
+    return null;
+  }
+  return { side, name: record.name, colors, players, bench };
+}
+
+function parseRosterList(
+  value: unknown,
+  maxLength: number,
+): WireRosterPlayer[] | null {
+  if (!Array.isArray(value) || value.length > maxLength) {
+    return null;
+  }
   const players: WireRosterPlayer[] = [];
-  for (const item of record.players) {
+  for (const item of value) {
     const player = parseRosterPlayer(item);
     if (player === null) {
       return null;
     }
     players.push(player);
   }
-  return { side, name: record.name, colors, players };
+  return players;
 }
 
 function parseWireColors(value: unknown): WireTeamColors | null {
@@ -627,6 +810,7 @@ function parseRosterPlayer(value: unknown): WireRosterPlayer | null {
   const record = value as Record<string, unknown>;
   if (
     typeof record.id !== "string" ||
+    typeof record.name !== "string" ||
     !isPositiveInteger(record.number) ||
     typeof record.goalkeeper !== "boolean"
   ) {
@@ -634,9 +818,144 @@ function parseRosterPlayer(value: unknown): WireRosterPlayer | null {
   }
   return {
     id: record.id,
+    name: record.name,
     number: record.number,
     goalkeeper: record.goalkeeper,
   };
+}
+
+function parseMatchSettings(value: unknown): MatchSettingsWire | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    (record.halfRealMinutes !== 4 &&
+      record.halfRealMinutes !== 6 &&
+      record.halfRealMinutes !== 8 &&
+      record.halfRealMinutes !== 10) ||
+    typeof record.extraTime !== "boolean" ||
+    typeof record.shootout !== "boolean" ||
+    typeof record.varEnabled !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    halfRealMinutes: record.halfRealMinutes,
+    extraTime: record.extraTime,
+    shootout: record.shootout,
+    varEnabled: record.varEnabled,
+  };
+}
+
+function parseTeamStats(value: unknown): WireTeamMatchStats | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const keys = [
+    "goals",
+    "shots",
+    "shotsOnTarget",
+    "fouls",
+    "offsides",
+    "yellowCards",
+    "redCards",
+    "saves",
+    "passes",
+    "passesCompleted",
+    "possessionTicks",
+  ] as const;
+  const stats: Record<string, number> = {};
+  for (const key of keys) {
+    if (!isCount(record[key])) {
+      return null;
+    }
+    stats[key] = record[key];
+  }
+  return stats as unknown as WireTeamMatchStats;
+}
+
+function parseShootout(value: unknown): WireShootout | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    !isWireTeamSide(record.firstSide) ||
+    !isCount(record.homeScore) ||
+    !isCount(record.awayScore) ||
+    !isCount(record.index) ||
+    typeof record.suddenDeath !== "boolean" ||
+    (record.winner !== null && !isWireTeamSide(record.winner))
+  ) {
+    return null;
+  }
+  return {
+    firstSide: record.firstSide,
+    homeScore: record.homeScore,
+    awayScore: record.awayScore,
+    index: record.index,
+    suddenDeath: record.suddenDeath,
+    winner: record.winner,
+  };
+}
+
+function parseVarReview(value: unknown): WireVarReview | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    (record.kind !== "goal" &&
+      record.kind !== "penalty" &&
+      record.kind !== "redCard") ||
+    !isWireTeamSide(record.side) ||
+    (record.decision !== "checking" &&
+      record.decision !== "confirmed" &&
+      record.decision !== "overturned")
+  ) {
+    return null;
+  }
+  return {
+    kind: record.kind,
+    side: record.side,
+    decision: record.decision,
+  };
+}
+
+function parseMatchStats(value: unknown): WireMatchStats | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const home = parseTeamStats(record.home);
+  const away = parseTeamStats(record.away);
+  const shootout =
+    record.shootout === null ? null : parseShootout(record.shootout);
+  if (
+    home === null ||
+    away === null ||
+    (record.shootout !== null && shootout === null) ||
+    (record.forfeitSide !== null && !isWireTeamSide(record.forfeitSide)) ||
+    (record.winner !== null && !isWireTeamSide(record.winner))
+  ) {
+    return null;
+  }
+  return {
+    home,
+    away,
+    shootout,
+    forfeitSide: record.forfeitSide,
+    winner: record.winner,
+  };
+}
+
+function isPlayerRef(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^(home|away):[a-z0-9][a-z0-9-]{0,63}$/.test(value)
+  );
 }
 
 function isLobbyPhase(value: unknown): value is LobbyPhase {

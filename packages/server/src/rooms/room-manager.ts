@@ -2,6 +2,7 @@
 import { randomInt } from "node:crypto";
 import {
   CLOSE_CODES,
+  DEFAULT_MATCH_SETTINGS,
   TUNING,
   decodeClientBinaryMessage,
   encodeSnapshot,
@@ -12,16 +13,21 @@ import {
   type LobbyPlayerWire,
   type LobbyRoomWire,
   type LobbyYouWire,
+  type MatchSettingsWire,
   type MatchSetupWire,
   type ServerErrorCode,
+  type ServerMessage,
   type SnapshotFrame,
   type TeamSheet,
   type WireTeamSide,
 } from "@fb/shared";
 import {
   isRefereePlayable,
+  substitutePlayers,
+  substitutionsAllowed,
   stepMatch,
   type MatchState,
+  type SubstitutionChange,
 } from "@fb/sim";
 import {
   controlSnapshotIndices,
@@ -35,7 +41,10 @@ import type { ClientConnection } from "../client";
 import type { TeamRegistry } from "../data/registry";
 import type { Logger } from "../create-server";
 import {
+  buildMatchStats,
+  buildShootoutWire,
   buildSnapshotFrame,
+  buildWireRoster,
   createServerMatch,
 } from "./match-stream";
 
@@ -50,6 +59,8 @@ const GUEST_NAME = "Guest";
 
 interface Seat {
   readonly token: string;
+  /** Requests wait for the next natural stoppage. */
+  pendingSubstitutions: SubstitutionChange[];
   readonly host: boolean;
   readonly name: string;
   readonly team: WireTeamSide;
@@ -70,6 +81,9 @@ interface RoomMatch {
   snapshots: Map<number, SnapshotFrame>;
   accumulator: number;
   finished: boolean;
+  resultSent: boolean;
+  lastVarSignature: string | null;
+  lastShootoutSignature: string | null;
   readonly controls: {
     readonly home: TeamControlRuntime;
     readonly away: TeamControlRuntime;
@@ -83,6 +97,7 @@ interface Room {
   match: RoomMatch | null;
   phase: LobbyPhase;
   pauseDeadlineMs: number | null;
+  settings: MatchSettingsWire;
 }
 
 export interface RoomManagerOptions {
@@ -183,6 +198,12 @@ export class RoomManager {
       case "updateSheet":
         this.updateSheet(client, message.sheet);
         return;
+      case "updateSettings":
+        this.updateSettings(client, message.settings);
+        return;
+      case "substitute":
+        this.queueSubstitution(client, message.outId, message.inId);
+        return;
       case "leaveRoom":
         this.leaveRoom(client);
         return;
@@ -277,10 +298,12 @@ export class RoomManager {
         match.accumulator >= TICK_SECONDS &&
         steps < TUNING.sim.maxCatchUpTicks
       ) {
+        this.flushPendingSubstitutions(room);
         if (isRefereePlayable(match.state)) {
           this.prepareControls(match);
         }
         stepMatch(match.state);
+        this.syncMatchNotifications(room);
         match.accumulator -= TICK_SECONDS;
         steps += 1;
 
@@ -331,6 +354,7 @@ export class RoomManager {
       match: null,
       phase: "waiting",
       pauseDeadlineMs: null,
+      settings: { ...DEFAULT_MATCH_SETTINGS },
     };
     this.rooms.set(code, room);
     this.membership.set(client.token, room);
@@ -470,6 +494,198 @@ export class RoomManager {
     this.broadcastLobby(room);
   }
 
+  private updateSettings(
+    client: ClientConnection,
+    settings: MatchSettingsWire,
+  ): void {
+    const room = this.membership.get(client.token);
+    const seat = room === undefined ? null : this.findSeat(room, client.token);
+    if (room === undefined || seat === null) {
+      this.sendError(client, "not_in_room", "Join a room before changing settings");
+      return;
+    }
+    if (!seat.host) {
+      this.sendError(client, "not_host", "The host controls match settings");
+      return;
+    }
+    if (room.match !== null) {
+      this.sendError(client, "room_unavailable", "The match already started");
+      return;
+    }
+    room.settings = { ...settings };
+    for (const player of this.seats(room)) {
+      player.ready = false;
+    }
+    this.refreshLobbyPhase(room);
+    this.broadcastLobby(room);
+  }
+
+  private queueSubstitution(
+    client: ClientConnection,
+    outId: string,
+    inId: string,
+  ): void {
+    const room = this.membership.get(client.token);
+    const seat = room === undefined ? null : this.findSeat(room, client.token);
+    if (room === undefined || seat === null || room.match === null) {
+      this.sendError(client, "not_in_room", "No active match to change");
+      return;
+    }
+    if (room.match.finished || room.match.state.referee.phase === "fullTime") {
+      this.sendError(client, "match_not_live", "The match is complete");
+      return;
+    }
+    const team =
+      seat.team === "home"
+        ? room.match.state.home
+        : room.match.state.away;
+    const outgoing = team.players.find((player) => player.id === outId);
+    const incoming = team.bench.find(
+      (substitute) => substitute.player.id === inId,
+    );
+    if (outgoing === undefined || incoming === undefined) {
+      this.sendError(
+        client,
+        "invalid_substitution",
+        "Choose an active player and an unused substitute",
+      );
+      return;
+    }
+    if (
+      seat.pendingSubstitutions.some(
+        (change) => change.inId === inId || change.outId === outId,
+      )
+    ) {
+      this.sendError(
+        client,
+        "invalid_substitution",
+        "That substitution is already queued",
+      );
+      return;
+    }
+    seat.pendingSubstitutions.push({ outId, inId });
+    client.send({
+      t: "substitution",
+      status: "queued",
+      message: `${outgoing.name} → ${incoming.player.name}`,
+    });
+    this.flushPendingSubstitutions(room);
+  }
+
+  private flushPendingSubstitutions(room: Room): void {
+    const match = room.match;
+    if (match === null || !substitutionsAllowed(match.state)) {
+      return;
+    }
+    for (const seat of this.seats(room)) {
+      if (seat.pendingSubstitutions.length === 0) {
+        continue;
+      }
+      const changes = seat.pendingSubstitutions;
+      const result = substitutePlayers(match.state, seat.team, changes);
+      if (!result.ok) {
+        seat.pendingSubstitutions = [];
+        seat.client?.send({
+          t: "substitution",
+          status: "rejected",
+          message: result.reason ?? "Substitution rejected",
+        });
+        continue;
+      }
+      seat.pendingSubstitutions = [];
+      seat.client?.send({
+        t: "substitution",
+        status: "applied",
+        message: `${result.applied} substitution${
+          result.applied === 1 ? "" : "s"
+        } applied`,
+      });
+      this.broadcastRoster(room, seat.team);
+    }
+  }
+
+  private broadcastRoster(
+    room: Room,
+    side: WireTeamSide,
+  ): void {
+    const match = room.match;
+    if (match === null) {
+      return;
+    }
+    const team = side === "home" ? match.state.home : match.state.away;
+    const roster = buildWireRoster(team);
+    this.broadcast(room, {
+      t: "roster",
+      side,
+      players: roster.players,
+      bench: roster.bench,
+    });
+  }
+
+  private sendRoster(
+    client: ClientConnection,
+    room: Room,
+    side: WireTeamSide,
+  ): void {
+    const match = room.match;
+    if (match === null) {
+      return;
+    }
+    const team = side === "home" ? match.state.home : match.state.away;
+    const roster = buildWireRoster(team);
+    client.send({
+      t: "roster",
+      side,
+      players: roster.players,
+      bench: roster.bench,
+    });
+  }
+
+  private syncMatchNotifications(room: Room): void {
+    const match = room.match;
+    if (match === null) {
+      return;
+    }
+    const review = match.state.referee.varReview;
+    const varSignature =
+      review === null ? null : `${review.kind}:${review.decision}`;
+    if (varSignature !== match.lastVarSignature) {
+      match.lastVarSignature = varSignature;
+      this.broadcast(room, {
+        t: "varReview",
+        review:
+          review === null
+            ? null
+            : {
+                kind: review.kind,
+                side: review.side,
+                decision: review.decision,
+              },
+      });
+    }
+    const shootout = buildShootoutWire(match.state);
+    const shootoutSignature =
+      shootout === null
+        ? null
+        : `${shootout.index}:${shootout.homeScore}:${shootout.awayScore}:${
+            shootout.winner ?? "-"
+          }`;
+    if (shootoutSignature !== match.lastShootoutSignature) {
+      match.lastShootoutSignature = shootoutSignature;
+      this.broadcast(room, { t: "shootout", shootout });
+    }
+    if (
+      match.state.referee.phase === "fullTime" &&
+      !match.resultSent
+    ) {
+      match.resultSent = true;
+      this.broadcast(room, {
+        t: "matchStats",
+        stats: buildMatchStats(match.state),
+      });
+    }
+  }
+
   private leaveRoom(client: ClientConnection): void {
     const room = this.membership.get(client.token);
     if (room === undefined) {
@@ -551,6 +767,7 @@ export class RoomManager {
   ): Seat | null {
     return {
       token: client.token,
+      pendingSubstitutions: [],
       host,
       name: host ? HOST_NAME : GUEST_NAME,
       team: host ? "home" : "away",
@@ -606,6 +823,12 @@ export class RoomManager {
     }
     try {
       const serverMatch = createServerMatch({
+        rules: {
+          realHalfSeconds: room.settings.halfRealMinutes * 60,
+          extraTimeEnabled: room.settings.extraTime,
+          shootoutEnabled: room.settings.shootout,
+          varEnabled: room.settings.varEnabled,
+        },
         home: {
           team: hostTeam,
           sheet: host.sheet,
@@ -638,6 +861,9 @@ export class RoomManager {
       snapshots: new Map(),
       accumulator: 0,
       finished: false,
+      resultSent: false,
+      lastVarSignature: null,
+      lastShootoutSignature: null,
       controls: {
         home: createTeamControlRuntime(),
         away: createTeamControlRuntime(),
@@ -649,6 +875,7 @@ export class RoomManager {
     for (const seat of this.seats(room)) {
       seat.lastAckedSeq = 0;
       seat.forceFullSnapshot = true;
+      seat.pendingSubstitutions = [];
     }
 
     this.prepareControls(room.match);
@@ -747,6 +974,31 @@ export class RoomManager {
     seat.lastAckedSeq = 0;
     seat.forceFullSnapshot = true;
     seat.client.send({ t: "matchStart", setup: room.match.setup });
+    // The immutable setup carries the starting XI; reconnect must also learn
+    // about substitutions already made while the client was away.
+    this.sendRoster(seat.client, room, "home");
+    this.sendRoster(seat.client, room, "away");
+    const review = room.match.state.referee.varReview;
+    if (review !== null) {
+      seat.client.send({
+        t: "varReview",
+        review: {
+          kind: review.kind,
+          side: review.side,
+          decision: review.decision,
+        },
+      });
+    }
+    const shootout = buildShootoutWire(room.match.state);
+    if (shootout !== null) {
+      seat.client.send({ t: "shootout", shootout });
+    }
+    if (room.match.state.referee.phase === "fullTime") {
+      seat.client.send({
+        t: "matchStats",
+        stats: buildMatchStats(room.match.state),
+      });
+    }
 
     room.match.snapshotSeq += 1;
     const frame = buildSnapshotFrame(
@@ -782,10 +1034,7 @@ export class RoomManager {
     }
   }
 
-  private broadcast(
-    room: Room,
-    message: { readonly t: "matchResumed" },
-  ): void {
+  private broadcast(room: Room, message: ServerMessage): void {
     for (const seat of this.seats(room)) {
       seat.client?.send(message);
     }
@@ -826,6 +1075,7 @@ export class RoomManager {
               Math.ceil((room.pauseDeadlineMs - Date.now()) / 1_000),
             )
           : null,
+      settings: room.settings,
     };
   }
 

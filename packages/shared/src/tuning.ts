@@ -50,8 +50,22 @@ export const TUNING = {
     gameMinutesPerHalf: 45,
     /** Default real-time half length; 4/6/8/10 are the intended UI choices. */
     halfRealMinutes: 6,
+    /** Game minutes in one extra-time period. */
+    extraTimeMinutesPerHalf: 15,
     /** Real seconds of half-time before the second-half kick-off. */
     halfTimeSeconds: 5,
+    /** Real seconds of the break before extra time starts, seconds. */
+    extraTimeBreakSeconds: 5,
+    /** Added time is rounded up to this display increment, seconds. */
+    addedTimeRoundingSeconds: 60,
+    /** Upper bound on a single period's added time, seconds. */
+    addedTimeCapSeconds: 300,
+    /** Stoppage allowances added to the board, seconds of game clock. */
+    addedTimeGoalSeconds: 30,
+    addedTimeCardSeconds: 10,
+    addedTimeSubstitutionSeconds: 20,
+    addedTimeInjurySeconds: 45,
+    addedTimeVarSeconds: 20,
     /** Freeze time while an out-of-play restart is being set up. */
     restartDelaySeconds: 1.2,
     /** Longer freeze after a goal before the conceding side kicks off. */
@@ -567,6 +581,89 @@ export const TUNING = {
     penaltyClearanceM: 0.5,
     /** Extra distance beyond the penalty arc for non-participants. */
     penaltyArcClearanceM: 0.5,
+    /** Goalkeeper six-second-style possession limit, seconds. */
+    goalkeeperHoldSeconds: 8,
+    /** Ball speed below which a keeper is judged to be holding it, m/s. */
+    goalkeeperHoldMaxBallSpeedMps: 2,
+    /** Reach used to attribute possession to the goalkeeper, metres. */
+    goalkeeperHoldRadiusM: 1.2,
+  },
+  management: {
+    /** Total substitutions allowed in regulation, excluding extra time. */
+    maxSubstitutions: 5,
+    /** Additional substitution allowed when extra time starts. */
+    extraTimeSubstitutions: 1,
+    /** Regulation substitution windows; half-time is free. */
+    maxWindows: 3,
+    /** Additional window allowed in extra time. */
+    extraTimeWindows: 1,
+    /** Match is forfeited below this many available players. */
+    minimumPlayers: 7,
+    /** Substitute enters this far inside the touchline when the ball is dead. */
+    benchInsetM: 1,
+  },
+  injury: {
+    /** Added to the injury-prone rating to form the base risk. */
+    baseRisk: 0.04,
+    /** Risk from a foul with maximum contact severity. */
+    severityRisk: 0.18,
+    /** Scaling of the victim's injury-proneness (1..99). */
+    pronenessRisk: 0.08,
+    /** Contact severity at or above which the injury can end the player's match. */
+    seriousThreshold: 0.55,
+    /** Chance a high-force injury is still playable. */
+    playOnChance: 0.35,
+    /** Extra risk multiplier for contact from behind. */
+    behindRiskFactor: 0.5,
+    /** Speed/stamina multipliers while carrying a minor injury. */
+    minorSpeedFactor: 0.9,
+    minorStaminaFactor: 1.15,
+    /** Seconds a seriously injured player needs before play can resume. */
+    stretcherSeconds: 4,
+    /** Seconds a minor injury keeps the player grounded. */
+    minorFallSeconds: 1.4,
+  },
+  shootout: {
+    /** Regulation kicks per side. */
+    regulationKicks: 5,
+    /** Real seconds between shootout kicks. */
+    kickIntervalSeconds: 1.5,
+    /** Base conversion chance before skill modifiers. */
+    baseConversionChance: 0.74,
+    /** Weight of the taker's finishing/composure. */
+    takerWeight: 0.22,
+    /** Weight of the goalkeeper's save attributes. */
+    keeperWeight: 0.2,
+    /** Taker skill blend. */
+    takerFinishingWeight: 0.55,
+    takerComposureWeight: 0.3,
+    takerPowerWeight: 0.15,
+    /** Keeper skill blend when the goalkeeper attributes are present. */
+    keeperDivingWeight: 0.3,
+    keeperHandlingWeight: 0.25,
+    keeperReflexesWeight: 0.3,
+    keeperPositioningWeight: 0.15,
+    /** Outfield emergency keeper blend. */
+    emergencyReactionsWeight: 0.4,
+    emergencyDefenceWeight: 0.35,
+    emergencyAgilityWeight: 0.25,
+    /** Fallback conversion against a missing keeper. */
+    missingKeeperScore: 0.45,
+    /** Clamp for the final conversion chance. */
+    minChance: 0.35,
+    maxChance: 0.94,
+    /** Real seconds between the final miss and the full-time board. */
+    finishDelaySeconds: 1.5,
+  },
+  var: {
+    /** Real seconds of the review check. */
+    reviewSeconds: 3,
+    /** Real seconds the confirmed/overturned board stays visible. */
+    decisionDisplaySeconds: 1,
+    /** Severity band below the foul threshold that VAR can overturn. */
+    penaltyOverturnSeverity: 0.5,
+    /** Red-card severity band below the red threshold that VAR can overturn. */
+    redOverturnSeverity: 0.94,
   },
   presentation: {
     /** Largest animation-frame delta consumed by the client, seconds. */
