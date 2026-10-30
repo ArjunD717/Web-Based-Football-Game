@@ -1809,57 +1809,6 @@ kbd {
 }
 
 /* M10 match management */
-.match-options {
-  margin-top: 0.65rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(7, 19, 13, 0.55);
-}
-
-.match-options-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.55rem;
-}
-
-.match-options-head h3 {
-  margin: 0.1rem 0 0;
-  font-size: 0.95rem;
-}
-
-.match-options-grid {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.65rem;
-}
-
-.option-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-height: 2rem;
-  padding: 0.3rem 0.55rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.option-check input {
-  accent-color: var(--accent);
-}
-
-.match-options .editor-rules {
-  margin-bottom: 0;
-}
-
 .score-added,
 .score-pens {
   color: var(--warn);

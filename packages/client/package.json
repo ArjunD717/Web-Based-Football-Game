@@ -12,10 +12,14 @@
   "dependencies": {
     "@fb/shared": "workspace:*",
     "@fb/sim": "workspace:*",
+    "@fontsource/barlow": "5.1.1",
+    "@fontsource/barlow-condensed": "5.1.1",
+    "qrcode": "1.5.4",
     "three": "0.186.0"
   },
   "devDependencies": {
     "@types/node": "20.17.16",
+    "@types/qrcode": "1.5.5",
     "@types/three": "0.186.0",
     "vite": "6.1.0"
   }

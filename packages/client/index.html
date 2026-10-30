@@ -5,243 +5,631 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0b09" />
     <meta
       name="description"
       content="Web Football LAN lobby and server-authoritative match"
     />
     <title>Web Football | LAN Lobby</title>
   </head>
-  <body>
+  <body class="console-ui">
     <div class="app-shell">
-      <header class="topbar">
-        <div class="brand-block">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <div>
-            <p class="brand-kicker">Web Football</p>
-            <p class="brand-milestone">M7 / team editor</p>
-          </div>
-        </div>
+      <header class="ui-topbar">
+        <a class="ui-brand" href="/" aria-label="Web Football home">
+          <span class="ui-brand__mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9.25" stroke="currentColor" stroke-width="1.4" />
+              <path
+                d="M12 7.25 15.4 9.7 14.1 13.7H9.9L8.6 9.7 12 7.25Z"
+                stroke="currentColor"
+                stroke-width="1.25"
+                stroke-linejoin="round"
+              />
+              <path
+                d="m12 7.25-.4-3.05M15.4 9.7l2.9-1.2M14.1 13.7l1.9 2.35M9.9 13.7 8 16.05M8.6 9.7 5.7 8.5"
+                stroke="currentColor"
+                stroke-width="1.1"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
+          <span class="ui-brand__word">Web Football</span>
+          <span class="ui-brand__edition">Night match</span>
+        </a>
 
-        <div class="connection-pill" aria-live="polite">
-          <span id="connection-dot" class="status-dot" data-status="connecting"></span>
+        <div class="ui-connection" aria-live="polite">
+          <span id="connection-dot" class="ui-status-dot" data-status="connecting"></span>
           <span id="connection-label">Connecting</span>
-          <span class="connection-sep">/</span>
-          <span id="ping-label" class="mono">— ms</span>
+          <span id="ping-label" class="ui-connection__ping">— ms</span>
         </div>
 
-        <nav class="topbar-nav" aria-label="Sections">
-          <button id="open-bindings" class="nav-button" type="button">
-            Controls
+        <nav class="ui-topnav" aria-label="Sections">
+          <button id="open-help" class="ui-topnav__link" type="button">
+            How to connect
           </button>
-          <a href="/practice.html">Practice</a>
-          <a href="/controller.html">Controller</a>
-          <a href="/link.html">Transport</a>
+          <a href="/controller.html" class="ui-topnav__link">Phone controller</a>
         </nav>
       </header>
 
       <main id="lobby-view" class="lobby-shell">
-        <section id="entry-view" class="lobby-card">
-          <p class="eyebrow">LAN / one host, two devices</p>
-          <h1>Two devices.<br />One pitch.</h1>
-          <p class="lede">
-            Start the Node host, create a room here, then scan the room QR from
-            the host terminal or share the four-letter code. Both players ready
-            up and the server kicks off.
-          </p>
+        <section id="entry-view" class="ui-menu-screen">
+          <svg
+            class="ui-stadium"
+            viewBox="0 0 1600 900"
+            aria-hidden="true"
+            preserveAspectRatio="xMidYMid slice"
+          >
+            <g class="ui-stadium__beam">
+              <path d="M1190 0h150L950 900H700L1190 0Z" />
+              <path d="M1440 0h110L1170 900H1030L1440 0Z" />
+            </g>
 
-          <div class="entry-grid">
-            <article class="entry-panel">
-              <span class="panel-index">01</span>
-              <h2>Host a match</h2>
-              <p>Create the room on this device. You take the home side.</p>
-              <button id="create-room" class="button primary wide" type="button">
-                Create room
-              </button>
-            </article>
+            <g transform="rotate(-8 1060 470)">
+              <g class="ui-stadium__pitch">
+                <rect x="560" y="210" width="940" height="590" />
+                <path d="M1030 210v590" />
+                <circle cx="1030" cy="505" r="92" />
+                <circle cx="1030" cy="505" r="4" />
+                <path d="M560 360h170v290H560M1500 360h-170v290h170" />
+                <path d="M560 435h70v140h-70M1500 435h-70v140h70" />
+                <path d="M560 245a65 65 0 0 1 0 130M1500 245a65 65 0 0 0 0 130" />
+                <path d="M560 765a65 65 0 0 0 0-130M1500 765a65 65 0 0 1 0-130" />
+                <path d="M1012 210h36M1012 800h36" />
+              </g>
+              <g class="ui-stadium__strut">
+                <path d="M500 170h1060M500 840h1060" />
+                <path d="M520 170v670M610 170v670M1540 170v670M1450 170v670" />
+              </g>
+            </g>
 
-            <article class="entry-panel">
-              <span class="panel-index">02</span>
-              <h2>Join a match</h2>
-              <form id="join-form" class="join-form">
-                <label for="room-input" class="field-label">Room code</label>
-                <div class="join-row">
-                  <input
-                    id="room-input"
-                    class="room-input"
-                    name="room"
-                    type="text"
-                    maxlength="4"
-                    autocomplete="off"
-                    autocapitalize="characters"
-                    spellcheck="false"
-                    inputmode="text"
-                    pattern="[A-Za-z]{4}"
-                    placeholder="ABCD"
-                    aria-label="Four-letter room code"
-                  />
-                  <button id="join-submit" class="button" type="submit">
-                    Join
+            <g class="ui-stadium__stand">
+              <path d="M250 58h1320M210 88h1400M170 122h1470" />
+              <path d="M260 824h1320M220 854h1400M180 886h1470" />
+              <path d="M30 182 220 122M30 724l190 60M1580 182l-190-60M1580 724l-190 60" />
+              <path d="M120 650v-110h190v150M1490 160v110h-190V120" />
+            </g>
+
+            <g class="ui-stadium__strut">
+              <path d="M330 122v-52M430 122v-52M1230 122v-52M1330 122v-52M330 854v52M430 854v52M1230 854v52M1330 854v52" />
+              <path d="M330 70h-72M430 70h-72M1230 70h72M1330 70h72M330 906h-72M430 906h-72M1230 906h72M1330 906h72" />
+            </g>
+
+            <g class="ui-stadium__light">
+              <circle cx="258" cy="70" r="4" />
+              <circle cx="358" cy="70" r="4" />
+              <circle cx="1282" cy="70" r="4" />
+              <circle cx="1382" cy="70" r="4" />
+              <circle cx="258" cy="906" r="4" />
+              <circle cx="358" cy="906" r="4" />
+              <circle cx="1282" cy="906" r="4" />
+              <circle cx="1382" cy="906" r="4" />
+            </g>
+
+            <g class="ui-stadium__scoreboard">
+              <rect x="1328" y="250" width="188" height="86" />
+              <path d="M1348 268h148M1348 286h88M1348 304h116" class="ui-stadium__strut" />
+            </g>
+          </svg>
+          <div class="ui-menu-screen__vignette" aria-hidden="true"></div>
+
+          <div class="ui-menu-layout">
+            <section class="ui-menu-rail" aria-label="Main menu">
+              <div class="ui-menu-rail__main">
+                <div class="ui-menu-rail__head">
+                  <h1 class="ui-visually-hidden">Main menu</h1>
+                  <p class="ui-kicker">Matchday / choose a mode</p>
+                </div>
+
+                <nav id="main-menu" class="ui-menu" aria-label="Game modes">
+                <button
+                  class="ui-menu-item"
+                  type="button"
+                  data-menu-key="lan"
+                  aria-controls="panel-lan"
+                  aria-current="true"
+                >
+                  <span class="ui-menu-item__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <circle cx="6" cy="7" r="2.4" stroke="currentColor" stroke-width="1.5" />
+                      <circle cx="18" cy="17" r="2.4" stroke="currentColor" stroke-width="1.5" />
+                      <path d="M8.4 7h3.1a3.5 3.5 0 0 1 3.5 3.5v4" stroke="currentColor" stroke-width="1.5" />
+                      <path d="M8.4 7 15 17" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2" />
+                    </svg>
+                  </span>
+                  <span class="ui-menu-item__label">LAN Match</span>
+                  <span class="ui-menu-item__meta">2 devices</span>
+                  <svg class="ui-menu-item__chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="m5.5 3 5 5-5 5" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
+
+                <button
+                  class="ui-menu-item"
+                  type="button"
+                  data-menu-key="ai"
+                  aria-controls="panel-ai"
+                >
+                  <span class="ui-menu-item__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path d="M12 3.5 14.2 9l5.8 1.8-5.8 1.9L12 18.5l-2.2-5.8L4 10.8 9.8 9 12 3.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                      <path d="m18.5 16 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <span class="ui-menu-item__label">Play vs AI</span>
+                  <span class="ui-menu-item__meta">Unavailable</span>
+                  <svg class="ui-menu-item__chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="m5.5 3 5 5-5 5" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
+
+                <button
+                  class="ui-menu-item"
+                  type="button"
+                  data-menu-key="practice"
+                  aria-controls="panel-practice"
+                >
+                  <span class="ui-menu-item__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.4" />
+                      <circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.2" />
+                      <path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3" stroke="currentColor" stroke-width="1.2" />
+                    </svg>
+                  </span>
+                  <span class="ui-menu-item__label">Practice</span>
+                  <span class="ui-menu-item__meta">Local</span>
+                  <svg class="ui-menu-item__chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="m5.5 3 5 5-5 5" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
+
+                <button
+                  class="ui-menu-item"
+                  type="button"
+                  data-menu-key="controls"
+                  aria-controls="panel-controls"
+                >
+                  <span class="ui-menu-item__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path d="M8 7.5h8c2.4 0 4 1.8 4.2 4.2l.4 3.8c.2 2.2-2.4 3.4-3.7 1.6l-1.6-2.1H8.7L7.1 17c-1.3 1.8-3.9.6-3.7-1.6l.4-3.8C4 9.3 5.6 7.5 8 7.5Z" stroke="currentColor" stroke-width="1.4" />
+                      <path d="M7 10v3M5.5 11.5h3M16 11h.01M18 12.5h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                    </svg>
+                  </span>
+                  <span class="ui-menu-item__label">Controls</span>
+                  <span class="ui-menu-item__meta">Bindings</span>
+                  <svg class="ui-menu-item__chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="m5.5 3 5 5-5 5" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
+
+                <button
+                  class="ui-menu-item"
+                  type="button"
+                  data-menu-key="settings"
+                  aria-controls="panel-settings"
+                >
+                  <span class="ui-menu-item__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path d="M4 7h10M18 7h2M4 17h2M10 17h10M4 12h4M12 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                      <circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="1.4" />
+                      <circle cx="8" cy="12" r="2" stroke="currentColor" stroke-width="1.4" />
+                      <circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="1.4" />
+                    </svg>
+                  </span>
+                  <span class="ui-menu-item__label">Settings</span>
+                  <span class="ui-menu-item__meta">Audio</span>
+                  <svg class="ui-menu-item__chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="m5.5 3 5 5-5 5" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
+                </nav>
+              </div>
+
+              <footer class="ui-rail-footer">
+                <span class="ui-control-hints">
+                  <kbd>↑</kbd><kbd>↓</kbd> select
+                  <kbd>Tab</kbd> actions
+                </span>
+                <span class="ui-rail-footer__status">
+                  Two seats on one LAN
+                </span>
+              </footer>
+            </section>
+
+            <section class="ui-context" aria-label="Selected mode">
+              <article id="panel-lan" class="ui-context-panel" data-menu-panel="lan">
+                <header class="ui-context-panel__head">
+                  <p class="ui-kicker ui-kicker--accent">Same network / two seats</p>
+                  <h2 class="ui-context-panel__title">LAN Match</h2>
+                  <p class="ui-context-panel__lede">
+                    One device hosts the room. The other joins with a code or the
+                    room QR.
+                  </p>
+                </header>
+
+                <div class="ui-lan-grid">
+                  <section class="ui-panel ui-host-card">
+                    <div class="ui-host-card__head">
+                      <span class="ui-badge ui-badge--accent">Host</span>
+                      <span class="ui-kicker">Home side</span>
+                    </div>
+                    <h3 class="ui-card-title">Open a room</h3>
+                    <p class="ui-card-copy">
+                      This device runs the match and owns the room code.
+                    </p>
+                    <div class="ui-host-card__action">
+                      <button
+                        id="create-room"
+                        class="ui-button ui-button--primary ui-button--wide ui-button--large"
+                        type="button"
+                      >
+                        Host match
+                      </button>
+                    </div>
+                  </section>
+
+                  <section class="ui-panel ui-join-card">
+                    <div class="ui-join-card__head">
+                      <span class="ui-badge ui-badge--outline">Guest</span>
+                      <span class="ui-kicker">Away side</span>
+                    </div>
+                    <h3 class="ui-card-title">Join with a code</h3>
+                    <form id="join-form" class="ui-join-form" novalidate>
+                      <label for="room-input" class="ui-label">Room code</label>
+                      <div class="ui-code-field" data-code-input>
+                        <div class="ui-code-slots" aria-hidden="true">
+                          <span class="ui-code-slot" data-code-slot></span>
+                          <span class="ui-code-slot" data-code-slot></span>
+                          <span class="ui-code-slot" data-code-slot></span>
+                          <span class="ui-code-slot" data-code-slot></span>
+                        </div>
+                        <input
+                          id="room-input"
+                          class="ui-code-native"
+                          name="room"
+                          type="text"
+                          maxlength="4"
+                          autocomplete="off"
+                          autocapitalize="characters"
+                          spellcheck="false"
+                          inputmode="text"
+                          pattern="[A-Za-z]{4}"
+                          placeholder="ABCD"
+                          aria-label="Four-letter room code"
+                          aria-describedby="join-code-hint join-error"
+                        />
+                      </div>
+                      <p id="join-code-hint" class="ui-field-hint">
+                        Four letters. Matching is not case-sensitive.
+                      </p>
+                      <p id="join-error" class="ui-field-error" role="alert" hidden></p>
+                      <button
+                        id="join-submit"
+                        class="ui-button ui-button--outline-accent ui-button--wide"
+                        type="submit"
+                      >
+                        Join match
+                      </button>
+                    </form>
+                  </section>
+                </div>
+
+                <p class="ui-context-note">
+                  Host terminal: <kbd>pnpm start</kbd>. Both devices need the same
+                  LAN and the local certificate trusted.
+                </p>
+              </article>
+
+              <article
+                id="panel-ai"
+                class="ui-context-panel"
+                data-menu-panel="ai"
+                hidden
+                aria-hidden="true"
+              >
+                <header class="ui-context-panel__head">
+                  <p class="ui-kicker">Solo</p>
+                  <h2 class="ui-context-panel__title">Play vs AI</h2>
+                  <p class="ui-context-panel__lede">
+                    The single-player match path is not wired in this build.
+                  </p>
+                </header>
+                <div class="ui-empty-state">
+                  <span class="ui-badge ui-badge--warning">Unavailable</span>
+                  <h3 class="ui-empty-state__title">No AI opponent yet</h3>
+                  <p class="ui-empty-state__copy">
+                    Host a LAN room for a two-device match, or open Practice to
+                    watch the deterministic engine locally.
+                  </p>
+                  <a class="ui-button" href="/practice.html">Open practice</a>
+                </div>
+              </article>
+
+              <article
+                id="panel-practice"
+                class="ui-context-panel"
+                data-menu-panel="practice"
+                hidden
+                aria-hidden="true"
+              >
+                <header class="ui-context-panel__head">
+                  <p class="ui-kicker">No server required</p>
+                  <h2 class="ui-context-panel__title">Practice</h2>
+                  <p class="ui-context-panel__lede">
+                    Watch the local simulation and exercise the renderer without
+                    a room.
+                  </p>
+                </header>
+                <div class="ui-panel ui-panel--padded ui-panel--accent">
+                  <h3 class="ui-card-title">Local pitch</h3>
+                  <p class="ui-card-copy">
+                    Practice opens in this tab and does not touch the LAN room.
+                  </p>
+                  <div class="ui-inline ui-inline--spaced">
+                    <a class="ui-button ui-button--primary" href="/practice.html">
+                      Open practice
+                    </a>
+                  </div>
+                </div>
+              </article>
+
+              <article
+                id="panel-controls"
+                class="ui-context-panel"
+                data-menu-panel="controls"
+                hidden
+                aria-hidden="true"
+              >
+                <header class="ui-context-panel__head">
+                  <p class="ui-kicker">Input</p>
+                  <h2 class="ui-context-panel__title">Controls</h2>
+                  <p class="ui-context-panel__lede">
+                    Keyboard bindings save to this browser. Gamepad mapping is
+                    fixed in this build.
+                  </p>
+                </header>
+                <div class="ui-panel ui-panel--padded">
+                  <h3 class="ui-card-title">Keyboard bindings</h3>
+                  <p class="ui-card-copy">
+                    Click a binding, then press the replacement key.
+                  </p>
+                  <div class="ui-inline ui-inline--spaced">
+                    <button id="open-bindings" class="ui-button" type="button">
+                      Edit bindings
+                    </button>
+                  </div>
+                </div>
+              </article>
+
+              <article
+                id="panel-settings"
+                class="ui-context-panel"
+                data-menu-panel="settings"
+                hidden
+                aria-hidden="true"
+              >
+                <header class="ui-context-panel__head">
+                  <p class="ui-kicker">Match night</p>
+                  <h2 class="ui-context-panel__title">Settings</h2>
+                  <p class="ui-context-panel__lede">
+                    Match sound for this browser.
+                  </p>
+                </header>
+                <div class="ui-panel ui-panel--padded">
+                  <div class="ui-settings-list">
+                    <button
+                      id="settings-sound"
+                      class="ui-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked="true"
+                    >
+                      <span>Match sound</span>
+                      <span class="ui-toggle__track" aria-hidden="true">
+                        <span class="ui-toggle__thumb"></span>
+                      </span>
+                    </button>
+                  </div>
+                  <button
+                    class="ui-button"
+                    type="button"
+                    data-open-controls
+                  >
+                    Keyboard bindings
                   </button>
                 </div>
-              </form>
-              <p class="panel-hint">The host terminal prints a scannable join QR.</p>
-            </article>
+              </article>
+            </section>
           </div>
-
-          <ol class="how-list">
-            <li><span>1</span> Host runs <code>pnpm start</code> with mkcert TLS.</li>
-            <li><span>2</span> Create a room, both devices open the HTTPS URL.</li>
-            <li><span>3</span> Edit both squads live, then press Ready. The host starts the match.</li>
-          </ol>
         </section>
 
-        <section id="room-view" class="room-card" hidden>
-          <div class="room-head">
-            <div>
-              <p class="eyebrow">Room</p>
-              <div class="room-code-row">
-                <h2 id="room-code" class="room-code">----</h2>
-                <button id="copy-code" class="button small" type="button">
+        <section id="room-view" class="ui-room" hidden>
+          <div class="ui-room-hero">
+            <div class="ui-room-id">
+              <p class="ui-kicker ui-kicker--accent">LAN room / two seats</p>
+              <div class="ui-room-code-line">
+                <h2 id="room-code" class="ui-room-code">----</h2>
+                <button
+                  id="copy-code"
+                  class="ui-button ui-button--small ui-room-copy"
+                  type="button"
+                >
                   Copy code
                 </button>
               </div>
-              <p id="room-phase" class="room-phase">Waiting for opponent</p>
+              <p id="room-phase" class="ui-room-phase" aria-live="polite">
+                Waiting for opponent
+              </p>
+              <div class="ui-room-meta">
+                <span id="room-badge" class="ui-badge">Lobby</span>
+                <span class="ui-room-meta__ping">
+                  Ping <strong id="room-ping">— ms</strong>
+                </span>
+              </div>
             </div>
-            <span id="room-badge" class="chip live">Lobby</span>
+
+            <div class="ui-room-qr">
+              <div class="qr-frame">
+                <canvas
+                  id="room-qr"
+                  width="240"
+                  height="240"
+                  role="img"
+                  aria-label="QR code for this room"
+                ></canvas>
+              </div>
+              <p class="ui-room-qr__label">Scan to join</p>
+              <p class="ui-room-qr__hint">Point the second device at the code.</p>
+              <p id="join-url" class="ui-room-url">—</p>
+              <p id="controller-url" class="ui-room-url">—</p>
+            </div>
+
+            <div class="ui-room-lineup">
+              <div class="ui-room-section-head">
+                <span><strong>Players</strong> / two seats</span>
+                <span>Ready when both are in</span>
+              </div>
+              <div id="room-players" class="room-players" aria-label="Room players"></div>
+            </div>
           </div>
 
-          <p id="join-url" class="join-url mono">—</p>
-          <p id="controller-url" class="join-url mono">—</p>
+          <div class="ui-room-actions">
+            <button
+              id="ready"
+              class="ui-button ui-button--primary ui-button--large"
+              type="button"
+            >
+              Ready
+            </button>
+            <button id="leave-room" class="ui-button" type="button">
+              Leave room
+            </button>
+            <p id="room-hint" class="ui-room-phase">
+              The match starts automatically when both players are ready.
+            </p>
+          </div>
 
-          <div id="room-players" class="room-players" aria-label="Room players"></div>
-
-          <section id="team-editor" class="team-editor" aria-label="Team editor" hidden>
-            <div class="editor-head">
-              <div>
-                <p class="eyebrow">Draft room</p>
-                <h2>Build your XI</h2>
+          <section id="team-editor" class="ui-squad" aria-label="Squad editor" hidden>
+            <header class="ui-squad__masthead">
+              <div id="club-preview" class="squad-club"></div>
+              <div class="squad-summary">
+                <dl class="squad-metrics" aria-label="Squad summary">
+                  <div class="squad-metrics__item">
+                    <dt>XI rating</dt>
+                    <dd id="squad-xi-rating">—</dd>
+                  </div>
+                  <div class="squad-metrics__item">
+                    <dt>Bench</dt>
+                    <dd id="squad-bench-summary">—</dd>
+                  </div>
+                  <div class="squad-metrics__item">
+                    <dt>Role warnings</dt>
+                    <dd id="squad-role-warnings">—</dd>
+                  </div>
+                </dl>
+                <span id="editor-sync" class="squad-sync" data-state="ok">Synced with host</span>
               </div>
-              <span id="editor-sync" class="chip editor-sync" data-state="ok">Synced with host</span>
-            </div>
+            </header>
 
-            <p id="editor-status" class="editor-status" hidden></p>
+            <p id="editor-status" class="squad-alert" role="alert" hidden></p>
 
             <div id="editor-body" hidden>
-              <div class="editor-toolbar">
-                <label class="editor-select">
-                  <span>Team type</span>
-                  <select id="team-kind">
+              <div class="squad-command" aria-label="Team selection">
+                <label class="squad-field squad-field--team">
+                  <span class="ui-label">Team</span>
+                  <select id="team-select" class="ui-select"></select>
+                </label>
+                <label class="squad-field">
+                  <span class="ui-label">Type</span>
+                  <select id="team-kind" class="ui-select">
                     <option value="club">Clubs</option>
                     <option value="nation">National teams</option>
                     <option value="all">All teams</option>
                   </select>
                 </label>
-                <label class="editor-select">
-                  <span>League</span>
-                  <select id="league-filter"></select>
+                <label class="squad-field">
+                  <span class="ui-label">League</span>
+                  <select id="league-filter" class="ui-select"></select>
                 </label>
-                <label class="editor-select">
-                  <span>Team</span>
-                  <select id="team-select"></select>
+                <label class="squad-field">
+                  <span class="ui-label">Formation</span>
+                  <select id="formation-select" class="ui-select"></select>
                 </label>
-                <label class="editor-select">
-                  <span>Formation</span>
-                  <select id="formation-select"></select>
-                </label>
-                <label class="editor-select">
-                  <span>Kit</span>
-                  <select id="kit-select">
+                <label class="squad-field">
+                  <span class="ui-label">Kit</span>
+                  <select id="kit-select" class="ui-select">
                     <option value="home">Home</option>
                     <option value="away">Away</option>
                     <option value="third">Third</option>
                   </select>
                 </label>
-                <div class="editor-toolbar-actions">
-                  <button id="auto-pick" class="button small" type="button">Auto pick</button>
-                  <button id="reset-sheet" class="button small" type="button">Reset</button>
-                  <button id="save-sheet" class="button small" type="button">Save</button>
-                  <button id="load-sheet" class="button small" type="button">Load</button>
-                  <button id="export-sheet" class="button small" type="button">Export</button>
-                  <button id="import-sheet" class="button small" type="button">Import</button>
-                  <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" />
+                <div class="squad-command__actions">
+                  <button id="auto-pick" class="ui-button ui-button--small ui-button--outline-accent" type="button">
+                    Auto pick
+                  </button>
+                  <button id="reset-sheet" class="ui-button ui-button--small" type="button">
+                    Reset
+                  </button>
+                  <details class="squad-file">
+                    <summary class="ui-button ui-button--small squad-file__summary">
+                      <span>Squad file</span>
+                      <span class="squad-file__caret" aria-hidden="true"></span>
+                    </summary>
+                    <div class="squad-file__menu">
+                      <p class="ui-kicker">Squad file</p>
+                      <button id="save-sheet" class="squad-file__action" type="button">
+                        <span>Save in browser</span>
+                        <span aria-hidden="true">⌘S</span>
+                      </button>
+                      <button id="load-sheet" class="squad-file__action" type="button">
+                        <span>Load saved sheet</span>
+                        <span aria-hidden="true">⌘L</span>
+                      </button>
+                      <button id="export-sheet" class="squad-file__action" type="button">
+                        <span>Export JSON</span>
+                        <span aria-hidden="true">↓</span>
+                      </button>
+                      <button id="import-sheet" class="squad-file__action" type="button">
+                        <span>Import JSON</span>
+                        <span aria-hidden="true">↑</span>
+                      </button>
+                    </div>
+                  </details>
+                  <input id="import-file" class="ui-visually-hidden" type="file" accept="application/json,.json" />
                 </div>
               </div>
 
-              <div class="match-options" aria-label="Match options">
-                <div class="match-options-head">
-                  <div>
-                    <p class="eyebrow">Match options</p>
-                    <h3>Competition rules</h3>
-                  </div>
-                  <span id="settings-owner" class="chip">Host controls</span>
+              <div class="squad-tabs">
+                <div class="ui-tabs squad-tabs__list" role="tablist" aria-label="Squad editor sections">
+                  <button id="squad-tab-squad" class="ui-tab" type="button" role="tab" aria-selected="true" aria-controls="squad-panel-squad" data-squad-tab="squad">Squad</button>
+                  <button id="squad-tab-tactics" class="ui-tab" type="button" role="tab" aria-selected="false" aria-controls="squad-panel-tactics" data-squad-tab="tactics" tabindex="-1">Tactics</button>
+                  <button id="squad-tab-setup" class="ui-tab" type="button" role="tab" aria-selected="false" aria-controls="squad-panel-setup" data-squad-tab="setup" tabindex="-1">Match setup</button>
                 </div>
-                <div class="match-options-grid">
-                  <label class="editor-select">
-                    <span>Half length</span>
-                    <select id="match-half-length">
-                      <option value="4">4 minutes</option>
-                      <option value="6">6 minutes</option>
-                      <option value="8">8 minutes</option>
-                      <option value="10">10 minutes</option>
-                    </select>
-                  </label>
-                  <label class="option-check">
-                    <input id="match-extra-time" type="checkbox" />
-                    <span>Extra time</span>
-                  </label>
-                  <label class="option-check">
-                    <input id="match-shootout" type="checkbox" />
-                    <span>Penalty shootout</span>
-                  </label>
-                  <label class="option-check">
-                    <input id="match-var" type="checkbox" />
-                    <span>VAR-lite</span>
-                  </label>
-                </div>
-                <p class="editor-rules">
-                  Knockout finish options apply when the score is level. VAR-lite
-                  checks goals, penalties and direct red cards for three seconds.
-                </p>
+                <p class="squad-tabs__hint">Changes sync to the host as you edit.</p>
               </div>
 
-              <div id="club-preview" class="club-preview"></div>
-              <p class="editor-rules">
-                Formation rules: exactly 1 goalkeeper in the XI; bench 5-9 with a
-                backup keeper; every squad player assigned once. Out-of-position
-                outfielders are allowed but marked as a role warning.
-              </p>
-
-              <div class="editor-layout">
-                <div class="editor-pitch-column">
-                  <div class="panel-head">
-                    <h3>Starting XI</h3>
-                    <span class="panel-hint">Tap two players to swap</span>
-                  </div>
-                  <div id="formation-pitch" class="formation-pitch" aria-label="Formation pitch"></div>
-
-                  <div class="bench-block">
-                    <div class="panel-head">
-                      <h3>Substitutes</h3>
-                      <label class="inline-select">
+              <div id="squad-panel-squad" class="squad-panel" role="tabpanel" aria-labelledby="squad-tab-squad" data-squad-panel="squad">
+                <div class="squad-workbench">
+                  <aside class="squad-pool" aria-label="Squad selection">
+                    <header class="squad-panel-head">
+                      <div>
+                        <p class="ui-kicker">Selection pool</p>
+                        <h2 class="squad-panel-title">Matchday squad</h2>
+                      </div>
+                      <label class="squad-inline-field">
                         <span>Bench</span>
-                        <select id="bench-size"></select>
+                        <select id="bench-size" class="ui-select" aria-label="Bench size"></select>
                       </label>
-                    </div>
-                    <div id="bench-list" class="squad-list"></div>
-                  </div>
-                </div>
+                    </header>
 
-                <aside class="editor-side">
-                  <section id="player-detail" class="editor-panel"></section>
-
-                  <section class="editor-panel">
-                    <div class="panel-head">
-                      <h3>Reserves</h3>
-                      <span id="reserve-count" class="panel-hint">0 players</span>
-                    </div>
                     <div class="squad-filters">
-                      <input id="player-search" type="search" placeholder="Search reserves" aria-label="Search reserves" />
-                      <select id="position-filter" aria-label="Filter reserves by position">
+                      <div class="squad-search">
+                        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                          <circle cx="8.5" cy="8.5" r="4.75"></circle>
+                          <path d="m12.1 12.1 4 4"></path>
+                        </svg>
+                        <input id="player-search" class="ui-input" type="search" placeholder="Search squad" aria-label="Search squad" />
+                      </div>
+                      <select id="position-filter" class="ui-select" aria-label="Filter squad by position">
                         <option value="all">All positions</option>
                         <option value="GK">Goalkeepers</option>
                         <option value="DEF">Defenders</option>
@@ -249,75 +637,251 @@
                         <option value="ATT">Attackers</option>
                       </select>
                     </div>
-                    <div id="reserve-list" class="squad-list"></div>
+
+                    <div class="ui-tabs squad-pool__tabs" role="tablist" aria-label="Squad list">
+                      <button id="bench-tab" class="ui-tab" type="button" role="tab" aria-selected="true" aria-controls="bench-panel" data-pool-tab="bench">
+                        Substitutes <span id="bench-count" class="squad-count">—</span>
+                      </button>
+                      <button id="reserve-tab" class="ui-tab" type="button" role="tab" aria-selected="false" aria-controls="reserve-panel" data-pool-tab="reserve" tabindex="-1">
+                        Reserves <span id="reserve-count" class="squad-count">—</span>
+                      </button>
+                    </div>
+
+                    <div id="bench-panel" role="tabpanel" aria-labelledby="bench-tab" data-pool-panel="bench">
+                      <div id="bench-list" class="squad-list"></div>
+                    </div>
+                    <div id="reserve-panel" role="tabpanel" aria-labelledby="reserve-tab" data-pool-panel="reserve" hidden>
+                      <div id="reserve-list" class="squad-list"></div>
+                    </div>
+                    <p class="squad-note">Tap two players to swap them. Drag-and-drop works too.</p>
+                  </aside>
+
+                  <section class="squad-pitch-column" aria-labelledby="squad-pitch-title">
+                    <header class="squad-panel-head">
+                      <div>
+                        <p class="ui-kicker">Starting XI</p>
+                        <h2 id="squad-pitch-title" class="squad-panel-title">Build your XI</h2>
+                      </div>
+                      <span id="squad-formation-label" class="squad-formation">4-3-3</span>
+                    </header>
+
+                    <div class="squad-pitch">
+                      <svg class="squad-pitch__art" viewBox="-3 -2 111 72" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                        <g fill="none" stroke="currentColor" stroke-width="0.22">
+                          <rect x="0" y="0" width="105" height="68"></rect>
+                          <line x1="52.5" y1="0" x2="52.5" y2="68"></line>
+                          <circle cx="52.5" cy="34" r="9.15"></circle>
+                          <rect x="0" y="13.84" width="16.5" height="40.32"></rect>
+                          <rect x="88.5" y="13.84" width="16.5" height="40.32"></rect>
+                          <rect x="0" y="24.84" width="5.5" height="18.32"></rect>
+                          <rect x="99.5" y="24.84" width="5.5" height="18.32"></rect>
+                          <path d="M16.5 41.31 A9.15 9.15 0 0 0 16.5 26.69"></path>
+                          <path d="M88.5 26.69 A9.15 9.15 0 0 0 88.5 41.31"></path>
+                          <path d="M0 1 A1 1 0 0 1 1 0"></path>
+                          <path d="M105 1 A1 1 0 0 0 104 0"></path>
+                          <path d="M0 67 A1 1 0 0 0 1 68"></path>
+                          <path d="M105 67 A1 1 0 0 1 104 68"></path>
+                          <rect x="-2" y="30.34" width="2" height="7.32"></rect>
+                          <rect x="105" y="30.34" width="2" height="7.32"></rect>
+                        </g>
+                        <g fill="currentColor">
+                          <circle cx="52.5" cy="34" r="0.28"></circle>
+                          <circle cx="11" cy="34" r="0.28"></circle>
+                          <circle cx="94" cy="34" r="0.28"></circle>
+                        </g>
+                      </svg>
+                      <div id="formation-pitch" class="squad-pitch__slots" aria-label="Formation pitch"></div>
+                    </div>
+
+                    <div class="squad-pitch-footer">
+                      <p class="squad-note">Select a starter, then a substitute or reserve to swap.</p>
+                      <div class="squad-role-key" aria-label="Role fit legend">
+                        <span><i data-state="natural"></i>Natural</span>
+                        <span><i data-state="accomplished"></i>Accomplished</span>
+                        <span><i data-state="warning"></i>Out of role</span>
+                      </div>
+                    </div>
                   </section>
 
-                  <section class="editor-panel">
-                    <div class="panel-head">
-                      <h3>Tactics</h3>
-                      <span class="panel-hint">Live to both players</span>
-                    </div>
-                    <label class="range-row">
-                      <span>Defensive depth <output id="tactics-depth-value">50</output></span>
-                      <input id="tactics-depth" type="range" min="0" max="100" step="1" />
+                  <aside class="squad-dossier" aria-label="Player profile">
+                    <section id="player-detail" class="squad-card squad-profile"></section>
+                  </aside>
+                </div>
+              </div>
+
+              <div id="squad-panel-tactics" class="squad-panel squad-panel--padded" role="tabpanel" aria-labelledby="squad-tab-tactics" data-squad-panel="tactics" hidden>
+                <header class="squad-section-head">
+                  <div>
+                    <p class="ui-kicker">Tactics</p>
+                    <h2 class="squad-section-title">How the team plays</h2>
+                    <p class="squad-lede">Shape without the ball, then the delivery and penalty detail that decides tight games.</p>
+                  </div>
+                  <span class="ui-badge">Live to both players</span>
+                </header>
+
+                <div class="squad-tactics-grid">
+                  <section class="squad-card squad-card--padded">
+                    <header class="squad-card-head">
+                      <span class="squad-card-index">01</span>
+                      <div>
+                        <p class="ui-kicker">Out of possession</p>
+                        <h3>Shape &amp; pressure</h3>
+                      </div>
+                    </header>
+
+                    <label class="squad-range">
+                      <span class="squad-range__label">Defensive depth <output id="tactics-depth-value">50</output></span>
+                      <input id="tactics-depth" class="ui-slider" type="range" min="0" max="100" step="1" />
+                      <span class="squad-range__hint">Low protects the space behind. High compresses the pitch.</span>
                     </label>
-                    <label class="range-row">
-                      <span>Width <output id="tactics-width-value">50</output></span>
-                      <input id="tactics-width" type="range" min="0" max="100" step="1" />
+                    <label class="squad-range">
+                      <span class="squad-range__label">Width <output id="tactics-width-value">50</output></span>
+                      <input id="tactics-width" class="ui-slider" type="range" min="0" max="100" step="1" />
+                      <span class="squad-range__hint">Narrow keeps the block compact. Wide stretches the opposition.</span>
                     </label>
-                    <div class="tactics-grid">
-                      <label class="editor-select">
-                        <span>Press</span>
-                        <select id="tactics-press">
+
+                    <div class="squad-field-grid">
+                      <label class="squad-field">
+                        <span class="ui-label">Press</span>
+                        <select id="tactics-press" class="ui-select">
                           <option value="low">Low</option>
                           <option value="medium">Medium</option>
                           <option value="high">High</option>
                         </select>
                       </label>
-                      <label class="editor-select">
-                        <span>Build-up</span>
-                        <select id="tactics-build-up">
+                      <label class="squad-field">
+                        <span class="ui-label">Build-up</span>
+                        <select id="tactics-build-up" class="ui-select">
                           <option value="short">Short</option>
                           <option value="balanced">Balanced</option>
                           <option value="direct">Direct</option>
                         </select>
                       </label>
                     </div>
-
-                    <h3 class="subheading">Set-piece takers</h3>
-                    <div class="taker-grid">
-                      <label class="editor-select"><span>Captain</span><select id="captain-select"></select></label>
-                      <label class="editor-select"><span>Penalties</span><select id="penalty-select"></select></label>
-                      <label class="editor-select"><span>Free kicks</span><select id="freekick-select"></select></label>
-                      <label class="editor-select"><span>Corners L</span><select id="corner-left-select"></select></label>
-                      <label class="editor-select"><span>Corners R</span><select id="corner-right-select"></select></label>
-                    </div>
                   </section>
 
-                  <section id="opponent-panel" class="editor-panel opponent-panel"></section>
-                </aside>
+                  <section class="squad-card squad-card--padded">
+                    <header class="squad-card-head">
+                      <span class="squad-card-index">02</span>
+                      <div>
+                        <p class="ui-kicker">Dead ball</p>
+                        <h3>Set-piece takers</h3>
+                      </div>
+                    </header>
+
+                    <div class="squad-taker-grid">
+                      <label class="squad-field">
+                        <span class="ui-label">Captain</span>
+                        <select id="captain-select" class="ui-select"></select>
+                      </label>
+                      <label class="squad-field">
+                        <span class="ui-label">Penalties</span>
+                        <select id="penalty-select" class="ui-select"></select>
+                      </label>
+                      <label class="squad-field">
+                        <span class="ui-label">Free kicks</span>
+                        <select id="freekick-select" class="ui-select"></select>
+                      </label>
+                      <label class="squad-field">
+                        <span class="ui-label">Corners left</span>
+                        <select id="corner-left-select" class="ui-select"></select>
+                      </label>
+                      <label class="squad-field">
+                        <span class="ui-label">Corners right</span>
+                        <select id="corner-right-select" class="ui-select"></select>
+                      </label>
+                    </div>
+
+                    <p class="squad-note">Only the starting XI is eligible. Takers are repaired automatically after a swap.</p>
+                  </section>
+                </div>
+              </div>
+
+              <div id="squad-panel-setup" class="squad-panel squad-panel--padded" role="tabpanel" aria-labelledby="squad-tab-setup" data-squad-panel="setup" hidden>
+                <header class="squad-section-head">
+                  <div>
+                    <p class="ui-kicker">Match setup</p>
+                    <h2 class="squad-section-title">Room conditions</h2>
+                    <p class="squad-lede">Both seats see the same rules. Only the host can change the match length and finish options.</p>
+                  </div>
+                  <span id="settings-owner" class="ui-badge">Host controls</span>
+                </header>
+
+                <div class="squad-setup-grid">
+                  <section class="squad-card squad-card--padded">
+                    <header class="squad-card-head">
+                      <span class="squad-card-index">01</span>
+                      <div>
+                        <p class="ui-kicker">Competition</p>
+                        <h3>Match rules</h3>
+                      </div>
+                    </header>
+
+                    <div class="squad-rules-controls">
+                      <label class="squad-field">
+                        <span class="ui-label">Half length</span>
+                        <select id="match-half-length" class="ui-select">
+                          <option value="4">4 minutes</option>
+                          <option value="6">6 minutes</option>
+                          <option value="8">8 minutes</option>
+                          <option value="10">10 minutes</option>
+                        </select>
+                      </label>
+
+                      <div class="squad-checks">
+                        <label class="squad-check">
+                          <input id="match-extra-time" type="checkbox" />
+                          <span class="squad-check__control" aria-hidden="true"></span>
+                          <span class="squad-check__label">Extra time</span>
+                        </label>
+                        <label class="squad-check">
+                          <input id="match-shootout" type="checkbox" />
+                          <span class="squad-check__control" aria-hidden="true"></span>
+                          <span class="squad-check__label">Penalty shootout</span>
+                        </label>
+                        <label class="squad-check">
+                          <input id="match-var" type="checkbox" />
+                          <span class="squad-check__control" aria-hidden="true"></span>
+                          <span class="squad-check__label">VAR-lite</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <p class="squad-note">Knockout finish options only apply when the score is level. VAR-lite checks goals, penalties and direct red cards for three seconds.</p>
+                  </section>
+
+                  <section class="squad-card squad-card--padded">
+                    <header class="squad-card-head">
+                      <span class="squad-card-index">02</span>
+                      <div>
+                        <p class="ui-kicker">Opposition</p>
+                        <h3>Other seat</h3>
+                      </div>
+                    </header>
+                    <div id="opponent-panel"></div>
+                  </section>
+                </div>
+
+                <section class="squad-card squad-card--padded squad-rules">
+                  <header class="squad-card-head">
+                    <span class="squad-card-index">03</span>
+                    <div>
+                      <p class="ui-kicker">Validation</p>
+                      <h3>Team sheet rules</h3>
+                    </div>
+                  </header>
+                  <ol class="squad-rule-list">
+                    <li><span>01</span><p>Exactly one goalkeeper in the starting XI, with a backup keeper on the bench.</p></li>
+                    <li><span>02</span><p>Bench size from five to nine. Every assigned player appears exactly once.</p></li>
+                    <li><span>03</span><p>Out-of-position players are legal but carry a visible role warning.</p></li>
+                    <li><span>04</span><p>Captain and set-piece takers must come from the starting XI.</p></li>
+                  </ol>
+                </section>
               </div>
             </div>
           </section>
 
-          <div class="room-actions">
-            <button id="ready" class="button primary" type="button">Ready</button>
-            <button id="leave-room" class="button" type="button">Leave room</button>
-          </div>
-
-          <p id="room-hint" class="room-hint">
-            The match starts automatically when both players are ready.
-          </p>
         </section>
-
-        <footer class="lobby-footer">
-          <p>
-            Server-owned simulation. Snapshots travel at 30 Hz; clients render a
-            100 ms interpolation buffer. Keyboard, gamepad and phone controls
-            stream input frames at 60 Hz.
-          </p>
-          <p><a href="/practice.html">Open offline practice</a></p>
-        </footer>
       </main>
 
       <main id="match-view" class="match-shell" hidden>
@@ -452,11 +1016,45 @@
             <a href="/">Lobby</a>
             <span class="hint-sep">/</span>
             <a href="/controller.html">Phone controller</a>
-            <span class="hint-sep">/</span>
-            <a href="/link.html">Transport check</a>
           </p>
         </footer>
       </main>
+
+      <dialog id="help-dialog" class="ui-dialog">
+        <div class="ui-dialog__head">
+          <div>
+            <p class="ui-kicker">LAN setup</p>
+            <h2 class="ui-dialog__title">How to connect</h2>
+          </div>
+          <button id="close-help" class="ui-button ui-button--small" type="button">
+            Close
+          </button>
+        </div>
+        <div class="ui-dialog__body">
+          <p>
+            Host and guest must be on the same network. The host terminal serves
+            HTTPS; both devices need the local certificate trusted.
+          </p>
+          <ol class="ui-help-list">
+            <li>
+              On the host machine, run <strong>pnpm start</strong> and open the
+              printed HTTPS address.
+            </li>
+            <li>
+              Create a room. The next screen shows a four-letter code and a QR
+              code.
+            </li>
+            <li>
+              On the second device, open the same host address, choose
+              <strong>LAN Match</strong>, then enter the code or scan the QR.
+            </li>
+          </ol>
+          <p class="ui-dialog__footnote">
+            Phone controller: open the printed controller URL on the second
+            device if you want touch input instead of a gamepad.
+          </p>
+        </div>
+      </dialog>
 
       <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
@@ -500,7 +1098,7 @@
         </div>
         <p class="dialog-copy">
           Click a binding, then press a key. Bindings save to this browser.
-          Gamepad mapping is fixed for now.
+          Gamepad mapping is fixed.
         </p>
         <div id="bindings-grid" class="bindings-grid"></div>
         <div class="dialog-actions">
