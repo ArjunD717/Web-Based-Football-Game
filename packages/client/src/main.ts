@@ -40,9 +40,24 @@ import {
   renderMatchStatsScreen,
   type MatchStatsViewRow,
 } from "./match/stats-screen";
+import * as QRCode from "qrcode";
+import "@fontsource/barlow/latin-400.css";
+import "@fontsource/barlow/latin-500.css";
+import "@fontsource/barlow/latin-600.css";
+import "@fontsource/barlow-condensed/latin-600.css";
+import "@fontsource/barlow-condensed/latin-700.css";
+import "./ui/tokens.css";
 import "./style.css";
+import "./ui/components.css";
+import "./ui/menu.css";
+import "./ui/squad.css";
+import { installConsoleMenu } from "./ui/menu";
 
 const TOAST_DURATION_MS = 2_600;
+// Canvas fills cannot read CSS custom properties; keep these in sync with
+// --ui-ink and --ui-chalk so the QR keeps the console palette.
+const QR_DARK = "#0A0B09";
+const QR_LIGHT = "#F2EEE3";
 const STATUS_LABELS: Record<GameLinkStatus, string> = {
   connecting: "Connecting",
   online: "Online",
@@ -71,6 +86,7 @@ const createRoomButton = byId<HTMLButtonElement>("create-room");
 const joinForm = byId<HTMLFormElement>("join-form");
 const roomInput = byId<HTMLInputElement>("room-input");
 const joinSubmit = byId<HTMLButtonElement>("join-submit");
+const joinError = byId<HTMLElement>("join-error");
 const roomCode = byId<HTMLElement>("room-code");
 const copyCodeButton = byId<HTMLButtonElement>("copy-code");
 const roomPhase = byId<HTMLElement>("room-phase");
@@ -78,9 +94,15 @@ const roomBadge = byId<HTMLElement>("room-badge");
 const joinUrl = byId<HTMLElement>("join-url");
 const controllerUrl = byId<HTMLElement>("controller-url");
 const roomPlayers = byId<HTMLElement>("room-players");
+const roomPing = byId<HTMLElement>("room-ping");
+const roomQr = byId<HTMLCanvasElement>("room-qr");
 const readyButton = byId<HTMLButtonElement>("ready");
 const leaveRoomButton = byId<HTMLButtonElement>("leave-room");
 const roomHint = byId<HTMLElement>("room-hint");
+const openHelpButton = byId<HTMLButtonElement>("open-help");
+const helpDialog = byId<HTMLDialogElement>("help-dialog");
+const closeHelpButton = byId<HTMLButtonElement>("close-help");
+const settingsSoundButton = byId<HTMLButtonElement>("settings-sound");
 const homeSwatch = byId<HTMLElement>("home-swatch");
 const awaySwatch = byId<HTMLElement>("away-swatch");
 const homeName = byId<HTMLElement>("home-name");
@@ -131,6 +153,7 @@ const toast = byId<HTMLElement>("toast");
 
 let currentState: GameClientState | null = null;
 let toastTimer: number | null = null;
+let lastQrRoomCode: string | null = null;
 
 const substitutionPanel = new SubstitutionPanel({
   onSubstitute: (outId, inId) => client.substitute(outId, inId),
@@ -157,7 +180,23 @@ if (rendererFellBack) {
 const queryCode = readQueryRoomCode();
 if (queryCode !== null) {
   roomInput.value = queryCode;
+  roomInput.dispatchEvent(new Event("input", { bubbles: true }));
 }
+installConsoleMenu();
+
+openHelpButton.addEventListener("click", () => {
+  helpDialog.showModal();
+});
+
+closeHelpButton.addEventListener("click", () => {
+  helpDialog.close();
+});
+
+helpDialog.addEventListener("click", (event) => {
+  if (event.target === helpDialog) {
+    helpDialog.close();
+  }
+});
 
 let lastLobby: ServerLobbyStateMessage | null | undefined;
 let lastStatus: GameLinkStatus | null = null;
@@ -195,9 +234,16 @@ joinForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const code = normalizeRoomCode(roomInput.value);
   if (!isRoomCode(code)) {
+    joinError.textContent = "Enter the four-letter code shown in the host room.";
+    joinError.hidden = false;
+    roomInput.setAttribute("aria-invalid", "true");
+    roomInput.focus();
     showToast("Enter the four-letter room code");
     return;
   }
+  joinError.hidden = true;
+  joinError.textContent = "";
+  roomInput.removeAttribute("aria-invalid");
   roomInput.value = code;
   autoJoinAttempted = true;
   client.joinRoom(code);
@@ -208,6 +254,9 @@ roomInput.addEventListener("input", () => {
     .toUpperCase()
     .replace(/[^A-Z]/g, "")
     .slice(0, 4);
+  joinError.hidden = true;
+  joinError.textContent = "";
+  roomInput.removeAttribute("aria-invalid");
 });
 
 readyButton.addEventListener("click", () => {
@@ -248,6 +297,10 @@ replayStopButton.addEventListener("click", () => {
 });
 
 audioToggleButton.addEventListener("click", () => {
+  void audio.toggle().then(updateAudioControl);
+});
+
+settingsSoundButton.addEventListener("click", () => {
   void audio.toggle().then(updateAudioControl);
 });
 
@@ -499,7 +552,22 @@ function applyState(state: GameClientState): void {
   substitutionPanel.updateNotice(state.substitutionNotice);
 
   if (state.notice !== null && state.notice !== lastNotice) {
-    showToast(state.notice);
+    const noticeText = state.notice.replace(/^[a-z_]+: /, "");
+    const joinFailure =
+      state.notice.startsWith("room_not_found: ") ||
+      state.notice.startsWith("room_unavailable: ") ||
+      state.notice.startsWith("room_full: ");
+    if (joinFailure) {
+      joinError.textContent = noticeText;
+      joinError.hidden = false;
+      roomInput.setAttribute("aria-invalid", "true");
+      document
+        .querySelector<HTMLButtonElement>('[data-menu-key="lan"]')
+        ?.click();
+      roomInput.focus();
+    } else {
+      showToast(noticeText);
+    }
     lastNotice = state.notice;
   } else if (state.notice === null) {
     lastNotice = null;
@@ -637,6 +705,8 @@ function renderConnection(state: GameClientState): void {
   connectionLabel.title = state.detail;
   pingLabel.textContent =
     state.pingMs === null ? "— ms" : `${Math.round(state.pingMs)} ms`;
+  roomPing.textContent =
+    state.pingMs === null ? "— ms" : `${Math.round(state.pingMs)} ms`;
 
   const canCommand = state.status === "online";
   createRoomButton.disabled = !canCommand;
@@ -651,18 +721,40 @@ function renderConnection(state: GameClientState): void {
 
 function renderLobby(state: GameClientState): void {
   const room = state.lobby?.room ?? null;
+  const focusWasInRoom = roomView.contains(document.activeElement);
+  const focusWasInEntry = entryView.contains(document.activeElement);
   if (room === null) {
     entryView.hidden = false;
     roomView.hidden = true;
+    lastQrRoomCode = null;
     teamEditor.render(null, null);
+    if (focusWasInRoom) {
+      document
+        .querySelector<HTMLButtonElement>('[data-menu-key="lan"]')
+        ?.focus();
+    }
     return;
   }
 
   entryView.hidden = true;
   roomView.hidden = false;
+  joinError.hidden = true;
+  joinError.textContent = "";
+  roomInput.removeAttribute("aria-invalid");
+  if (focusWasInEntry) {
+    copyCodeButton.focus();
+  }
   roomCode.textContent = room.code;
+  roomPing.textContent =
+    state.pingMs === null ? "— ms" : `${Math.round(state.pingMs)} ms`;
   joinUrl.textContent = `Player: ${window.location.origin}/?room=${room.code}`;
+  joinUrl.title = joinUrl.textContent;
   controllerUrl.textContent = `Phone: ${window.location.origin}/controller.html?room=${room.code}`;
+  controllerUrl.title = controllerUrl.textContent;
+  if (lastQrRoomCode !== room.code) {
+    lastQrRoomCode = room.code;
+    void renderRoomQr(room.code);
+  }
   roomPhase.textContent = phaseDescription(room);
   roomBadge.textContent = phaseLabel(room.phase);
   roomBadge.dataset.state =
@@ -673,16 +765,40 @@ function renderLobby(state: GameClientState): void {
         : "idle";
 
   const you = state.lobby?.you ?? null;
+  roomView.dataset.host = String(you?.host ?? false);
   const selfSeat = you?.seat ?? null;
   teamEditor.render(room, selfSeat);
   renderRoomPlayers(room, selfSeat);
+  const matchRunning = room.phase === "live" || room.phase === "paused";
   readyButton.disabled =
     state.status !== "online" ||
-    room.phase === "live" ||
-    room.phase === "paused" ||
+    matchRunning ||
     (!you?.ready && !teamEditor.canReady());
-  readyButton.textContent = you?.ready ? "Cancel ready" : "Ready";
+  readyButton.textContent = matchRunning
+    ? "Match live"
+    : you?.ready
+      ? "Cancel ready"
+      : "Ready";
   roomHint.textContent = roomHintText(room);
+}
+
+async function renderRoomQr(code: string): Promise<void> {
+  const joinLink = new URL("/", window.location.origin);
+  joinLink.searchParams.set("room", code);
+  try {
+    await QRCode.toCanvas(roomQr, joinLink.toString(), {
+      width: 240,
+      margin: 1,
+      color: { dark: QR_DARK, light: QR_LIGHT },
+    });
+    roomQr.setAttribute("aria-label", `QR code to join room ${code}`);
+  } catch {
+    lastQrRoomCode = null;
+    roomQr.setAttribute(
+      "aria-label",
+      "QR code unavailable; enter the room code instead",
+    );
+  }
 }
 
 function renderRoomPlayers(
@@ -696,7 +812,7 @@ function renderRoomPlayers(
   if (room.players.length < 2) {
     const empty = document.createElement("div");
     empty.className = "room-player-empty";
-    empty.textContent = "Waiting for the second device";
+    empty.textContent = "Open seat / waiting for the second device";
     roomPlayers.append(empty);
   }
 }
@@ -709,6 +825,7 @@ function buildPlayerCard(
   card.className = "room-player";
   card.dataset.self = String(player.seat === selfSeat);
   card.dataset.connected = String(player.connected);
+  card.dataset.ready = String(player.ready);
 
   const nameRow = document.createElement("div");
   nameRow.className = "room-player-name";
@@ -717,15 +834,21 @@ function buildPlayerCard(
   const tag = document.createElement("span");
   tag.className = "room-player-tag";
   tag.textContent =
-    player.seat === selfSeat ? "You" : player.host ? "Host" : "Guest";
+    player.seat === selfSeat
+      ? "You"
+      : `Seat ${String(player.seat + 1).padStart(2, "0")}`;
   nameRow.append(name, tag);
 
   const meta = document.createElement("div");
   meta.className = "room-player-meta";
+  const readiness = chip(player.ready ? "Ready" : "Not ready");
+  readiness.dataset.ready = String(player.ready);
+  const connection = chip(player.connected ? "Connected" : "Reconnecting");
+  connection.dataset.connected = String(player.connected);
   meta.append(
     chip(`${player.team === "home" ? "Home" : "Away"} XI`),
-    chip(player.ready ? "Ready" : "Not ready"),
-    chip(player.connected ? "Connected" : "Reconnecting"),
+    readiness,
+    connection,
   );
 
   card.append(nameRow, meta);
@@ -1162,6 +1285,7 @@ function switchRenderer(next: RendererMode): void {
 function updateAudioControl(): void {
   audioToggleButton.textContent = audio.isEnabled ? "Sound on" : "Sound off";
   audioToggleButton.setAttribute("aria-pressed", String(audio.isEnabled));
+  settingsSoundButton.setAttribute("aria-checked", String(audio.isEnabled));
 }
 
 function updateRendererControl(): void {
@@ -1226,19 +1350,17 @@ function phaseDescription(room: LobbyRoomWire): string {
         ? "Waiting for a second device"
         : "Waiting for both players to ready up";
     case "ready":
-      return "Both players ready — starting";
+      return "Both players ready. Starting.";
     case "live":
-      return "Server match in progress";
+      return "Match in progress";
     case "paused":
-      return `Paused — ${
-        room.reconnectSeconds ?? 0
-      }s reconnect window`;
+      return `Paused. Reconnect window ${room.reconnectSeconds ?? 0}s`;
   }
 }
 
 function roomHintText(room: LobbyRoomWire): string {
   if (room.phase === "live") {
-    return "The match is running on the host server.";
+    return "The match is live.";
   }
   if (room.phase === "paused") {
     return "The match is frozen while the disconnected seat is held.";

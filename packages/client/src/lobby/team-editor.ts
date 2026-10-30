@@ -18,6 +18,8 @@ import {
 import { loadCatalog, type Catalog, type TeamCatalogEntry } from "../data/catalog";
 
 type SelectionKind = "starter" | "bench" | "reserve";
+type EditorTab = "squad" | "tactics" | "setup";
+type PoolTab = "bench" | "reserve";
 
 interface Selection {
   readonly kind: SelectionKind;
@@ -89,10 +91,17 @@ export class TeamEditor {
   private readonly kitSelect = byId<HTMLSelectElement>("kit-select");
   private readonly clubPreview = byId<HTMLElement>("club-preview");
   private readonly syncChip = byId<HTMLElement>("editor-sync");
+  private readonly xiRating = byId<HTMLElement>("squad-xi-rating");
+  private readonly benchSummary = byId<HTMLElement>("squad-bench-summary");
+  private readonly roleWarnings =
+    byId<HTMLElement>("squad-role-warnings");
+  private readonly formationLabel =
+    byId<HTMLElement>("squad-formation-label");
   private readonly pitch = byId<HTMLElement>("formation-pitch");
   private readonly benchSize = byId<HTMLSelectElement>("bench-size");
   private readonly benchList = byId<HTMLElement>("bench-list");
   private readonly reserveList = byId<HTMLElement>("reserve-list");
+  private readonly benchCount = byId<HTMLElement>("bench-count");
   private readonly reserveCount = byId<HTMLElement>("reserve-count");
   private readonly playerSearch = byId<HTMLInputElement>("player-search");
   private readonly positionFilter =
@@ -137,8 +146,14 @@ export class TeamEditor {
   private lastTeamId: string | null = null;
   private dragged: Selection | null = null;
   private suppressClickUntil = 0;
+  private activeEditorTab: EditorTab = "squad";
+  private activePoolTab: PoolTab = "bench";
 
   constructor(private readonly callbacks: EditorCallbacks) {
+    this.bindEditorTabs();
+    this.bindPoolTabs();
+    this.bindSquadFileMenu();
+
     this.teamSelect.addEventListener("change", () => {
       const teamId = this.teamSelect.value;
       if (teamId === "") {
@@ -270,6 +285,140 @@ export class TeamEditor {
     void this.loadCatalog();
   }
 
+  private bindEditorTabs(): void {
+    const tabs = [
+      ...this.root.querySelectorAll<HTMLButtonElement>("[data-squad-tab]"),
+    ];
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => {
+        this.showEditorTab(readEditorTab(tab));
+      });
+      tab.addEventListener("keydown", (event) => {
+        this.handleTabKey(event, tabs, (next) => {
+          this.showEditorTab(readEditorTab(next));
+          next.focus();
+        });
+      });
+    }
+    this.showEditorTab(this.activeEditorTab);
+  }
+
+  private bindPoolTabs(): void {
+    const tabs = [
+      ...this.root.querySelectorAll<HTMLButtonElement>("[data-pool-tab]"),
+    ];
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => {
+        this.showPoolTab(readPoolTab(tab));
+      });
+      tab.addEventListener("keydown", (event) => {
+        this.handleTabKey(event, tabs, (next) => {
+          this.showPoolTab(readPoolTab(next));
+          next.focus();
+        });
+      });
+    }
+    this.showPoolTab(this.activePoolTab);
+  }
+
+  private bindSquadFileMenu(): void {
+    const menu = this.root.querySelector<HTMLDetailsElement>(".squad-file");
+    if (menu === null) {
+      return;
+    }
+    for (const action of menu.querySelectorAll<HTMLButtonElement>("button")) {
+      action.addEventListener("click", () => {
+        menu.open = false;
+      });
+    }
+    menu.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !menu.open) {
+        return;
+      }
+      event.preventDefault();
+      menu.open = false;
+      menu.querySelector<HTMLElement>("summary")?.focus();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (
+        menu.open &&
+        event.target instanceof Node &&
+        !menu.contains(event.target)
+      ) {
+        menu.open = false;
+      }
+    });
+  }
+
+  private showEditorTab(tab: EditorTab): void {
+    this.activeEditorTab = tab;
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>(
+      "[data-squad-tab]",
+    )) {
+      const selected = button.dataset.squadTab === tab;
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    }
+    for (const panel of this.root.querySelectorAll<HTMLElement>(
+      "[data-squad-panel]",
+    )) {
+      panel.hidden = panel.dataset.squadPanel !== tab;
+    }
+    this.root.dataset.section = tab;
+  }
+
+  private showPoolTab(tab: PoolTab): void {
+    this.activePoolTab = tab;
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>(
+      "[data-pool-tab]",
+    )) {
+      const selected = button.dataset.poolTab === tab;
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    }
+    for (const panel of this.root.querySelectorAll<HTMLElement>(
+      "[data-pool-panel]",
+    )) {
+      panel.hidden = panel.dataset.poolPanel !== tab;
+    }
+  }
+
+  private handleTabKey(
+    event: KeyboardEvent,
+    tabs: readonly HTMLButtonElement[],
+    activate: (tab: HTMLButtonElement) => void,
+  ): void {
+    if (
+      event.key !== "ArrowLeft" &&
+      event.key !== "ArrowRight" &&
+      event.key !== "Home" &&
+      event.key !== "End"
+    ) {
+      return;
+    }
+    const current = event.currentTarget;
+    if (!(current instanceof HTMLButtonElement)) {
+      return;
+    }
+    const index = tabs.indexOf(current);
+    if (index < 0 || tabs.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : event.key === "ArrowRight"
+            ? (index + 1) % tabs.length
+            : (index - 1 + tabs.length) % tabs.length;
+    const next = tabs[nextIndex];
+    if (next !== undefined) {
+      activate(next);
+    }
+  }
+
   render(room: LobbyRoomWire | null, selfSeat: number | null): void {
     this.room = room;
     this.selfSeat = selfSeat;
@@ -328,10 +477,13 @@ export class TeamEditor {
     this.body.hidden = false;
     this.renderToolbar();
     this.renderPitch();
+    this.renderSummary();
     this.renderSquadLists();
     this.renderPlayerDetail();
     this.renderTactics();
     this.renderOpponent();
+    this.showEditorTab(this.activeEditorTab);
+    this.showPoolTab(this.activePoolTab);
   }
 
   /** Used by the ready button to avoid a predictable server rejection. */
@@ -461,19 +613,6 @@ export class TeamEditor {
       return;
     }
     this.clubPreview.replaceChildren();
-    const crest = document.createElement("img");
-    crest.className = "club-crest";
-    crest.src = `/data/${entry.team.crest}`;
-    crest.alt = `${entry.team.name} crest`;
-    const kit = document.createElement("img");
-    kit.className = "club-kit";
-    kit.src = `/data/${entry.team.kits[sheet.kit]}`;
-    kit.alt = `${entry.team.name} ${sheet.kit} kit`;
-
-    const identity = document.createElement("div");
-    identity.className = "club-identity";
-    const name = document.createElement("strong");
-    name.textContent = entry.team.name;
     const league = this.catalog?.leagues.find(
       (item) => item.id === entry.team.leagueId,
     );
@@ -481,18 +620,39 @@ export class TeamEditor {
       entry.team.kind === "nation" && entry.team.nationId !== null
         ? this.catalog?.nationsById.get(entry.team.nationId)
         : null;
+
+    const crestFrame = document.createElement("div");
+    crestFrame.className = "squad-club__crest-frame";
+    const crest = document.createElement("img");
+    crest.className = "squad-club__crest";
+    crest.src = `/data/${entry.team.crest}`;
+    crest.alt = `${entry.team.name} crest`;
+    crest.decoding = "async";
+    crestFrame.append(crest);
+
+    const identity = document.createElement("div");
+    identity.className = "squad-club__identity";
+    const kicker = document.createElement("p");
+    kicker.className = "ui-kicker";
+    kicker.textContent =
+      entry.team.kind === "nation"
+        ? "International"
+        : league?.country ?? "Club";
+    const name = document.createElement("h2");
+    name.className = "squad-club__name";
+    name.textContent = entry.team.name;
     const meta = document.createElement("p");
-    meta.className = "panel-hint";
+    meta.className = "squad-club__meta";
     meta.textContent =
       entry.team.kind === "nation"
-        ? `National team · ${nation?.name ?? entry.team.name} · ${entry.team.squad.length}-player call-ups`
+        ? `${nation?.name ?? entry.team.name} · ${entry.team.squad.length}-player pool`
         : `${league?.name ?? "Unknown league"} · ${entry.team.stadium} · ${
             entry.team.managerName
           }`;
-    identity.append(name, meta);
+    identity.append(kicker, name, meta);
 
     const swatches = document.createElement("div");
-    swatches.className = "kit-swatches";
+    swatches.className = "squad-club__swatches";
     for (const [label, colour] of [
       ["Home", entry.team.colours.home],
       ["Away", entry.team.colours.away],
@@ -500,13 +660,13 @@ export class TeamEditor {
       ["GK", entry.team.colours.goalkeeper],
     ] as const) {
       const swatch = document.createElement("span");
-      swatch.className = "kit-swatch";
+      swatch.className = "squad-club__swatch";
       swatch.style.backgroundColor = colour;
       swatch.title = `${label} ${colour}`;
       swatches.append(swatch);
     }
     const sample = document.createElement("span");
-    sample.className = "chip";
+    sample.className = "ui-badge ui-badge--outline";
     sample.textContent = entry.team.sample
       ? entry.team.kind === "nation"
         ? "Sample nation"
@@ -516,7 +676,34 @@ export class TeamEditor {
         : "Club";
     swatches.append(sample);
 
-    this.clubPreview.append(crest, kit, identity, swatches);
+    const kit = document.createElement("img");
+    kit.className = "squad-club__kit";
+    kit.src = `/data/${entry.team.kits[sheet.kit]}`;
+    kit.alt = `${entry.team.name} ${sheet.kit} kit`;
+    kit.decoding = "async";
+
+    this.clubPreview.append(crestFrame, identity, swatches, kit);
+  }
+
+  private renderSummary(): void {
+    const entry = this.entry;
+    const sheet = this.sheet;
+    if (entry === null || sheet === null) {
+      return;
+    }
+    const starters = sheet.startingXI
+      .map((slot) => entry.playersById.get(slot.playerId))
+      .filter((player): player is PlayerData => player !== undefined);
+    const rating =
+      starters.length === 0
+        ? null
+        : Math.round(
+            starters.reduce((total, player) => total + player.overall, 0) /
+              starters.length,
+          );
+    this.xiRating.textContent = rating === null ? "—" : String(rating);
+    this.benchSummary.textContent = String(sheet.bench.length);
+    this.formationLabel.textContent = sheet.formation;
   }
 
   private renderPitch(): void {
@@ -532,6 +719,7 @@ export class TeamEditor {
       kitColor(entry, sheet.kit),
     );
 
+    let outOfRole = 0;
     for (const [index, slot] of sheet.startingXI.entries()) {
       const geometry = definition.slots[index];
       const player = entry.playersById.get(slot.playerId);
@@ -539,23 +727,32 @@ export class TeamEditor {
         this.selection?.kind === "starter" && this.selection.index === index;
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "pitch-slot";
+      button.className = "squad-marker";
       button.dataset.selected = String(selected);
       if (player !== undefined) {
         const fit = roleFit(player, slot.role);
         button.dataset.roleFit = fit;
-        button.title = `${fit} fit for ${slot.role}`;
+        button.title = `${player.name} — ${fit} fit at ${slot.role}`;
+        button.dataset.number = String(player.kitNumber);
+        if (fit === "warning") {
+          outOfRole += 1;
+        }
+      } else {
+        button.dataset.number = "—";
       }
       // The shared geometry stops around x=0.72; spread it across the editor
       // pitch and keep edge cards inside the touchlines.
       const normalizedX = Math.min(0.72, Math.max(0, geometry?.x ?? 0.5));
-      const displayX = 0.06 + (normalizedX / 0.72) * 0.88;
-      const displayY = 0.08 + Math.min(1, Math.max(0, geometry?.y ?? 0.5)) * 0.84;
+      const displayX = 0.12 + (normalizedX / 0.72) * 0.76;
+      const displayY =
+        0.1 + Math.min(1, Math.max(0, geometry?.y ?? 0.5)) * 0.8;
       button.style.left = `${displayX * 100}%`;
       button.style.top = `${displayY * 100}%`;
       button.setAttribute(
         "aria-label",
-        `${slot.role} ${player?.name ?? slot.playerId}, click to swap`,
+        `${slot.role} ${player?.name ?? slot.playerId}, ${
+          player === undefined ? "unassigned" : `${player.overall} overall`
+        }, click to swap`,
       );
       button.addEventListener("click", () => {
         if (performance.now() < this.suppressClickUntil) {
@@ -566,23 +763,24 @@ export class TeamEditor {
       this.makeDraggable(button, { kind: "starter", index });
 
       const role = document.createElement("span");
-      role.className = "pitch-slot-role";
+      role.className = "squad-marker__role";
       role.textContent = slot.role;
       const name = document.createElement("strong");
-      name.className = "pitch-slot-name";
-      name.textContent = player?.name ?? slot.playerId;
+      name.className = "squad-marker__name";
+      name.textContent =
+        player === undefined ? slot.playerId : surname(player.name);
       const meta = document.createElement("span");
-      meta.className = "pitch-slot-meta";
+      meta.className = "squad-marker__meta";
       meta.textContent =
-        player === undefined
-          ? slot.playerId
-          : `#${player.kitNumber} · ${player.overall}`;
+        player === undefined ? "Unassigned" : `${player.overall} OVR`;
       button.append(role, name, meta);
       if (player !== undefined) {
         button.style.setProperty("--shirt", kitColor(entry, sheet.kit));
       }
       this.pitch.append(button);
     }
+    this.roleWarnings.textContent = String(outOfRole);
+    this.roleWarnings.dataset.state = outOfRole === 0 ? "ok" : "warning";
   }
 
   private renderSquadLists(): void {
@@ -650,7 +848,8 @@ export class TeamEditor {
     if (visibleReserves === 0) {
       this.reserveList.append(emptyMessage("No reserves match this filter"));
     }
-    this.reserveCount.textContent = `${sheet.reserves.length} players`;
+    this.benchCount.textContent = String(sheet.bench.length);
+    this.reserveCount.textContent = String(sheet.reserves.length);
   }
 
   private buildPlayerRow(
@@ -660,8 +859,15 @@ export class TeamEditor {
   ): HTMLElement {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "squad-row";
+    button.className = "squad-player";
     button.dataset.selected = String(this.isSelected(selection));
+    if (player !== undefined) {
+      button.title = `${player.name} — select to swap`;
+      button.setAttribute(
+        "aria-label",
+        `${player.name}, ${player.preferredPosition}, ${player.overall} overall, select to swap`,
+      );
+    }
     button.addEventListener("click", () => {
       if (performance.now() < this.suppressClickUntil) {
         return;
@@ -671,22 +877,23 @@ export class TeamEditor {
     this.makeDraggable(button, selection);
 
     const number = document.createElement("span");
-    number.className = "squad-number";
+    number.className = "squad-player__number";
     number.textContent =
       player === undefined ? "—" : String(player.kitNumber).padStart(2, "0");
     const identity = document.createElement("span");
-    identity.className = "squad-identity";
+    identity.className = "squad-player__identity";
     const name = document.createElement("strong");
+    name.className = "squad-player__name";
     name.textContent = player?.name ?? playerId;
     const meta = document.createElement("span");
-    meta.className = "squad-meta";
+    meta.className = "squad-player__meta";
     meta.textContent =
       player === undefined
         ? playerId
         : `${player.preferredPosition} · ${player.positions.slice(0, 3).join("/")}`;
     identity.append(name, meta);
     const overall = document.createElement("span");
-    overall.className = "squad-overall";
+    overall.className = "squad-player__overall";
     overall.textContent = player === undefined ? "—" : String(player.overall);
     button.append(number, identity, overall);
     return button;
@@ -741,6 +948,9 @@ export class TeamEditor {
   }
 
   private select(selection: Selection): void {
+    if (selection.kind === "bench" || selection.kind === "reserve") {
+      this.showPoolTab(selection.kind);
+    }
     if (
       this.selection !== null &&
       this.selection.kind === selection.kind &&
@@ -886,9 +1096,20 @@ export class TeamEditor {
       return;
     }
     this.sheet = sheet;
+    if (this.entry !== null) {
+      this.root.style.setProperty(
+        "--team-primary",
+        kitColor(this.entry, sheet.kit),
+      );
+    }
+    this.formationSelect.value = sheet.formation;
+    this.kitSelect.value = sheet.kit;
+    this.benchSize.value = String(sheet.bench.length);
     this.syncChip.textContent = "Sending to host…";
     this.syncChip.dataset.state = "pending";
+    this.renderClubPreview();
     this.renderPitch();
+    this.renderSummary();
     this.renderSquadLists();
     this.renderTactics();
     this.renderPlayerDetail();
@@ -930,58 +1151,86 @@ export class TeamEditor {
       playerId === undefined ? undefined : entry.playersById.get(playerId);
     this.playerDetail.replaceChildren();
     if (player === undefined) {
-      const hint = document.createElement("p");
-      hint.className = "panel-hint";
-      hint.textContent =
-        "Select any player on the pitch or bench to see face stats and attributes.";
-      this.playerDetail.append(
-        heading("Player card"),
-        hint,
-      );
+      const empty = document.createElement("div");
+      empty.className = "squad-profile__empty";
+      const mark = document.createElement("span");
+      mark.className = "squad-profile__empty-mark";
+      mark.textContent = "XI";
+      const title = document.createElement("h3");
+      title.textContent = "Player dossier";
+      const copy = document.createElement("p");
+      copy.textContent =
+        this.selection === null
+          ? "Select a starter, substitute or reserve to inspect face stats, attributes and role fit."
+          : "This slot is unassigned. Select another player to inspect a dossier.";
+      empty.append(mark, title, copy);
+      this.playerDetail.append(empty);
       return;
     }
 
     const head = document.createElement("div");
-    head.className = "player-detail-head";
+    head.className = "squad-profile__head";
     const portrait = document.createElement("div");
-    portrait.className = "player-portrait";
+    portrait.className = "squad-profile__portrait";
     const headshot = document.createElement("img");
     headshot.src = `/data/${player.face}`;
     headshot.alt = player.name;
     headshot.loading = "lazy";
     const shirt = document.createElement("span");
-    shirt.className = "player-shirt";
+    shirt.className = "squad-profile__shirt";
     shirt.textContent = String(player.kitNumber).padStart(2, "0");
     portrait.append(headshot, shirt);
+
     const identity = document.createElement("div");
+    identity.className = "squad-profile__identity";
+    const kicker = document.createElement("p");
+    kicker.className = "ui-kicker";
+    kicker.textContent = `#${player.kitNumber} · ${player.preferredPosition}`;
     const name = document.createElement("h3");
+    name.className = "squad-profile__name";
     name.textContent = player.name;
     const meta = document.createElement("p");
-    meta.className = "panel-hint";
+    meta.className = "squad-profile__meta";
     const nation = this.catalog?.nationsById.get(player.nationId);
+    const originLine = document.createElement("span");
+    originLine.textContent = `${nation?.name ?? player.nationId} · Age ${
+      player.age
+    }`;
+    const footLine = document.createElement("span");
+    footLine.textContent =
+      player.foot === "both"
+        ? "Both feet"
+        : `${player.foot === "right" ? "Right" : "Left"} footed`;
+    meta.append(originLine, footLine);
+    identity.append(kicker, name, meta);
+
     const selectedRole: PlayerPosition | null =
       this.selection?.kind === "starter"
         ? sheet.startingXI[this.selection.index]?.role ?? null
         : null;
-    const fit =
-      selectedRole !== null
-        ? ` · ${roleFit(player, selectedRole)} fit at ${selectedRole}`
-        : "";
-    meta.textContent = `${player.preferredPosition} · ${player.positions.join(
-      " / ",
-    )} · ${player.foot}-footed · ${nation?.name ?? player.nationId} · age ${
-      player.age
-    }${fit}`;
-    identity.append(name, meta);
-    const overall = document.createElement("strong");
-    overall.className = "player-overall";
-    overall.textContent = String(player.overall);
-    head.append(portrait, identity, overall);
+    if (selectedRole !== null) {
+      const fit = roleFit(player, selectedRole);
+      const fitChip = document.createElement("span");
+      fitChip.className = "squad-profile__fit";
+      fitChip.dataset.state = fit;
+      fitChip.textContent = `${fit} fit · ${selectedRole}`;
+      identity.append(fitChip);
+    }
+
+    const rating = document.createElement("div");
+    rating.className = "squad-profile__rating";
+    const ratingLabel = document.createElement("span");
+    ratingLabel.textContent = "OVR";
+    const ratingValue = document.createElement("strong");
+    ratingValue.textContent = String(player.overall);
+    rating.append(ratingLabel, ratingValue);
+    head.append(portrait, identity, rating);
 
     const face = document.createElement("div");
-    face.className = "face-stats";
+    face.className = "squad-profile__face";
     for (const [label, value] of Object.entries(player.faceStats)) {
       const cell = document.createElement("div");
+      cell.className = "squad-face-stat";
       const key = document.createElement("span");
       key.textContent = label;
       const score = document.createElement("strong");
@@ -990,27 +1239,50 @@ export class TeamEditor {
       face.append(cell);
     }
 
+    const bioLabel = document.createElement("p");
+    bioLabel.className = "squad-profile__section-label";
+    bioLabel.textContent = "Profile";
+    const bio = document.createElement("div");
+    bio.className = "squad-profile__bio";
+    const bioFields: readonly [string, string][] = [
+      ["Weak foot", `${player.weakFoot}★`],
+      ["Skill moves", `${player.skillMoves}★`],
+      ["Work rate", `${player.workRate.att}/${player.workRate.def}`],
+      ["Height", `${player.heightCm} cm`],
+      ["Weight", `${player.weightKg} kg`],
+      ["Body", player.bodyType],
+    ];
+    for (const [label, value] of bioFields) {
+      const row = document.createElement("div");
+      row.className = "squad-bio";
+      const key = document.createElement("span");
+      key.textContent = label;
+      const score = document.createElement("strong");
+      score.textContent = value;
+      row.append(key, score);
+      bio.append(row);
+    }
+
+    const attributeLabel = document.createElement("p");
+    attributeLabel.className = "squad-profile__section-label";
+    attributeLabel.textContent = "Top attributes";
     const attributes = document.createElement("div");
-    attributes.className = "attribute-grid";
-    const entries = Object.entries(player.attributes)
+    attributes.className = "squad-profile__attributes";
+    const entries = (Object.entries(player.attributes) as [string, number][])
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8);
     for (const [key, value] of entries) {
-      const row = document.createElement("div");
-      const label = document.createElement("span");
-      label.textContent = ATTRIBUTE_LABELS[key] ?? key;
-      const score = document.createElement("strong");
-      score.textContent = String(value);
-      row.append(label, score);
-      attributes.append(row);
+      attributes.append(
+        attributeRow(ATTRIBUTE_LABELS[key] ?? key, value),
+      );
     }
 
     const allAttributes = document.createElement("details");
-    allAttributes.className = "attribute-details";
+    allAttributes.className = "squad-profile__details";
     const summary = document.createElement("summary");
     summary.textContent = "All attributes";
     const fullGrid = document.createElement("div");
-    fullGrid.className = "attribute-grid";
+    fullGrid.className = "squad-profile__all-grid";
     for (const [key, value] of Object.entries(player.attributes) as [
       string,
       number,
@@ -1029,31 +1301,14 @@ export class TeamEditor {
     }
     allAttributes.append(summary, fullGrid);
 
-    const bio = document.createElement("div");
-    bio.className = "bio-grid";
-    const bioFields: readonly [string, string][] = [
-      ["Weak foot", `${player.weakFoot}★`],
-      ["Skill moves", `${player.skillMoves}★`],
-      ["Work rate", `${player.workRate.att}/${player.workRate.def}`],
-      ["Height", `${player.heightCm} cm`],
-      ["Weight", `${player.weightKg} kg`],
-      ["Body", player.bodyType],
-    ];
-    for (const [label, value] of bioFields) {
-      const row = document.createElement("div");
-      const key = document.createElement("span");
-      key.textContent = label;
-      const score = document.createElement("strong");
-      score.textContent = value;
-      row.append(key, score);
-      bio.append(row);
-    }
-
+    const styleLabel = document.createElement("p");
+    styleLabel.className = "squad-profile__section-label";
+    styleLabel.textContent = "PlayStyles";
     const styles = document.createElement("div");
-    styles.className = "playstyle-list";
+    styles.className = "squad-profile__styles";
     for (const style of player.playStyles.slice(0, 6)) {
       const chip = document.createElement("span");
-      chip.className = "chip";
+      chip.className = "ui-badge ui-badge--outline";
       chip.textContent = style;
       styles.append(chip);
     }
@@ -1064,9 +1319,12 @@ export class TeamEditor {
     this.playerDetail.append(
       head,
       face,
+      bioLabel,
       bio,
+      attributeLabel,
       attributes,
       allAttributes,
+      styleLabel,
       styles,
     );
   }
@@ -1115,27 +1373,82 @@ export class TeamEditor {
         ? null
         : this.catalog?.teamEntries.get(opponent.teamId) ?? null;
     this.opponentPanel.replaceChildren();
-    this.opponentPanel.append(heading("Opponent live"));
     if (opponent === null) {
-      this.opponentPanel.append(
-        emptyMessage("Waiting for the second device"),
-      );
+      const empty = document.createElement("div");
+      empty.className = "squad-opponent__empty";
+      const seat = document.createElement("span");
+      seat.className = "ui-kicker";
+      seat.textContent = "Seat 02";
+      const title = document.createElement("strong");
+      title.textContent = "Waiting for a second device";
+      const copy = document.createElement("p");
+      copy.textContent =
+        "Share the room code or QR. Their team sheet appears here once they join.";
+      empty.append(seat, title, copy);
+      this.opponentPanel.append(empty);
       return;
     }
     if (opponentEntry === null || opponent.sheet === null) {
-      this.opponentPanel.append(emptyMessage("Choosing a team"));
+      const empty = document.createElement("div");
+      empty.className = "squad-opponent__empty";
+      const seat = document.createElement("span");
+      seat.className = "ui-kicker";
+      seat.textContent = "Seat 02";
+      const title = document.createElement("strong");
+      title.textContent = "Choosing a team";
+      const copy = document.createElement("p");
+      copy.textContent = "Their formation and bench will appear here.";
+      empty.append(seat, title, copy);
+      this.opponentPanel.append(empty);
       return;
     }
-    const teamLine = document.createElement("p");
-    teamLine.className = "opponent-team";
-    teamLine.textContent = opponentEntry.team.name;
-    const meta = document.createElement("p");
-    meta.className = "panel-hint";
-    meta.textContent = `${opponent.sheet.formation} · bench ${opponent.sheet.bench.length} · press ${opponent.sheet.tactics.pressIntensity}`;
-    const ready = document.createElement("span");
-    ready.className = "chip";
-    ready.textContent = opponent.ready ? "Ready" : "Editing";
-    this.opponentPanel.append(teamLine, meta, ready);
+
+    const identity = document.createElement("div");
+    identity.className = "squad-opponent__identity";
+    const crest = document.createElement("img");
+    crest.className = "squad-opponent__crest";
+    crest.src = `/data/${opponentEntry.team.crest}`;
+    crest.alt = `${opponentEntry.team.name} crest`;
+    crest.decoding = "async";
+    const copy = document.createElement("div");
+    copy.className = "squad-opponent__copy";
+    const name = document.createElement("strong");
+    name.textContent = opponentEntry.team.name;
+    const meta = document.createElement("span");
+    meta.textContent = opponent.name;
+    copy.append(name, meta);
+
+    const state = document.createElement("span");
+    state.className = "ui-badge";
+    state.textContent = !opponent.connected
+      ? "Offline"
+      : opponent.ready
+        ? "Ready"
+        : "Editing";
+    state.dataset.state = !opponent.connected
+      ? "warning"
+      : opponent.ready
+        ? "success"
+        : "idle";
+    identity.append(crest, copy, state);
+
+    const stats = document.createElement("dl");
+    stats.className = "squad-opponent__stats";
+    for (const [label, value] of [
+      ["Formation", opponent.sheet.formation],
+      ["Bench", String(opponent.sheet.bench.length)],
+      ["Press", opponent.sheet.tactics.pressIntensity],
+    ] as const) {
+      const item = document.createElement("div");
+      const key = document.createElement("dt");
+      key.textContent = label;
+      const score = document.createElement("dd");
+      score.textContent = value;
+      item.append(key, score);
+      stats.append(item);
+    }
+
+    this.opponentPanel.append(identity, stats);
   }
 
   private bindTactics(): void {
@@ -1313,12 +1626,27 @@ export class TeamEditor {
 
 function attributeRow(label: string, value: number): HTMLElement {
   const row = document.createElement("div");
+  row.className = "squad-attribute";
   const key = document.createElement("span");
   key.textContent = label;
   const score = document.createElement("strong");
   score.textContent = String(value);
   row.append(key, score);
   return row;
+}
+
+function surname(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts[parts.length - 1] ?? name;
+}
+
+function readEditorTab(element: HTMLElement): EditorTab {
+  const value = element.dataset.squadTab;
+  return value === "tactics" || value === "setup" ? value : "squad";
+}
+
+function readPoolTab(element: HTMLElement): PoolTab {
+  return element.dataset.poolTab === "reserve" ? "reserve" : "bench";
 }
 
 function kitColor(entry: TeamCatalogEntry, kit: TeamSheet["kit"]): string {
@@ -1384,16 +1712,9 @@ function repairTakers(
   };
 }
 
-function heading(text: string): HTMLElement {
-  const element = document.createElement("h3");
-  element.className = "panel-title";
-  element.textContent = text;
-  return element;
-}
-
 function emptyMessage(text: string): HTMLElement {
   const element = document.createElement("p");
-  element.className = "empty-message";
+  element.className = "squad-empty";
   element.textContent = text;
   return element;
 }

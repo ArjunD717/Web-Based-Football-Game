@@ -1,0 +1,1232 @@
+/* packages/client/src/ui/menu.css
+ * Main menu, LAN dossier and lobby shell. The match HUD keeps its own surface
+ * treatment until its pass; changing the page shell here is intentional.
+ */
+
+/* --------------------------------------------------------------------------
+ * Page shell
+ * ------------------------------------------------------------------------ */
+body.console-ui {
+  background: var(--ui-ink);
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-md);
+  line-height: var(--ui-leading-body);
+}
+
+body.console-ui::before {
+  display: none;
+}
+
+.console-ui .app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* The legacy shell capped the lobby at 1080 px. The console layout owns the
+ * full viewport; room content applies its own readable max width. */
+.console-ui .lobby-shell {
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.console-ui ::selection {
+  background: var(--ui-orange);
+  color: var(--ui-ink);
+}
+
+.console-ui a {
+  color: var(--ui-ice);
+}
+
+.console-ui h1,
+.console-ui h2,
+.console-ui h3,
+.console-ui p {
+  text-wrap: balance;
+}
+
+/* --------------------------------------------------------------------------
+ * Top bar
+ * ------------------------------------------------------------------------ */
+.ui-topbar {
+  position: relative;
+  z-index: var(--ui-z-topbar);
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-5);
+  min-height: var(--ui-topbar-height);
+  padding: 0.65rem clamp(1rem, 2.6vw, 2.25rem);
+  border-bottom: 1px solid var(--ui-line);
+  background: var(--ui-ink);
+}
+
+.console-ui a.ui-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-3);
+  min-width: 0;
+  color: var(--ui-chalk);
+  text-decoration: none;
+}
+
+.console-ui a.ui-brand:hover {
+  color: var(--ui-chalk);
+}
+
+.ui-brand:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.ui-brand__mark {
+  display: grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  flex: none;
+  color: var(--ui-orange);
+}
+
+.ui-brand__mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ui-brand__word {
+  font-family: var(--ui-font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ui-brand__edition {
+  padding-left: var(--ui-space-3);
+  border-left: 1px solid var(--ui-line-strong);
+  color: var(--ui-muted);
+  font-size: var(--ui-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ui-connection {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  min-height: 2rem;
+  margin-left: auto;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--ui-line);
+  color: var(--ui-muted-strong);
+  font-size: var(--ui-text-xs);
+  white-space: nowrap;
+}
+
+.ui-connection__ping {
+  padding-left: var(--ui-space-2);
+  border-left: 1px solid var(--ui-line);
+  color: var(--ui-muted);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-2xs);
+}
+
+.ui-topnav {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-4);
+}
+
+.ui-topnav__link {
+  padding: 0.35rem 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--ui-muted-strong);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-xs);
+  font-weight: 500;
+  line-height: 1.3;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ui-topnav__link:hover {
+  border-bottom-color: var(--ui-orange);
+  color: var(--ui-chalk);
+}
+
+.ui-topnav__link:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+ * Menu screen and stadium backdrop
+ * ------------------------------------------------------------------------ */
+.ui-menu-screen {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: calc(100vh - var(--ui-topbar-height));
+  min-height: calc(100dvh - var(--ui-topbar-height));
+  overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse 55% 48% at 76% 46%,
+      color-mix(in srgb, var(--ui-orange) 7%, transparent),
+      transparent 68%
+    ),
+    linear-gradient(
+      90deg,
+      var(--ui-ink) 0%,
+      var(--ui-ink-mid) 52%,
+      var(--ui-ink-right) 100%
+    );
+}
+
+.ui-stadium {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--ui-muted);
+  opacity: 0.95;
+  pointer-events: none;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.35) 28%,
+    black 56%,
+    black 100%
+  );
+}
+
+.ui-stadium__pitch {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  opacity: 0.52;
+}
+
+.ui-stadium__stand {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.36;
+}
+
+.ui-stadium__strut {
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.22;
+}
+
+.ui-stadium__beam {
+  fill: var(--ui-orange);
+  opacity: 0.06;
+}
+
+.ui-stadium__light {
+  fill: var(--ui-orange);
+  opacity: 0.65;
+}
+
+.ui-stadium__scoreboard {
+  fill: var(--ui-ink);
+  stroke: var(--ui-line-strong);
+  stroke-width: 1;
+}
+
+.ui-menu-screen__vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(10, 11, 9, 0.97) 0%, rgba(10, 11, 9, 0.8) 38%, rgba(10, 11, 9, 0.18) 74%, transparent 100%),
+    linear-gradient(0deg, rgba(10, 11, 9, 0.72) 0%, transparent 25%);
+}
+
+.ui-menu-layout {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(21rem, 0.82fr) minmax(0, 1.18fr);
+  width: 100%;
+  min-height: 0;
+}
+
+.ui-menu-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-6);
+  min-width: 0;
+  padding: clamp(2rem, 4vw, 4rem) clamp(1.25rem, 3vw, 3rem);
+  border-right: 1px solid color-mix(in srgb, var(--ui-line) 72%, transparent);
+}
+
+.ui-menu-rail__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-6);
+  margin-block: auto;
+}
+
+.ui-menu-rail__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+}
+
+.ui-rail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-4);
+  padding-top: var(--ui-space-5);
+  border-top: 1px solid var(--ui-line);
+  color: var(--ui-muted);
+  font-size: var(--ui-text-2xs);
+}
+
+.ui-control-hints {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  flex-wrap: wrap;
+}
+
+.ui-control-hints kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.3rem;
+  min-height: 1.3rem;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid var(--ui-line-strong);
+  background: var(--ui-carbon);
+  color: var(--ui-muted-strong);
+  font-family: var(--ui-font-mono);
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+.ui-rail-footer__status {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+ * Context dossier
+ * ------------------------------------------------------------------------ */
+.ui-context {
+  min-width: 0;
+  padding: clamp(2rem, 4vw, 4rem) clamp(1.25rem, 4vw, 4.5rem);
+  overflow-y: auto;
+}
+
+.ui-context-panel {
+  width: 100%;
+  max-width: 50rem;
+  margin-left: auto;
+  animation: ui-dossier-in var(--ui-dur-slow) var(--ui-ease-out) both;
+}
+
+@keyframes ui-dossier-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-context-panel__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+  margin-bottom: var(--ui-space-5);
+}
+
+.ui-context-panel__title {
+  margin: 0;
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-display);
+  font-size: clamp(2.75rem, 4.6vw, 4.75rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 0.92;
+}
+
+.ui-context-panel__lede {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-body);
+}
+
+.ui-context-panel__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-3);
+  margin-top: var(--ui-space-4);
+  padding-top: var(--ui-space-3);
+  border-top: 1px solid var(--ui-line);
+  color: var(--ui-muted);
+  font-size: var(--ui-text-xs);
+}
+
+.ui-context-panel__foot kbd {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--ui-line-strong);
+  background: var(--ui-carbon);
+  color: var(--ui-chalk-dim);
+  font-family: var(--ui-font-mono);
+  font-size: 0.7em;
+}
+
+/* LAN entry: intentionally asymmetric. Host is the primary action. */
+.ui-lan-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--ui-space-4);
+  align-items: stretch;
+}
+
+.ui-host-card,
+.ui-join-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-4);
+  padding: var(--ui-space-5);
+}
+
+.ui-host-card {
+  border-top: 2px solid var(--ui-orange);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--ui-orange) 8%, var(--ui-carbon)) 0%, var(--ui-carbon) 58%);
+}
+
+.ui-host-card__head,
+.ui-join-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+}
+
+.ui-card-title {
+  margin: 0;
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-2xl);
+  font-weight: 600;
+  line-height: var(--ui-leading-tight);
+}
+
+.ui-card-copy {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-xs);
+  line-height: var(--ui-leading-body);
+}
+
+.ui-host-card__action {
+  margin-top: auto;
+}
+
+.ui-host-card__action .ui-button {
+  justify-content: space-between;
+  padding-inline: var(--ui-space-4);
+}
+
+.ui-join-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-3);
+}
+
+.ui-join-form .ui-label {
+  margin-bottom: calc(var(--ui-space-2) * -1);
+}
+
+.ui-join-form .ui-button {
+  margin-top: var(--ui-space-1);
+}
+
+.ui-context-note {
+  margin: var(--ui-space-3) 0 0;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-xs);
+  line-height: var(--ui-leading-body);
+}
+
+.ui-context-note kbd {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--ui-line-strong);
+  background: var(--ui-carbon);
+  font-family: var(--ui-font-mono);
+  font-size: 0.9em;
+}
+
+.ui-context-panel .ui-empty-state {
+  margin-top: var(--ui-space-2);
+}
+
+.ui-settings-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--ui-space-4);
+  border-top: 1px solid var(--ui-line);
+}
+
+.ui-settings-list .ui-button {
+  margin-top: var(--ui-space-4);
+  align-self: flex-start;
+}
+
+/* Help dialog list */
+.ui-help-list {
+  display: grid;
+  gap: var(--ui-space-3);
+  margin: var(--ui-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: help-step;
+}
+
+.ui-help-list li {
+  position: relative;
+  padding-left: 1.75rem;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-body);
+  counter-increment: help-step;
+}
+
+.ui-help-list li::before {
+  content: counter(help-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--ui-orange);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-xs);
+  font-weight: 600;
+}
+
+.ui-help-list strong {
+  color: var(--ui-chalk-dim);
+  font-weight: 600;
+}
+
+/* Toast overlays belong to this shell, not the legacy green surfaces. */
+.console-ui .toast {
+  z-index: var(--ui-z-toast);
+  max-width: min(90vw, 30rem);
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--ui-line-strong);
+  border-left: 3px solid var(--ui-orange);
+  border-radius: var(--ui-radius-none);
+  background: var(--ui-carbon-raised);
+  box-shadow: var(--ui-shadow-hard);
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-body);
+  text-align: left;
+}
+
+/* --------------------------------------------------------------------------
+ * Room / lobby
+ * ------------------------------------------------------------------------ */
+.ui-room {
+  width: min(100%, var(--ui-content-max));
+  margin: 0 auto;
+  padding: clamp(1.25rem, 3vw, 2.5rem) clamp(1rem, 3vw, 2.5rem) var(--ui-space-10);
+}
+
+.ui-room-hero {
+  display: grid;
+  grid-template-areas:
+    "id qr"
+    "lineup qr";
+  grid-template-columns: minmax(0, 1.45fr) minmax(15rem, 0.55fr);
+  gap: var(--ui-space-5) clamp(1.25rem, 3vw, 3rem);
+  align-items: start;
+  padding-bottom: var(--ui-space-6);
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.ui-room-id {
+  grid-area: id;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-3);
+  min-width: 0;
+}
+
+.ui-room-code-line {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ui-space-4);
+  flex-wrap: wrap;
+}
+
+.ui-room-code {
+  margin: 0;
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-display);
+  font-size: clamp(4.75rem, 9vw, 8.5rem);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 0.76;
+}
+
+.ui-room-copy {
+  margin-bottom: 0.35rem;
+}
+
+.ui-room-phase {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--ui-muted-strong);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-body);
+}
+
+.ui-room-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-3);
+  flex-wrap: wrap;
+  padding-top: var(--ui-space-2);
+}
+
+.ui-room-meta__ping {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  color: var(--ui-muted);
+  font-size: var(--ui-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ui-room-meta__ping strong {
+  color: var(--ui-chalk-dim);
+  font-family: var(--ui-font-mono);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ui-badge[data-state="live"] {
+  border-color: color-mix(in srgb, var(--ui-success) 45%, var(--ui-line));
+  background: transparent;
+  color: var(--ui-success);
+}
+
+.ui-badge[data-state="paused"] {
+  border-color: color-mix(in srgb, var(--ui-warning) 45%, var(--ui-line));
+  background: transparent;
+  color: var(--ui-warning);
+}
+
+.ui-room-qr {
+  grid-area: qr;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+.qr-frame {
+  width: min(100%, 216px);
+  padding: 10px;
+  background: var(--ui-chalk);
+  box-shadow: var(--ui-shadow-hard);
+}
+
+.qr-frame canvas {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+  image-rendering: pixelated;
+}
+
+.ui-room-qr__label {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-2xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ui-room-qr__hint {
+  margin: 0;
+  max-width: 26ch;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-xs);
+  line-height: var(--ui-leading-body);
+}
+
+/* Raw invite URLs are secondary to the code and QR. Keep them to one line so
+ * text scaling cannot shatter the path into fragments. */
+.console-ui .ui-room-url {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ui-muted);
+  font-family: var(--ui-font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-room-url + .ui-room-url {
+  margin-top: -0.3rem;
+}
+
+.ui-room-lineup {
+  grid-area: lineup;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-3);
+  min-width: 0;
+}
+
+.ui-room-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-4);
+  color: var(--ui-muted);
+  font-size: var(--ui-text-2xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ui-room-section-head strong {
+  color: var(--ui-chalk-dim);
+  font-weight: 600;
+}
+
+.room-players {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-3);
+  margin-top: 0;
+}
+
+.room-player {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-3);
+  min-height: 7.25rem;
+  padding: var(--ui-space-4);
+  border: 1px solid var(--ui-line);
+  border-left: 3px solid var(--ui-line-strong);
+  border-radius: var(--ui-radius-none);
+  background: var(--ui-carbon);
+}
+
+.room-player[data-self="true"] {
+  border-left-color: var(--ui-orange);
+}
+
+.room-player[data-connected="false"] {
+  border-left-color: var(--ui-warning);
+  opacity: 0.75;
+}
+
+.room-player-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-2xl);
+  font-weight: 600;
+  line-height: var(--ui-leading-tight);
+}
+
+.room-player-tag {
+  flex: none;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--ui-line-strong);
+  color: var(--ui-muted);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+/* Card gap owns the rhythm; reset the legacy paragraph margin. */
+.room-player-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  flex-wrap: wrap;
+  margin-top: 0;
+}
+
+.room-player-meta .chip {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-muted);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-2xs);
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.room-player-meta .chip + .chip::before {
+  content: "/";
+  margin-right: var(--ui-space-2);
+  color: var(--ui-line-bright);
+}
+
+.room-player-meta .chip[data-ready="true"] {
+  color: var(--ui-success);
+}
+
+.room-player-meta .chip[data-connected="false"] {
+  color: var(--ui-warning);
+}
+
+.room-player-empty {
+  display: grid;
+  place-items: center;
+  min-height: 7.25rem;
+  padding: var(--ui-space-4);
+  border: 1px dashed var(--ui-line-strong);
+  border-radius: var(--ui-radius-none);
+  background: transparent;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-sm);
+  text-align: center;
+}
+
+.ui-room-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-3);
+  flex-wrap: wrap;
+  margin-top: var(--ui-space-5);
+  padding-top: var(--ui-space-4);
+  border-top: 1px solid var(--ui-line);
+}
+
+.ui-room-actions .ui-button--primary {
+  min-width: 10rem;
+}
+
+.ui-room-actions #room-hint {
+  max-width: 38ch;
+  margin: 0 0 0 auto;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-xs);
+  line-height: var(--ui-leading-body);
+  text-align: right;
+}
+
+#room-hint:empty {
+  display: none;
+}
+
+/* The bindings dialog is reachable from the menu. Reskin it now so the entry
+ * flow never drops back into the legacy green surface; its layout is unchanged. */
+.console-ui #controls-dialog {
+  width: min(40rem, calc(100vw - 2rem));
+  max-height: min(44rem, calc(100dvh - 2rem));
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--ui-radius-none);
+  background: var(--ui-carbon-raised);
+  color: var(--ui-chalk);
+  box-shadow: var(--ui-shadow-hard);
+}
+
+.console-ui #controls-dialog::backdrop {
+  background: var(--ui-overlay);
+  backdrop-filter: none;
+}
+
+.console-ui #controls-dialog .dialog-head {
+  align-items: flex-start;
+  padding: var(--ui-space-5) var(--ui-space-6) var(--ui-space-4);
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.console-ui #controls-dialog .dialog-head .eyebrow {
+  margin: 0 0 var(--ui-space-1);
+  color: var(--ui-muted);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--ui-tracking-label);
+}
+
+.console-ui #controls-dialog .dialog-head h2 {
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-3xl);
+  font-weight: 600;
+  line-height: var(--ui-leading-tight);
+}
+
+.console-ui #controls-dialog .dialog-copy {
+  margin: 0;
+  padding: var(--ui-space-4) var(--ui-space-6) 0;
+  color: var(--ui-muted);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-body);
+}
+
+.console-ui #controls-dialog .bindings-grid {
+  gap: 0;
+  padding: var(--ui-space-3) var(--ui-space-6) 0;
+}
+
+.console-ui #controls-dialog .binding-row {
+  min-height: 2.6rem;
+  padding: var(--ui-space-1) 0;
+  border-bottom: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-none);
+  background: transparent;
+}
+
+.console-ui #controls-dialog .binding-label {
+  color: var(--ui-chalk-dim);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-sm);
+}
+
+.console-ui #controls-dialog .binding-key {
+  min-width: 8rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--ui-radius-none);
+  background: var(--ui-ink);
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-xs);
+}
+
+.console-ui #controls-dialog .binding-key:hover,
+.console-ui #controls-dialog .binding-key.capturing {
+  border-color: var(--ui-orange);
+  color: var(--ui-orange-hot);
+}
+
+.console-ui #controls-dialog .binding-key:focus-visible,
+.console-ui #controls-dialog .button:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.console-ui #controls-dialog .dialog-actions {
+  margin-top: 0;
+  padding: var(--ui-space-4) var(--ui-space-6) var(--ui-space-5);
+  border-top: 1px solid var(--ui-line);
+  text-align: right;
+}
+
+.console-ui #controls-dialog .button {
+  min-height: var(--ui-control-height);
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--ui-radius-none);
+  background: transparent;
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
+}
+
+.console-ui #controls-dialog .button:hover {
+  border-color: var(--ui-orange);
+  color: var(--ui-chalk);
+}
+
+/* --------------------------------------------------------------------------
+ * Responsive
+ * ------------------------------------------------------------------------ */
+@media (min-width: 821px) {
+  .ui-menu-rail__main {
+    flex: 1;
+    min-height: 0;
+    margin-block: 0;
+  }
+
+  .ui-menu-rail__main .ui-menu {
+    flex: 1;
+  }
+
+  .ui-menu-rail__main .ui-menu-item {
+    flex: 1 1 0;
+    max-height: 5.5rem;
+  }
+}
+
+@media (max-width: 1020px) {
+  .ui-menu-layout {
+    grid-template-columns: minmax(18rem, 0.9fr) minmax(0, 1.1fr);
+  }
+
+  .ui-context {
+    padding-inline: clamp(1.25rem, 3vw, 2.5rem);
+  }
+
+  .ui-lan-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-host-card {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 820px) {
+  .ui-brand__edition {
+    display: none;
+  }
+
+  .ui-topbar {
+    gap: var(--ui-space-3);
+  }
+
+  .ui-menu-screen {
+    overflow: visible;
+  }
+
+  .ui-menu-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-menu-rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--ui-line);
+    padding-bottom: var(--ui-space-5);
+  }
+
+  .ui-rail-footer {
+    display: none;
+  }
+
+  .ui-context {
+    padding-block: var(--ui-space-6);
+    overflow: visible;
+  }
+
+  .ui-context-panel {
+    max-width: none;
+    margin-left: 0;
+  }
+
+  .ui-room-hero {
+    grid-template-areas:
+      "id"
+      "qr"
+      "lineup";
+    grid-template-columns: 1fr;
+  }
+
+  .ui-room-qr {
+    display: grid;
+    grid-template-columns: 136px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--ui-space-2) var(--ui-space-4);
+  }
+
+  .ui-room-qr .qr-frame {
+    grid-row: span 4;
+    width: 136px;
+  }
+
+  .ui-room-url {
+    font-size: 0.6rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .ui-topbar {
+    flex-wrap: wrap;
+    padding-block: 0.55rem;
+  }
+
+  .ui-connection {
+    margin-left: auto;
+  }
+
+  .ui-topnav {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--ui-line);
+  }
+
+  .console-ui a.ui-brand {
+    min-height: 2.75rem;
+  }
+
+  .ui-topnav__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    font-size: var(--ui-text-xs);
+  }
+
+  .ui-button--small {
+    min-height: 2.75rem;
+    padding-inline: var(--ui-space-4);
+  }
+
+  .ui-menu-rail {
+    gap: var(--ui-space-4);
+    padding: var(--ui-space-5) var(--ui-space-4);
+  }
+
+  .ui-menu-item {
+    min-height: 3rem;
+    font-size: 1.4rem;
+  }
+
+  .ui-menu-item__meta {
+    font-size: 0.625rem;
+  }
+
+  .ui-context {
+    padding: var(--ui-space-5) var(--ui-space-4) var(--ui-space-7);
+  }
+
+  .ui-context-panel__title {
+    font-size: clamp(2.5rem, 11vw, 3.5rem);
+  }
+
+  .ui-host-card,
+  .ui-join-card {
+    padding: var(--ui-space-4);
+  }
+
+  .ui-code-slot {
+    min-height: 3.1rem;
+  }
+
+  .ui-room {
+    padding-inline: var(--ui-space-4);
+  }
+
+  .ui-room-code-line {
+    gap: var(--ui-space-2);
+  }
+
+  .ui-room-code {
+    font-size: clamp(4rem, 19vw, 6rem);
+  }
+
+  .room-players {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-room-actions {
+    align-items: stretch;
+  }
+
+  .ui-room-actions .ui-button--primary {
+    flex: 1;
+  }
+
+  .ui-room-actions #room-hint {
+    flex-basis: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .ui-room-qr {
+    grid-template-columns: 160px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .ui-room-qr .qr-frame {
+    grid-row: span 2;
+    width: 160px;
+  }
+
+  .ui-room-qr .ui-room-url {
+    grid-column: 1 / -1;
+  }
+
+  /* The guest already joined; the QR belongs on the host screen. Hiding it on
+   * a guest phone keeps the lineup and Ready action within one thumb scroll. */
+  .ui-room[data-host="false"] .ui-room-qr {
+    display: none;
+  }
+
+  .ui-room[data-host="false"] .ui-room-hero {
+    grid-template-areas:
+      "id"
+      "lineup";
+  }
+}
+
+@media (max-width: 400px) {
+  .ui-rail-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ui-menu-item {
+    grid-template-columns: 1.25rem minmax(0, 1fr) 0.9rem;
+  }
+
+  .ui-menu-item__meta {
+    display: none;
+  }
+
+  .ui-code-slots {
+    gap: 0.35rem;
+  }
+
+  .ui-room-qr {
+    grid-template-columns: 144px minmax(0, 1fr);
+  }
+
+  .ui-room-qr .qr-frame {
+    width: 144px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-context-panel {
+    animation: none;
+  }
+}

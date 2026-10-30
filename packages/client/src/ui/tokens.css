@@ -1,0 +1,106 @@
+/* packages/client/src/ui/tokens.css
+ * UI-only design tokens. The simulation never reads these; renderer and HUD
+ * values are converted at the presentation boundary.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: ink and carbon, not translucent glass. */
+  --ui-ink: #0a0b09;
+  --ui-ink-soft: #0f110d;
+  --ui-ink-mid: #0d0f0b;
+  --ui-ink-right: #12150f;
+  --ui-overlay: rgba(4, 5, 3, 0.78);
+  --ui-carbon: #161812;
+  --ui-carbon-raised: #1d2018;
+  --ui-surface: #20231b;
+  --ui-chalk: #f2eee3;
+  --ui-chalk-dim: #d8d3c6;
+  --ui-muted: #9da091;
+  --ui-muted-strong: #b8baab;
+
+  /* Structure */
+  --ui-line: #303329;
+  --ui-line-strong: #4a4e3f;
+  --ui-line-bright: #666b58;
+
+  /* Match-night signal colours. */
+  --ui-orange: #ff5a2a;
+  --ui-orange-hot: #ff7a4a;
+  --ui-orange-deep: #d63f14;
+  --ui-ice: #8dc8ff;
+  --ui-turf: #3d5a3a;
+  --ui-success: #39d98a;
+  --ui-warning: #ffb020;
+  --ui-danger: #ff4d5e;
+  --ui-yellow: #f6d34a;
+  --ui-focus: #ffd1b8;
+
+  /* Semantic roles */
+  --ui-bg: var(--ui-ink);
+  --ui-text: var(--ui-chalk);
+  --ui-text-soft: var(--ui-chalk-dim);
+  --ui-text-muted: var(--ui-muted);
+  --ui-border: var(--ui-line);
+  --ui-accent: var(--ui-orange);
+
+  /* Type */
+  --ui-font-body: "Barlow", "Segoe UI", sans-serif;
+  --ui-font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --ui-font-mono: "Cascadia Code", Consolas, monospace;
+  --ui-text-2xs: 0.6875rem;
+  --ui-text-xs: 0.75rem;
+  --ui-text-sm: 0.875rem;
+  --ui-text-md: 1rem;
+  --ui-text-lg: 1.125rem;
+  --ui-text-xl: 1.375rem;
+  --ui-text-2xl: 1.75rem;
+  --ui-text-3xl: 2.25rem;
+  --ui-text-display: clamp(2.75rem, 5vw, 5.5rem);
+  --ui-leading-tight: 0.95;
+  --ui-leading-body: 1.45;
+  --ui-tracking-label: 0.14em;
+
+  /* Spacing: 4 px base. */
+  --ui-space-1: 0.25rem;
+  --ui-space-2: 0.5rem;
+  --ui-space-3: 0.75rem;
+  --ui-space-4: 1rem;
+  --ui-space-5: 1.25rem;
+  --ui-space-6: 1.5rem;
+  --ui-space-7: 2rem;
+  --ui-space-8: 2.5rem;
+  --ui-space-9: 3rem;
+  --ui-space-10: 4rem;
+  --ui-space-11: 5rem;
+
+  /* Shape: sharp; a few clipped corners, never pills. */
+  --ui-radius-none: 0;
+  --ui-radius-sm: 2px;
+  --ui-radius-md: 4px;
+  --ui-clip-corner: 12px;
+  --ui-clip-corner-sm: 7px;
+
+  /* Depth: one hard shadow, used sparingly. */
+  --ui-shadow-hard: 0 18px 40px rgba(0, 0, 0, 0.42);
+  --ui-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* Motion */
+  --ui-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ui-dur-fast: 120ms;
+  --ui-dur-normal: 180ms;
+  --ui-dur-slow: 280ms;
+
+  /* Layout */
+  --ui-topbar-height: 4rem;
+  --ui-content-max: 92rem;
+  --ui-control-height: 2.75rem;
+  --ui-focus-width: 2px;
+
+  /* Z-index contract */
+  --ui-z-base: 1;
+  --ui-z-topbar: 20;
+  --ui-z-overlay: 30;
+  --ui-z-modal: 40;
+  --ui-z-toast: 50;
+}
