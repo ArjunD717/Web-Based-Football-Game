@@ -8,11 +8,13 @@ import {
   heldBySetPiece,
   isAvailablePlayer,
   isInsidePenaltyArea,
+  playDribbleTouch,
   playPass,
   playShot,
   playTackle,
   topSpeedFor,
   type MatchState,
+  type PassKind,
   type PlayerState,
   type TeamSide,
 } from "@fb/sim";
@@ -24,9 +26,35 @@ export interface TeamControlRuntime {
   lastInputSeq: number;
   lastInputAtMs: number;
   previousButtons: number;
+  /** Press edges collected from every queued frame, not just the latest. */
+  pendingPresses: number;
+  /** Release edges collected from every queued frame, not just the latest. */
+  pendingReleases: number;
+  receivedButtons: number;
   shootCharge: number;
   switchCooldown: number;
   autoSwitchCooldown: number;
+  idleSeconds: number;
+  dribbleCooldown: number;
+  /** Clock time of the last deliberate pass/shot, for kick grace. */
+  lastKickAtMs: number;
+  bufferedPass: BufferedPass | null;
+  bufferedShot: BufferedShot | null;
+}
+
+interface BufferedPass {
+  readonly kind: PassKind;
+  readonly aimX: number;
+  readonly aimY: number;
+  remainingSeconds: number;
+}
+
+interface BufferedShot {
+  readonly aimX: number;
+  readonly aimY: number;
+  readonly power: number;
+  readonly finesse: boolean;
+  remainingSeconds: number;
 }
 
 export function createTeamControlRuntime(): TeamControlRuntime {
@@ -36,9 +64,17 @@ export function createTeamControlRuntime(): TeamControlRuntime {
     lastInputSeq: 0,
     lastInputAtMs: 0,
     previousButtons: 0,
+    pendingPresses: 0,
+    pendingReleases: 0,
+    receivedButtons: 0,
     shootCharge: 0,
     switchCooldown: 0,
     autoSwitchCooldown: 0,
+    idleSeconds: 0,
+    dribbleCooldown: 0,
+    lastKickAtMs: 0,
+    bufferedPass: null,
+    bufferedShot: null,
   };
 }
 
@@ -50,6 +86,11 @@ export function updateControlInput(
   if (frame.seq <= runtime.lastInputSeq) {
     return false;
   }
+  const previous = runtime.receivedButtons;
+  runtime.pendingPresses |= frame.buttons & ~previous;
+  runtime.pendingReleases |= previous & ~frame.buttons;
+  runtime.receivedButtons = frame.buttons;
+  runtime.previousButtons = frame.buttons;
   runtime.input = frame;
   runtime.lastInputSeq = frame.seq;
   runtime.lastInputAtMs = nowMs;
@@ -62,7 +103,14 @@ export function markControlReconnected(runtime: TeamControlRuntime): void {
   runtime.lastInputSeq = 0;
   runtime.lastInputAtMs = 0;
   runtime.previousButtons = 0;
+  runtime.pendingPresses = 0;
+  runtime.pendingReleases = 0;
+  runtime.receivedButtons = 0;
   runtime.shootCharge = 0;
+  runtime.dribbleCooldown = 0;
+  runtime.idleSeconds = 0;
+  runtime.bufferedPass = null;
+  runtime.bufferedShot = null;
 }
 
 /**
@@ -85,6 +133,8 @@ export function prepareTeamControl(
   );
   runtime.switchCooldown = Math.max(0, runtime.switchCooldown - dt);
   runtime.autoSwitchCooldown = Math.max(0, runtime.autoSwitchCooldown - dt);
+  runtime.dribbleCooldown = Math.max(0, runtime.dribbleCooldown - dt);
+  tickActionBuffers(runtime, dt);
 
   const fresh =
     runtime.input !== null &&
@@ -93,6 +143,13 @@ export function prepareTeamControl(
   const moveX = input?.moveX ?? 0;
   const moveY = input?.moveY ?? 0;
   const buttons = input?.buttons ?? 0;
+  const pressed = fresh ? runtime.pendingPresses : 0;
+  const released = fresh ? runtime.pendingReleases : 0;
+  const steerMagnitude = Math.hypot(moveX, moveY);
+  runtime.idleSeconds =
+    steerMagnitude < TUNING.control.autoSwitchSteerDeadzone
+      ? runtime.idleSeconds + dt
+      : 0;
 
   let active = findPlayer(team.players, runtime.activePlayerId);
   if (active !== null && heldBySetPiece(state, active)) {
@@ -103,7 +160,6 @@ export function prepareTeamControl(
     active = nearestCandidate(state, side, ballInOwnBox, null);
   }
 
-  const pressed = buttons & ~runtime.previousButtons;
   let switched = false;
 
   if (
@@ -114,10 +170,19 @@ export function prepareTeamControl(
   ) {
     active = nextSwitchCandidate(state, side, active, ballInOwnBox);
     runtime.switchCooldown = TUNING.control.switchCooldownSeconds;
-    runtime.autoSwitchCooldown = TUNING.control.autoSwitchCooldownSeconds;
+    runtime.autoSwitchCooldown =
+      TUNING.control.manualSwitchAutoLockSeconds;
+    runtime.idleSeconds = 0;
     runtime.shootCharge = 0;
+    clearActionBuffers(runtime);
     switched = true;
-  } else if (!switched && runtime.autoSwitchCooldown <= 0) {
+  } else if (
+    !switched &&
+    runtime.autoSwitchCooldown <= 0 &&
+    runtime.shootCharge <= 0 &&
+    (runtime.idleSeconds >= TUNING.control.autoSwitchIdleSeconds ||
+      (active?.role === "GK" && !ballInOwnBox))
+  ) {
     const auto = chooseAutoSwitch(
       state,
       side,
@@ -128,7 +193,9 @@ export function prepareTeamControl(
       active = auto;
       runtime.autoSwitchCooldown =
         TUNING.control.autoSwitchCooldownSeconds;
+      runtime.idleSeconds = 0;
       runtime.shootCharge = 0;
+      clearActionBuffers(runtime);
       switched = true;
     }
   }
@@ -141,13 +208,31 @@ export function prepareTeamControl(
   if (active !== null) {
     applyMovement(active, state, moveX, moveY, buttons, input !== null);
     if (!switched && input !== null) {
-      applyActions(active, state, runtime, input, dt);
+      applyActions(active, state, runtime, input, pressed, released, dt);
+      const actionPressed =
+        (pressed &
+          (CONTROL_BUTTONS.TACKLE |
+            CONTROL_BUTTONS.LOB |
+            CONTROL_BUTTONS.THROUGH |
+            CONTROL_BUTTONS.PASS)) !==
+        0;
+      const shootReleased = (released & CONTROL_BUTTONS.SHOOT) !== 0;
+      if (!actionPressed && !shootReleased) {
+        applyBufferedAction(state, active, runtime);
+      }
+      applyDribbleControl(active, state, runtime, input, buttons, dt);
     }
   }
 
+  runtime.pendingPresses = 0;
+  runtime.pendingReleases = 0;
   runtime.previousButtons = buttons;
   if (!fresh) {
     runtime.shootCharge = 0;
+    runtime.pendingPresses = 0;
+    runtime.pendingReleases = 0;
+    runtime.receivedButtons = 0;
+    clearActionBuffers(runtime);
   }
 }
 
@@ -207,12 +292,13 @@ function applyActions(
   state: MatchState,
   runtime: TeamControlRuntime,
   input: InputFrame,
+  pressed: number,
+  released: number,
   dt: number,
 ): void {
   if (heldBySetPiece(state, player)) {
     return;
   }
-  const pressed = input.buttons & ~runtime.previousButtons;
   const aim = normalizedAim(input.moveX, input.moveY);
   const passAim = Math.hypot(input.moveX, input.moveY) >=
     TUNING.control.aimDeadzone
@@ -220,25 +306,48 @@ function applyActions(
     : { x: 0, y: 0 };
 
   let actionAttempted = false;
+  let passKind: PassKind | null = null;
 
   if ((pressed & CONTROL_BUTTONS.TACKLE) !== 0) {
     actionAttempted = true;
-    playTackle(state, player);
+    clearActionBuffers(runtime);
+    runtime.shootCharge = 0;
+    if (playTackle(state, player)) {
+      runtime.dribbleCooldown = TUNING.control.dribbleTouchIntervalSeconds;
+    }
   } else if ((pressed & CONTROL_BUTTONS.LOB) !== 0) {
     actionAttempted = true;
-    playPass(state, player, "lob", passAim.x, passAim.y);
+    passKind = "lob";
   } else if ((pressed & CONTROL_BUTTONS.THROUGH) !== 0) {
     actionAttempted = true;
-    playPass(state, player, "through", passAim.x, passAim.y);
+    passKind = "through";
   } else if ((pressed & CONTROL_BUTTONS.PASS) !== 0) {
     actionAttempted = true;
-    playPass(state, player, "pass", passAim.x, passAim.y);
+    passKind = "pass";
+  }
+
+  if (passKind !== null) {
+    if (playPass(state, player, passKind, passAim.x, passAim.y)) {
+      clearActionBuffers(runtime);
+      runtime.shootCharge = 0;
+      runtime.dribbleCooldown = TUNING.control.dribbleTouchIntervalSeconds;
+      runtime.lastKickAtMs = runtime.lastInputAtMs;
+    } else {
+      runtime.bufferedPass = {
+        kind: passKind,
+        aimX: passAim.x,
+        aimY: passAim.y,
+        remainingSeconds: TUNING.control.actionBufferSeconds,
+      };
+    }
   }
 
   const shootHeld = (input.buttons & CONTROL_BUTTONS.SHOOT) !== 0;
-  const shootReleased =
-    shootHeld === false &&
-    (runtime.previousButtons & CONTROL_BUTTONS.SHOOT) !== 0;
+  const shootReleased = (released & CONTROL_BUTTONS.SHOOT) !== 0;
+
+  if ((pressed & CONTROL_BUTTONS.SHOOT) !== 0) {
+    runtime.bufferedShot = null;
+  }
 
   if (shootHeld) {
     runtime.shootCharge = Math.min(
@@ -247,19 +356,226 @@ function applyActions(
     );
   }
 
-  if (shootReleased && !actionAttempted) {
+  if (shootReleased) {
     const power = Math.max(
       TUNING.control.minShotPower,
       runtime.shootCharge,
     );
     const finesse = (input.buttons & CONTROL_BUTTONS.FINESSE) !== 0;
-    if (player.role === "GK") {
-      playPass(state, player, "lob", passAim.x, passAim.y);
-    } else {
-      playShot(state, player, passAim.x, passAim.y, power, finesse);
-    }
     runtime.shootCharge = 0;
+    if (!actionAttempted) {
+      const committed =
+        player.role === "GK"
+          ? playPass(state, player, "lob", passAim.x, passAim.y)
+          : playShot(state, player, passAim.x, passAim.y, power, finesse);
+      if (committed) {
+        clearActionBuffers(runtime);
+        runtime.dribbleCooldown =
+          TUNING.control.dribbleTouchIntervalSeconds;
+        runtime.lastKickAtMs = runtime.lastInputAtMs;
+      } else {
+        runtime.bufferedShot = {
+          aimX: passAim.x,
+          aimY: passAim.y,
+          power,
+          finesse,
+          remainingSeconds: TUNING.control.actionBufferSeconds,
+        };
+      }
+    }
   }
+}
+
+function tickActionBuffers(
+  runtime: TeamControlRuntime,
+  dt: number,
+): void {
+  if (runtime.bufferedPass !== null) {
+    runtime.bufferedPass.remainingSeconds -= dt;
+    if (runtime.bufferedPass.remainingSeconds <= 0) {
+      runtime.bufferedPass = null;
+    }
+  }
+  if (runtime.bufferedShot !== null) {
+    runtime.bufferedShot.remainingSeconds -= dt;
+    if (runtime.bufferedShot.remainingSeconds <= 0) {
+      runtime.bufferedShot = null;
+    }
+  }
+}
+
+function clearActionBuffers(runtime: TeamControlRuntime): void {
+  runtime.bufferedPass = null;
+  runtime.bufferedShot = null;
+}
+
+function applyBufferedAction(
+  state: MatchState,
+  player: PlayerState,
+  runtime: TeamControlRuntime,
+): void {
+  if (heldBySetPiece(state, player)) {
+    return;
+  }
+  const pass = runtime.bufferedPass;
+  if (pass !== null) {
+    if (playPass(state, player, pass.kind, pass.aimX, pass.aimY)) {
+      clearActionBuffers(runtime);
+      runtime.dribbleCooldown = TUNING.control.dribbleTouchIntervalSeconds;
+      runtime.lastKickAtMs = runtime.lastInputAtMs;
+      return;
+    }
+  }
+
+  const shot = runtime.bufferedShot;
+  if (shot === null) {
+    return;
+  }
+  const committed =
+    player.role === "GK"
+      ? playPass(state, player, "lob", shot.aimX, shot.aimY)
+      : playShot(
+          state,
+          player,
+          shot.aimX,
+          shot.aimY,
+          shot.power,
+          shot.finesse,
+        );
+  if (committed) {
+    runtime.bufferedShot = null;
+    runtime.dribbleCooldown = TUNING.control.dribbleTouchIntervalSeconds;
+    runtime.lastKickAtMs = runtime.lastInputAtMs;
+  }
+}
+
+function applyDribbleControl(
+  player: PlayerState,
+  state: MatchState,
+  runtime: TeamControlRuntime,
+  input: InputFrame,
+  buttons: number,
+  dt: number,
+): void {
+  const ballDistance = Math.hypot(
+    state.ball.x - player.x,
+    state.ball.y - player.y,
+  );
+  const moveMagnitude = Math.hypot(input.moveX, input.moveY);
+  if (
+    ballDistance <= TUNING.control.dribbleAcquireRadiusM &&
+    state.ball.z <= TUNING.ai.controlMaxBallHeightM &&
+    moveMagnitude < TUNING.control.dribbleMinMoveMagnitude
+  ) {
+    // Stopping with the ball is part of close control: without extra braking
+    // momentum carries a sprinter straight over the ball.
+    const damping = Math.exp(
+      -TUNING.control.onBallBrakePerSecond * dt,
+    );
+    player.vx *= damping;
+    player.vy *= damping;
+    const sinceKickSeconds =
+      (runtime.lastInputAtMs - runtime.lastKickAtMs) / 1000;
+    if (
+      sinceKickSeconds >
+      TUNING.control.possessionBrakeKickGraceSeconds
+    ) {
+      // Cushion the ball too, otherwise the last dribble touch keeps rolling
+      // away from a player who has already stopped.
+      const ballDamping = Math.exp(
+        -TUNING.control.possessionBallBrakeRatePerSecond * dt,
+      );
+      state.ball.vx *= ballDamping;
+      state.ball.vy *= ballDamping;
+    }
+    return;
+  }
+  if (
+    runtime.dribbleCooldown > 0 ||
+    player.kickCooldown > 0 ||
+    moveMagnitude < TUNING.control.dribbleMinMoveMagnitude
+  ) {
+    return;
+  }
+  if (
+    player.state === "slide" ||
+    player.state === "tackle" ||
+    player.state === "pass" ||
+    player.state === "shoot" ||
+    player.state === "volley" ||
+    player.state === "header"
+  ) {
+    return;
+  }
+  if (
+    ballDistance > TUNING.control.dribbleAcquireRadiusM ||
+    state.ball.z > TUNING.ai.controlMaxBallHeightM
+  ) {
+    return;
+  }
+  if (
+    Math.hypot(state.ball.vx, state.ball.vy) >
+    TUNING.control.dribbleMaxBallSpeedMps
+  ) {
+    return;
+  }
+
+  const nearestTeammate = closestToBall(state, player.team);
+  if (
+    nearestTeammate !== null &&
+    nearestTeammate.player !== player &&
+    nearestTeammate.distance <
+      ballDistance - TUNING.control.dribbleOpponentClearanceM
+  ) {
+    return;
+  }
+  const nearestOpponent = closestToBall(
+    state,
+    player.team === "home" ? "away" : "home",
+  );
+  if (
+    nearestOpponent !== null &&
+    nearestOpponent.distance <
+      ballDistance - TUNING.control.dribbleOpponentClearanceM
+  ) {
+    return;
+  }
+
+  const sprinting = (buttons & CONTROL_BUTTONS.SPRINT) !== 0;
+  if (
+    playDribbleTouch(
+      state,
+      player,
+      input.moveX,
+      input.moveY,
+      sprinting,
+    )
+  ) {
+    runtime.dribbleCooldown =
+      TUNING.control.dribbleTouchIntervalSeconds *
+      (sprinting ? TUNING.control.dribbleSprintIntervalFactor : 1);
+  }
+}
+
+function closestToBall(
+  state: MatchState,
+  side: TeamSide,
+): { readonly player: PlayerState; readonly distance: number } | null {
+  const team = side === "home" ? state.home : state.away;
+  let best: { player: PlayerState; distance: number } | null = null;
+  for (const player of team.players) {
+    if (!isAvailablePlayer(player)) {
+      continue;
+    }
+    const distance = Math.hypot(
+      player.x - state.ball.x,
+      player.y - state.ball.y,
+    );
+    if (best === null || distance < best.distance) {
+      best = { player, distance };
+    }
+  }
+  return best;
 }
 
 function normalizedAim(moveX: number, moveY: number): { x: number; y: number } {

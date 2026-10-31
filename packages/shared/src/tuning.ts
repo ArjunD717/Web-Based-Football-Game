@@ -494,14 +494,61 @@ export const TUNING = {
     passSearchRangeM: 35,
     passConeCos: 0.1,
     aimDeadzone: 0.2,
-    actionBallReachM: 1.35,
-    jogSpeedFactor: 0.62,
+    /** Maximum stretch from the player's feet when starting a pass or shot. */
+    actionBallReachM: 1.6,
+    /** Jogging is deliberately slower than sprinting but still usable on the ball. */
+    jogSpeedFactor: 0.7,
     inputMoveTargetDistanceM: 12,
-    switchCooldownSeconds: 0.6,
-    autoSwitchCooldownSeconds: 0.5,
+    switchCooldownSeconds: 0.5,
+    autoSwitchCooldownSeconds: 0.9,
+    /** Steering above this magnitude protects the current player from auto-switch. */
+    autoSwitchSteerDeadzone: 0.15,
     autoSwitchDistanceM: 9,
     autoSwitchAdvantageM: 2.5,
+    /** Auto-switch stays locked after a deliberate switch, seconds. */
+    manualSwitchAutoLockSeconds: 1.8,
+    /** The stick must be idle this long before auto-switch may take over, seconds. */
+    autoSwitchIdleSeconds: 0.35,
     possessionRadiusM: 1.2,
+    /** A button press is retried for this long if the ball is not yet reachable. */
+    actionBufferSeconds: 0.3,
+    /** Extra braking while stopping with the ball at the player's feet, 1/s. */
+    onBallBrakePerSecond: 8,
+    /** Cushioning of a nearby ball while the controlled player stands still, 1/s. */
+    possessionBallBrakeRatePerSecond: 24,
+    /** Ignore close-control braking just after a deliberate kick, seconds. */
+    possessionBrakeKickGraceSeconds: 0.35,
+    /** Close-control pickup radius for the controlled player, metres. */
+    dribbleAcquireRadiusM: 1.5,
+    /** Below this ball speed a player can cushion a pass into a dribble. */
+    dribbleMaxBallSpeedMps: 12,
+    /** Smallest stick magnitude that counts as a dribble direction. */
+    dribbleMinMoveMagnitude: 0.15,
+    /** Base interval between close-control touches, seconds. */
+    dribbleTouchIntervalSeconds: 0.22,
+    /** Extra ball speed above the player's current speed, m/s. */
+    dribbleTouchSpeedMps: 1.2,
+    /** Distance ahead used to aim a close-control touch, metres. */
+    dribbleTouchDistanceM: 0.9,
+    /** Extra touch speed when sprinting, m/s. */
+    dribbleSprintSpeedBonusMps: 0.8,
+    /** Touch cadence multiplier while sprinting with the ball. */
+    dribbleSprintIntervalFactor: 0.85,
+    /** Extra touch distance when sprinting, metres. */
+    dribbleSprintDistanceBonusM: 0.45,
+    /** Max random touch error at low control, radians. */
+    dribbleMaxErrorRad: 0.42,
+    /** Touch error at maximum control, radians. */
+    dribbleMinErrorRad: 0.06,
+    /** Extra error from a nearby opponent, radians. */
+    dribblePressureErrorRad: 0.32,
+    /** Distance over which opponent pressure fades, metres. */
+    dribblePressureDistanceM: 4,
+    /** Opponent must be this much closer than the active player to block control. */
+    dribbleOpponentClearanceM: 0.25,
+    /** How much of the player's velocity is transferred into a dribble touch. */
+    dribbleVelocityTransfer: 0.15,
+    dribbleTouchLiftMps: 0.08,
     tackleRangeM: 1.9,
     tackleBallSpeedMps: 7,
     tackleLiftMps: 0.4,

@@ -4,6 +4,7 @@ import {
   getAttackingGoalForDirection,
 } from "../pitch";
 import { kickBall } from "../physics/ball";
+import { eventRng } from "../random";
 import { beginKick, commitTackleFoul } from "../rules/referee";
 import { findTackleVictim } from "../rules/fouls";
 import type { MatchState, PlayerState } from "../types";
@@ -109,6 +110,111 @@ export function playPass(
   player.actionTimer = TUNING.player.actionStateSeconds;
   player.kickCooldown = TUNING.control.passCooldownSeconds;
   return true;
+}
+
+/**
+ * Nudge the ball ahead of a running player. This is the human close-control
+ * touch: it is intentionally separate from the AI dribble so its error curve
+ * and touch cadence stay under player control and can be tuned independently.
+ */
+export function playDribbleTouch(
+  state: MatchState,
+  player: PlayerState,
+  aimX: number,
+  aimY: number,
+  sprinting: boolean,
+): boolean {
+  if (player.kickCooldown > 0 || player.sentOff) {
+    return false;
+  }
+  const distanceToBall = Math.hypot(
+    state.ball.x - player.x,
+    state.ball.y - player.y,
+  );
+  if (
+    distanceToBall > TUNING.control.dribbleAcquireRadiusM ||
+    state.ball.z > TUNING.ai.controlMaxBallHeightM
+  ) {
+    return false;
+  }
+
+  const aim = resolveAim(player, aimX, aimY);
+  const control = clamp(
+    (player.attributes.ballControl + player.attributes.dribbling) / 198,
+    0,
+    1,
+  );
+  const nearestOpponent = nearestOpponentDistance(state, player);
+  const pressure =
+    nearestOpponent === null
+      ? 0
+      : clamp(
+          1 -
+            nearestOpponent / TUNING.control.dribblePressureDistanceM,
+          0,
+          1,
+        );
+  const rng = eventRng(state.seed, state.tick, player.number);
+  const error =
+    lerp(
+      TUNING.control.dribbleMaxErrorRad,
+      TUNING.control.dribbleMinErrorRad,
+      control,
+    ) +
+    pressure * TUNING.control.dribblePressureErrorRad;
+  const angle = Math.atan2(aim.y, aim.x) + rng.range(-error, error);
+  const playerSpeed = Math.hypot(player.vx, player.vy);
+  const targetDistance =
+    TUNING.control.dribbleTouchDistanceM +
+    (sprinting ? TUNING.control.dribbleSprintDistanceBonusM : 0);
+  const speed =
+    playerSpeed +
+    TUNING.control.dribbleTouchSpeedMps +
+    (sprinting ? TUNING.control.dribbleSprintSpeedBonusMps : 0);
+  const targetX = clamp(
+    player.x + Math.cos(angle) * targetDistance,
+    TUNING.player.pitchMarginM,
+    state.pitch.lengthM - TUNING.player.pitchMarginM,
+  );
+  const targetY = clamp(
+    player.y + Math.sin(angle) * targetDistance,
+    TUNING.player.pitchMarginM,
+    state.pitch.widthM - TUNING.player.pitchMarginM,
+  );
+
+  if (!beginKick(state, player, "dribble")) {
+    return false;
+  }
+  kickBall(state.ball, player, {
+    targetX,
+    targetY,
+    speed,
+    lift: TUNING.control.dribbleTouchLiftMps,
+    velocityTransfer: TUNING.control.dribbleVelocityTransfer,
+  });
+  return true;
+}
+
+function nearestOpponentDistance(
+  state: MatchState,
+  player: PlayerState,
+): number | null {
+  const opponents =
+    player.team === "home" ? state.away.players : state.home.players;
+  let nearest: number | null = null;
+  for (const opponent of opponents) {
+    if (opponent.sentOff || opponent.unavailable) {
+      continue;
+    }
+    const distance = Math.hypot(
+      opponent.x - player.x,
+      opponent.y - player.y,
+    );
+    if (nearest === null || distance < nearest) {
+      nearest = distance;
+    }
+  }
+  return nearest;
 }
 
 export function playShot(

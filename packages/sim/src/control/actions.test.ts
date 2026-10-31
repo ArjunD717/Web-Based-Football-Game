@@ -3,7 +3,12 @@ import { TUNING } from "@fb/shared";
 import { describe, expect, it } from "vitest";
 import { createMatch, stepMatch } from "../match";
 import type { MatchState, PlayerState } from "../types";
-import { playPass, playShot, playTackle } from "./actions";
+import {
+  playDribbleTouch,
+  playPass,
+  playShot,
+  playTackle,
+} from "./actions";
 
 function placeBallAtFeet(state: MatchState, player: PlayerState): void {
   state.referee.phase = "live";
@@ -82,6 +87,22 @@ describe("human actions", () => {
     state.ball.vx = 0;
     state.ball.vy = 0;
     expect(playTackle(state, player)).toBe(false);
+  });
+
+  it("nudges the ball ahead with a close-control touch", () => {
+    const state = createMatch({ seed: 151 });
+    const player = state.home.players.find((entry) => entry.role === "ST")!;
+    placeBallAtFeet(state, player);
+
+    expect(playDribbleTouch(state, player, 1, 0, false)).toBe(true);
+    expect(state.lastTouch?.playerId).toBe(player.id);
+    expect(state.ball.vx).toBeGreaterThan(0);
+    expect(Math.hypot(state.ball.vx, state.ball.vy)).toBeGreaterThan(0.5);
+
+    state.ball.x = player.x + 8;
+    state.ball.vx = 0;
+    state.ball.vy = 0;
+    expect(playDribbleTouch(state, player, 1, 0, false)).toBe(false);
   });
 
   it("rejects actions when the ball is out of reach", () => {

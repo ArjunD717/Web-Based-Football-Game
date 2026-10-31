@@ -124,6 +124,92 @@ describe("control selection", () => {
     expect(home.activePlayerId).toBe(second);
   });
 
+  it("keeps a switch tap that lands between two simulation ticks", () => {
+    const state = createMatch({ seed: 107 });
+    const home = createTeamControlRuntime();
+    prepareTeamControl(state, "home", home, DT);
+    const first = home.activePlayerId;
+
+    updateControlInput(
+      home,
+      {
+        seq: 1,
+        moveX: 0,
+        moveY: 0,
+        buttons: CONTROL_BUTTONS.SWITCH,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    updateControlInput(
+      home,
+      {
+        seq: 2,
+        moveX: 0,
+        moveY: 0,
+        buttons: 0,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+
+    expect(home.activePlayerId).not.toBe(first);
+    expect(home.previousButtons).toBe(0);
+  });
+
+  it("buffers a pass until the ball comes into reach", () => {
+    const state = createMatch({ seed: 108 });
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.setPiece = null;
+    state.referee.timerSeconds = 0;
+    const home = createTeamControlRuntime();
+    prepareTeamControl(state, "home", home, DT);
+    const active = state.home.players.find(
+      (player) => player.isUserControlled,
+    )!;
+    state.ball.x = active.x + 5;
+    state.ball.y = active.y;
+    state.ball.z = 0.11;
+    state.ball.vx = 0;
+    state.ball.vy = 0;
+
+    updateControlInput(
+      home,
+      {
+        seq: 1,
+        moveX: 1,
+        moveY: 0,
+        buttons: CONTROL_BUTTONS.PASS,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+    expect(home.bufferedPass).not.toBeNull();
+
+    state.ball.x = active.x + 0.3;
+    state.ball.y = active.y;
+    state.ball.z = 0.11;
+    updateControlInput(
+      home,
+      {
+        seq: 2,
+        moveX: 0,
+        moveY: 0,
+        buttons: 0,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+
+    expect(state.lastTouch?.playerId).toBe(active.id);
+    expect(active.state).toBe("pass");
+    expect(home.bufferedPass).toBeNull();
+  });
+
   it("ignores stale input and older sequences", () => {
     const state = createMatch({ seed: 103 });
     const home = createTeamControlRuntime();
@@ -216,6 +302,42 @@ describe("control selection", () => {
     expect(
       Math.hypot(state.ball.vx, state.ball.vy, state.ball.vz),
     ).toBeGreaterThan(1);
+  });
+
+  it("brakes sharply when stopping with the ball at the player's feet", () => {
+    const state = createMatch({ seed: 109 });
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.setPiece = null;
+    const home = createTeamControlRuntime();
+    prepareTeamControl(state, "home", home, DT);
+    const active = state.home.players.find(
+      (player) => player.isUserControlled,
+    )!;
+    state.ball.x = active.x + 0.3;
+    state.ball.y = active.y;
+    state.ball.z = 0.11;
+    state.ball.vx = 4;
+    state.ball.vy = 0;
+    active.vx = 6;
+    active.vy = 0;
+
+    updateControlInput(
+      home,
+      {
+        seq: 1,
+        moveX: 0,
+        moveY: 0,
+        buttons: 0,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+
+    expect(Math.abs(active.vx)).toBeLessThan(6);
+    expect(Math.abs(state.ball.vx)).toBeLessThan(4);
+    expect(home.activePlayerId).toBe(active.id);
   });
 
   it("hands goalkeeper control to the human when the ball enters the box", () => {
