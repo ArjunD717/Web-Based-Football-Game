@@ -164,6 +164,11 @@ input {
   color: var(--bad);
 }
 
+.chip.sprint {
+  border-color: rgba(255, 189, 95, 0.55);
+  color: #ffbd5f;
+}
+
 .controller-main {
   position: relative;
   display: flex;

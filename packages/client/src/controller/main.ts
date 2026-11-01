@@ -1,11 +1,15 @@
 // packages/client/src/controller/main.ts
 import {
+  CONTROL_BUTTONS,
   TUNING,
   isRoomCode,
   normalizeRoomCode,
   type LobbyRoomWire,
 } from "@fb/shared";
-import { TouchControls } from "../input/touch-controls";
+import {
+  TouchControls,
+} from "../input/touch-controls";
+import type { ControlFrame } from "../input/desktop-controls";
 import { describeMatchEvent, formatCardCounts } from "../match/event-label";
 import {
   GameClient,
@@ -46,6 +50,7 @@ const playPhase = byId<HTMLElement>("play-phase");
 const playCards = byId<HTMLElement>("play-cards");
 const playEvent = byId<HTMLElement>("play-event");
 const playPlayer = byId<HTMLElement>("play-player");
+const playSprint = byId<HTMLElement>("play-sprint");
 const leavePlayButton = byId<HTMLButtonElement>("leave-play");
 const powerMeter = byId<HTMLElement>("controller-power");
 const powerFill = byId<HTMLElement>("power-fill");
@@ -72,6 +77,7 @@ let lastLoopAt = performance.now();
 let controlAccumulator = 0;
 let toastTimer: number | null = null;
 let lastHudAt = 0;
+let lastControlFrame: ControlFrame | null = null;
 let lastMatchEventSeq = 0;
 let matchEventTimer: number | null = null;
 
@@ -232,6 +238,7 @@ function updateInput(now: number, loopDt: number): void {
 
   if (!active) {
     controls.reset();
+    lastControlFrame = null;
     controlAccumulator = 0;
     hidePower();
     return;
@@ -245,6 +252,7 @@ function updateInput(now: number, loopDt: number): void {
     steps < TUNING.sim.maxCatchUpTicks
   ) {
     const command = controls.read(now);
+    lastControlFrame = command;
     client.sendInput(command);
     controlAccumulator -= tickSeconds;
     steps += 1;
@@ -278,18 +286,23 @@ function updatePlayerLabel(state: GameClientState): void {
   const frame = client.latestSnapshot();
   if (setup === null || team === null || frame === null) {
     playPlayer.textContent = "—";
+    playSprint.hidden = true;
     return;
   }
   const index = team === "home" ? frame.controlledHome : frame.controlledAway;
   if (index < 0) {
     playPlayer.textContent = "—";
+    playSprint.hidden = true;
     return;
   }
   const localIndex = team === "home" ? index : index - 11;
   const roster = team === "home" ? setup.home.players : setup.away.players;
   const player = roster[localIndex];
   playPlayer.textContent =
-    player === undefined ? "—" : `You: #${player.number}`;
+    player === undefined ? "—" : `#${player.number} ${player.name}`;
+  playSprint.hidden =
+    lastControlFrame === null ||
+    (lastControlFrame.buttons & CONTROL_BUTTONS.SPRINT) === 0;
 }
 
 function updateHud(state: GameClientState): void {

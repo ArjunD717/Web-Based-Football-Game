@@ -148,8 +148,21 @@ export class TouchControls {
       dx = (dx / distance) * maxRadius;
       dy = (dy / distance) * maxRadius;
     }
-    this.moveX = clamp(dx / maxRadius, -1, 1);
-    this.moveY = clamp(dy / maxRadius, -1, 1);
+    const rawX = clamp(dx / maxRadius, -1, 1);
+    const rawY = clamp(dy / maxRadius, -1, 1);
+    const magnitude = Math.hypot(rawX, rawY);
+    if (magnitude <= TUNING.control.gamepadDeadzone) {
+      this.moveX = 0;
+      this.moveY = 0;
+    } else {
+      const scaled =
+        (magnitude - TUNING.control.gamepadDeadzone) /
+        (1 - TUNING.control.gamepadDeadzone);
+      const unitX = rawX / magnitude;
+      const unitY = rawY / magnitude;
+      this.moveX = unitX * scaled;
+      this.moveY = unitY * scaled;
+    }
     this.knob.style.transform = `translate(-50%, -50%) translate(${dx}px, ${dy}px)`;
   }
 }
