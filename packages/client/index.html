@@ -1006,6 +1006,30 @@
               <div class="power-track"><i id="power-fill"></i></div>
             </div>
 
+            <aside id="control-card" class="control-card" aria-label="Controlled player" hidden>
+              <span id="control-accent" class="control-card__accent" aria-hidden="true"></span>
+              <div class="control-card__body">
+                <div class="control-card__head">
+                  <strong id="control-number" class="control-card__number">#—</strong>
+                  <div class="control-card__identity">
+                    <strong id="control-name" class="control-card__name">Selecting player</strong>
+                    <span id="control-meta" class="control-card__meta">—</span>
+                  </div>
+                  <span id="control-state" class="control-card__state">—</span>
+                </div>
+                <div class="control-card__meters">
+                  <div id="control-stamina" class="control-meter" aria-label="Stamina">
+                    <span class="control-meter__label">STA</span>
+                    <span class="control-meter__track"><i id="control-stamina-fill"></i></span>
+                    <b id="control-stamina-value" class="control-meter__value">100</b>
+                  </div>
+                  <span id="control-ball" class="control-pill control-pill--ball">ON BALL</span>
+                  <span id="control-sprint" class="control-pill control-pill--sprint" hidden>SPRINT</span>
+                  <span id="control-next" class="control-next">NEXT —</span>
+                </div>
+              </div>
+            </aside>
+
             <div id="match-overlay" class="match-overlay" data-tone="info" role="status" aria-live="polite" hidden>
               <div class="overlay-box">
                 <span class="overlay-pulse" aria-hidden="true"></span>
@@ -1086,9 +1110,10 @@
                 </p>
               </div>
               <p class="match-help__note">
-                White ring: your player. The host owns the simulation; both
-                devices render interpolated server snapshots. A disconnect
-                auto-pauses the match for 60 seconds.
+                Cyan arrow and ring: your player. Amber ring: the next manual
+                switch. The control card shows the selected player, stamina,
+                on-ball state and sprint input. The host owns the simulation;
+                a disconnect auto-pauses the match for 60 seconds.
               </p>
               <div class="match-help__links">
                 <a href="/">Lobby</a>

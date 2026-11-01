@@ -148,6 +148,8 @@ export class PlayerRig {
   private readonly leftArm = new THREE.Group();
   private readonly rightArm = new THREE.Group();
   private readonly ring: THREE.Mesh;
+  private readonly switchRing: THREE.Mesh;
+  private readonly marker: THREE.Sprite;
   private readonly shadow: THREE.Mesh;
   private readonly card: THREE.Mesh;
 
@@ -187,11 +189,11 @@ export class PlayerRig {
     this.root.add(this.shadow);
 
     this.ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.7, 0.82, 32),
+      new THREE.RingGeometry(0.92, 1.08, 36),
       new THREE.MeshBasicMaterial({
-        color: 0xf4fbff,
+        color: 0x62f6ff,
         transparent: true,
-        opacity: 0.88,
+        opacity: 0.98,
         depthWrite: false,
         side: THREE.DoubleSide,
       }),
@@ -199,6 +201,26 @@ export class PlayerRig {
     this.ring.rotation.x = -Math.PI / 2;
     this.ring.position.y = 0.028;
     this.root.add(this.ring);
+
+    this.switchRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.98, 1.12, 36),
+      new THREE.MeshBasicMaterial({
+        color: 0xffbd5f,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    this.switchRing.rotation.x = -Math.PI / 2;
+    this.switchRing.position.y = 0.026;
+    this.switchRing.visible = false;
+    this.root.add(this.switchRing);
+
+    this.marker = createControlledMarker();
+    this.marker.position.y = 2.75;
+    this.marker.scale.set(0.9, 0.9, 0.9);
+    this.root.add(this.marker);
 
     const hipY = 0.92;
     for (const [group, z] of [
@@ -297,7 +319,11 @@ export class PlayerRig {
     this.root.position.set(world.x, world.y, world.z);
     this.root.rotation.y = facingToRotationY(player.facing);
     this.ring.visible = player.controlled;
-    this.ring.scale.setScalar(1 + Math.sin(tick * 0.14) * 0.06);
+    this.ring.scale.setScalar(1 + Math.sin(tick * 0.14) * 0.08);
+    this.switchRing.visible = player.switchTarget && !player.controlled;
+    this.switchRing.scale.setScalar(1 + Math.sin(tick * 0.1 + 1.3) * 0.05);
+    this.marker.visible = player.controlled;
+    this.marker.position.y = 2.75 + Math.sin(tick * 0.12) * 0.09;
     this.card.visible = player.yellowCards > 0;
 
     const cadence =
@@ -323,6 +349,45 @@ export class PlayerRig {
       1 - clamp((player.state === "slide" ? 0.18 : 0), 0, 0.3),
     );
   }
+}
+
+function createControlledMarker(): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (ctx !== null) {
+    ctx.clearRect(0, 0, 128, 128);
+    ctx.translate(64, 64);
+    ctx.shadowColor = "rgba(98, 246, 255, 0.9)";
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.moveTo(0, 42);
+    ctx.lineTo(-38, -16);
+    ctx.lineTo(-17, -16);
+    ctx.lineTo(0, 10);
+    ctx.lineTo(17, -16);
+    ctx.lineTo(38, -16);
+    ctx.closePath();
+    ctx.fillStyle = "#62f6ff";
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(5, 22, 24, 0.9)";
+    ctx.stroke();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      toneMapped: false,
+    }),
+  );
+  return sprite;
 }
 
 function createNumberSprite(number: number): THREE.Sprite {

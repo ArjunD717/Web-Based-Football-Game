@@ -1,5 +1,5 @@
 // packages/client/src/match/view-from-wire.ts
-import { createPitch } from "@fb/sim";
+import { createPitch, isInsidePenaltyArea } from "@fb/sim";
 import type {
   MatchSetupWire,
   SnapshotFrame,
@@ -10,6 +10,7 @@ import type {
   RenderPlayer,
   RenderTeam,
 } from "../render/view";
+import { findNextSwitchTarget } from "./switch-target";
 
 /** Builds renderer frames from static setup + dynamic binary snapshots. */
 export class WireViewBuilder {
@@ -72,12 +73,47 @@ export class WireViewBuilder {
       }
     }
 
+    const selfPlayers =
+      this.selfSide === "home"
+        ? homePlayers
+        : this.selfSide === "away"
+          ? awayPlayers
+          : [];
+    const nextTarget =
+      this.selfSide === null
+        ? null
+        : findNextSwitchTarget(
+            selfPlayers,
+            frame.ball.x,
+            frame.ball.y,
+            isInsidePenaltyArea(
+              this.pitch,
+              this.selfSide,
+              frame.ball.x,
+              frame.ball.y,
+            ),
+          );
+    const targetId = nextTarget?.id ?? null;
     return {
       pitch: this.pitch,
       tick: frame.tick,
       elapsedSeconds: frame.tick / this.tickHz,
-      home: { ...this.home, players: homePlayers },
-      away: { ...this.away, players: awayPlayers },
+      home: {
+        ...this.home,
+        players: homePlayers.map((player) =>
+          player.id === targetId
+            ? { ...player, switchTarget: true }
+            : player,
+        ),
+      },
+      away: {
+        ...this.away,
+        players: awayPlayers.map((player) =>
+          player.id === targetId
+            ? { ...player, switchTarget: true }
+            : player,
+        ),
+      },
       ball: {
         x: frame.ball.x,
         y: frame.ball.y,
@@ -117,6 +153,7 @@ export class WireViewBuilder {
         (team === "home"
           ? frame.controlledHome === index
           : frame.controlledAway === index),
+      switchTarget: false,
     };
   }
 }

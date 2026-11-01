@@ -34,7 +34,8 @@ const COLORS = {
   actionShoot: "#ffb36b",
   actionPass: "#7cc7ff",
   actionDribble: "#ffe066",
-  controlled: "#f4fbff",
+  controlled: "#62f6ff",
+  switchTarget: "#ffbd5f",
 } as const;
 
 export function createCanvasRenderer(
@@ -406,12 +407,40 @@ function drawPlayer(
     ctx.stroke();
   }
 
+  if (player.switchTarget && !player.controlled) {
+    ctx.save();
+    ctx.strokeStyle = COLORS.switchTarget;
+    ctx.lineWidth = VISUAL.lineWidthM * 1.15;
+    ctx.setLineDash([0.38, 0.24]);
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, VISUAL.playerRadiusM + 0.55, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   if (player.controlled) {
     ctx.strokeStyle = COLORS.controlled;
-    ctx.lineWidth = VISUAL.lineWidthM * 1.55;
+    ctx.lineWidth = VISUAL.lineWidthM * 1.7;
     ctx.beginPath();
-    ctx.arc(player.x, player.y, VISUAL.playerRadiusM + 0.26, 0, TAU);
+    ctx.arc(player.x, player.y, VISUAL.playerRadiusM + 0.3, 0, TAU);
     ctx.stroke();
+    ctx.lineWidth = VISUAL.lineWidthM * 0.7;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, VISUAL.playerRadiusM + 0.48, 0, TAU);
+    ctx.stroke();
+    ctx.fillStyle = COLORS.controlled;
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y - VISUAL.playerRadiusM - 0.55);
+    ctx.lineTo(
+      player.x - 0.3,
+      player.y - VISUAL.playerRadiusM - 1.02,
+    );
+    ctx.lineTo(
+      player.x + 0.3,
+      player.y - VISUAL.playerRadiusM - 1.02,
+    );
+    ctx.closePath();
+    ctx.fill();
   }
 
   ctx.fillStyle = "#ffffff";

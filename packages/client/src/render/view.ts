@@ -26,6 +26,8 @@ export interface RenderPlayer {
   readonly yellowCards: number;
   /** True for the player currently selected by this client's control input. */
   readonly controlled: boolean;
+  /** True for the player the next manual switch would select. */
+  readonly switchTarget: boolean;
 }
 
 export interface RenderTeam {
@@ -76,6 +78,7 @@ export function matchStateToView(state: MatchState): MatchView {
         sentOff: player.sentOff,
         yellowCards: player.yellowCards,
         controlled: false,
+        switchTarget: false,
       })),
     },
     away: {
@@ -94,6 +97,7 @@ export function matchStateToView(state: MatchState): MatchView {
         sentOff: player.sentOff,
         yellowCards: player.yellowCards,
         controlled: false,
+        switchTarget: false,
       })),
     },
     ball: {

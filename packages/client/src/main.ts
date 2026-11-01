@@ -1,5 +1,6 @@
 // packages/client/src/main.ts
 import {
+  CONTROL_BUTTONS,
   TUNING,
   isRoomCode,
   normalizeRoomCode,
@@ -20,6 +21,11 @@ import {
   type KeyBindings,
 } from "./input/desktop-controls";
 import {
+  applyBinding,
+  cloneBindings,
+  sanitizeBindings,
+} from "./input/bindings";
+import {
   GameClient,
   type GameClientState,
   type GameLinkStatus,
@@ -31,7 +37,7 @@ import {
   saveRendererMode,
   type RendererMode,
 } from "./render/factory";
-import type { MatchView } from "./render/view";
+import type { MatchView, RenderPlayer } from "./render/view";
 import { describeMatchEvent, formatCardCounts } from "./match/event-label";
 import { SubstitutionPanel } from "./match/substitution-panel";
 import { MatchAudio } from "./audio/match-audio";
@@ -135,6 +141,17 @@ const audioToggleButton = byId<HTMLButtonElement>("audio-toggle");
 const bufferChip = byId<HTMLElement>("buffer-chip");
 const matchRulesChip = byId<HTMLElement>("match-rules");
 const controlPlayerChip = byId<HTMLElement>("control-player");
+const controlCard = byId<HTMLElement>("control-card");
+const controlNumber = byId<HTMLElement>("control-number");
+const controlName = byId<HTMLElement>("control-name");
+const controlMeta = byId<HTMLElement>("control-meta");
+const controlState = byId<HTMLElement>("control-state");
+const controlStamina = byId<HTMLElement>("control-stamina");
+const controlStaminaFill = byId<HTMLElement>("control-stamina-fill");
+const controlStaminaValue = byId<HTMLElement>("control-stamina-value");
+const controlBall = byId<HTMLElement>("control-ball");
+const controlSprint = byId<HTMLElement>("control-sprint");
+const controlNext = byId<HTMLElement>("control-next");
 const hudRoom = byId<HTMLElement>("hud-room");
 const hudPing = byId<HTMLElement>("hud-ping");
 const hudTick = byId<HTMLElement>("hud-tick");
@@ -219,7 +236,9 @@ let lastSelfTeam: "home" | "away" | null = null;
 let lastLoopAt = performance.now();
 let controlAccumulator = 0;
 let lastControlFrame: ControlFrame | null = null;
-let bindings: KeyBindings = loadKeyBindings();
+let lastControlledPlayerId: string | null = null;
+let lastControlledMatchId: string | null = null;
+let bindings: KeyBindings = sanitizeBindings(loadKeyBindings());
 let capturingAction: ControlAction | null = null;
 
 client.subscribe((state) => {
@@ -393,19 +412,7 @@ window.addEventListener(
       return;
     }
     const action = capturingAction;
-    const next: Record<ControlAction, readonly string[]> = {
-      ...bindings,
-    };
-    for (const key of Object.keys(next) as ControlAction[]) {
-      if (key === action) {
-        continue;
-      }
-      const remaining = next[key].filter((code) => code !== event.code);
-      next[key] =
-        remaining.length > 0 ? remaining : DEFAULT_KEY_BINDINGS[key].slice(0, 1);
-    }
-    next[action] = [event.code];
-    bindings = next;
+    bindings = applyBinding(bindings, action, event.code);
     saveKeyBindings(bindings);
     capturingAction = null;
     renderBindings();
@@ -475,23 +482,6 @@ function formatKey(code: string): string {
   return names[code] ?? code;
 }
 
-function cloneBindings(source: KeyBindings): KeyBindings {
-  return {
-    up: [...source.up],
-    down: [...source.down],
-    left: [...source.left],
-    right: [...source.right],
-    sprint: [...source.sprint],
-    pass: [...source.pass],
-    through: [...source.through],
-    lob: [...source.lob],
-    shoot: [...source.shoot],
-    tackle: [...source.tackle],
-    switch: [...source.switch],
-    finesse: [...source.finesse],
-  };
-}
-
 function applyState(state: GameClientState): void {
   renderConnection(state);
 
@@ -524,6 +514,9 @@ function applyState(state: GameClientState): void {
       replay.clear();
       setReplayAvailable(false);
       audio.reset();
+      lastControlledPlayerId = null;
+      lastControlledMatchId = null;
+      controlCard.hidden = true;
       lastMatchEventSeq = 0;
       if (matchEventTimer !== null) {
         window.clearTimeout(matchEventTimer);
@@ -987,6 +980,7 @@ function updateHud(state: GameClientState): void {
 
   updateScoreboard();
   updateControlPlayerChip(state);
+  updateControlCard(state);
   updateStatsScreen(state);
   updateRuleChip(state);
 
@@ -1146,24 +1140,114 @@ function latestScore(side: "home" | "away"): number {
   return side === "home" ? frame.match.scoreHome : frame.match.scoreAway;
 }
 
-function updateControlPlayerChip(state: GameClientState): void {
+interface ControlledPlayerInfo {
+  readonly player: RenderPlayer;
+  readonly name: string;
+  readonly side: "home" | "away";
+  readonly teamName: string;
+}
+
+function currentControlledPlayer(
+  state: GameClientState,
+): ControlledPlayerInfo | null {
   const setup = state.setup;
-  const team = state.lobby?.you?.team ?? null;
-  const frame = client.latestSnapshot();
-  if (setup === null || team === null || frame === null) {
-    controlPlayerChip.textContent = "You: —";
-    return;
+  const team = state.lobby?.you?.team;
+  const view = latestView;
+  if (
+    setup === null ||
+    view === null ||
+    (team !== "home" && team !== "away")
+  ) {
+    return null;
   }
-  const index = team === "home" ? frame.controlledHome : frame.controlledAway;
-  if (index < 0) {
-    controlPlayerChip.textContent = "You: —";
-    return;
+  const renderTeam = team === "home" ? view.home : view.away;
+  const player = renderTeam.players.find((entry) => entry.controlled);
+  if (player === undefined) {
+    return null;
   }
-  const localIndex = team === "home" ? index : index - 11;
   const roster = team === "home" ? setup.home.players : setup.away.players;
-  const player = roster[localIndex];
+  const entry = roster.find((candidate) => candidate.id === player.id);
+  return {
+    player,
+    name: entry?.name ?? "Player",
+    side: team,
+    teamName: team === "home" ? setup.home.name : setup.away.name,
+  };
+}
+
+function updateControlPlayerChip(state: GameClientState): void {
+  const info = currentControlledPlayer(state);
   controlPlayerChip.textContent =
-    player === undefined ? "You: —" : `You: #${player.number}`;
+    info === null ? "You: —" : `You: #${info.player.number} ${info.name}`;
+}
+
+function updateControlCard(state: GameClientState): void {
+  const setup = state.setup;
+  const matchId = setup?.matchId ?? null;
+  if (matchId !== lastControlledMatchId) {
+    lastControlledMatchId = matchId;
+    lastControlledPlayerId = null;
+  }
+  const phase = client.latestSnapshot()?.match.phase ?? null;
+  const info =
+    state.matchStats === null && phase !== "fullTime"
+      ? currentControlledPlayer(state)
+      : null;
+  if (setup === null || info === null) {
+    controlCard.hidden = true;
+    return;
+  }
+
+  controlCard.hidden = false;
+  controlCard.style.setProperty(
+    "--control-accent",
+    setup[info.side].colors.primary,
+  );
+  controlNumber.textContent = `#${info.player.number}`;
+  controlName.textContent = info.name;
+  controlMeta.textContent = info.teamName;
+  controlState.textContent = info.player.state.toUpperCase();
+
+  const stamina = Math.max(0, Math.min(1, info.player.stamina));
+  const staminaPercent = Math.round(stamina * 100);
+  controlStaminaFill.style.width = `${staminaPercent}%`;
+  controlStaminaValue.textContent = String(staminaPercent);
+  controlStamina.dataset.level = stamina <= 0.25 ? "low" : "normal";
+
+  const ball = latestView?.ball;
+  const onBall =
+    ball !== undefined &&
+    Math.hypot(info.player.x - ball.x, info.player.y - ball.y) <=
+      TUNING.control.actionBallReachM &&
+    ball.z <= TUNING.ai.controlMaxBallHeightM;
+  controlBall.hidden = !onBall;
+
+  const sprintHeld =
+    lastControlFrame !== null &&
+    (lastControlFrame.buttons & CONTROL_BUTTONS.SPRINT) !== 0;
+  controlSprint.hidden = !sprintHeld;
+
+  const next = latestView?.[info.side].players.find(
+    (player) => player.switchTarget,
+  );
+  if (next === undefined) {
+    controlNext.textContent = "NEXT —";
+    controlNext.title = "No switch target";
+  } else {
+    controlNext.textContent = `NEXT #${next.number}`;
+    const roster =
+      info.side === "home" ? setup.home.players : setup.away.players;
+    const nextEntry = roster.find((candidate) => candidate.id === next.id);
+    controlNext.title = nextEntry?.name ?? "Next player";
+  }
+
+  if (
+    lastControlledPlayerId !== null &&
+    lastControlledPlayerId !== info.player.id
+  ) {
+    showToast(`Now controlling #${info.player.number} ${info.name}`);
+  }
+  lastControlledPlayerId = info.player.id;
 }
 
 function updateOverlay(state: GameClientState): void {
@@ -1501,6 +1585,18 @@ function showToast(message: string): void {
     toast.hidden = true;
     toastTimer = null;
   }, TOAST_DURATION_MS);
+}
+
+if (import.meta.env.DEV) {
+  Object.defineProperty(window, "__FB_DEBUG__", {
+    configurable: true,
+    value: () => ({
+      state: currentState,
+      view: latestView,
+      control: lastControlFrame,
+      snapshot: client.latestSnapshot(),
+    }),
+  });
 }
 
 function byId<T extends HTMLElement>(id: string): T {
