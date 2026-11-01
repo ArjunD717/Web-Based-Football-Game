@@ -647,11 +647,21 @@ Implemented:
   button; goalkeepers participate in both paths when they are the right choice
 - Human movement with attribute-driven top speed, acceleration and turn rate,
   sprinting, and controlled-player AI suppression while a human owns the player
+- Server-side close control: the controlled player takes automatic dribble
+  touches, cushions the ball when stopping, and brakes sharply when asked to
+  stop; pass/shoot attempts buffer briefly so a ball arriving this tick is not
+  missed
 - Ground pass, through pass and lob/cross with lead targeting; charged shot with
   server-authoritative hold timing and the finesse modifier; standing tackle
 - Keyboard defaults: WASD/arrows move, Shift sprint, X pass, C through, V lob,
   Z shoot, F tackle, Space switch, E finesse; bindings are rebindable from the
-  **Controls** dialog and persist in `localStorage`
+  **Controls** dialog and persist in `localStorage`; reassigning a key steals it
+  from the old action and a missing binding falls back to a default instead of
+  leaving the action silently dead
+- Controlled-player card: shirt number, name, team, live state, stamina, an
+  `ON BALL` pill, a sprint pill and the next manual-switch target; the selected
+  player has a cyan/white ring and the switch target a second amber ring in both
+  renderers (3D adds a chevron)
 - Standard-mapping gamepad: stick move, A pass, B/RT shoot, X tackle, Y through,
   LB switch, RB lob, LT sprint, L3 finesse (mapping is fixed; keyboard is
   rebindable)
@@ -798,9 +808,15 @@ The two-minute match check:
 7. Play through the middle until the assistant flags a runner: verify the
    offside event and indirect free kick; check a free-kick wall forms at least
    9.15 m from the ball for a foul within shooting range.
-8. On the host, move with WASD and sprint; open **Controls & shortcuts** →
-   **Edit bindings**, rebind a key and confirm it survives a reload. Hold Z and
-   verify the shot power bar rises and clears on release.
+8. On the host, use the card to confirm who you control; press Space and verify
+   the `NEXT` target and the amber ring move before control follows. Hold Shift
+   and verify the sprint pill and stamina drain. Dribble with the ball, release
+   the stick and verify the ball is cushioned at your feet instead of running
+   away. Tap Z before the ball reaches you and verify the buffered shot fires on
+   contact; hold Z and verify the shot power bar rises and clears on release.
+   Open **Controls & shortcuts** → **Edit bindings**, rebind a key, assign a key
+   already used by another action and confirm it disappears from the old action
+   and survives a reload.
 9. On the phone, move with the stick, fire a charged shot (power shows) and tap
    **Switch**; verify the white active-player ring moves. Tap Pass/Through/Lob/
    Tackle/Sprint/Finesse to exercise the same input path.
