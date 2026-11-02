@@ -662,6 +662,9 @@ Implemented:
   `ON BALL` pill, a sprint pill and the next manual-switch target; the selected
   player has a cyan/white ring and the switch target a second amber ring in both
   renderers (3D adds a chevron)
+- Two-legged tie option: both legs play automatically after an eight-second
+  full-time break, the aggregate is shown on the statistics board, and a level
+  aggregate is a draw; extra time and penalties are skipped in this format
 - Standard-mapping gamepad: stick move, A pass, B/RT shoot, X tackle, Y through,
   LB switch, RB lob, LT sprint, L3 finesse (mapping is fixed; keyboard is
   rebindable)
@@ -677,8 +680,8 @@ Implemented:
 
 Not implemented yet (by milestone design):
 
-- Competition structures, two-legged ties, aggregate scoring and suspensions
-  carried across matches
+- Full cup/knockout brackets, away-goals and suspensions carried across
+  matches; two-legged aggregate ties are implemented as a standalone format
 - Mid-match rule changes; referee strictness and AI difficulty are locked at
   kick-off and apply to both seats
 - A pause command on the phone controller; only the host's match screen can
@@ -702,8 +705,10 @@ Not implemented yet (by milestone design):
 - Lobby JSON carries each seat's selected club and full `TeamSheet`;
   `setTeam` and `updateSheet` are client commands, and `lobbyState` is
   re-broadcast to both seats after every accepted edit. `updateSettings`
-  includes the host-owned half length, extra time, shootout, VAR, referee
-  strictness and AI difficulty; changing any value clears both ready flags.
+  includes the host-owned half length, tie format (one-off or two legs), extra
+  time, shootout, VAR, referee strictness and AI difficulty; changing any value
+  clears both ready flags. Two-legged ties disable extra time and penalties and
+  report aggregate `series` data on the full-time statistics message.
 - The host's `pauseMatch` is acknowledged by a `matchPaused` broadcast. The
   message carries `manual` so the client can distinguish a deliberate pause
   from a disconnect countdown. In manual mode the server stops ticking and the
@@ -829,7 +834,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 47 test files and 481 tests passing.
+13. `pnpm check`: expect 49 test files and 492 tests passing.
 14. Verify the 3D presentation: the match opens in 3D, the whole pitch fits
     after resizing the window, players animate and carry numbers, and the
     **2D view** button switches renderers. Reload and confirm the mode persisted.
@@ -842,6 +847,11 @@ The two-minute match check:
     16.67 ms and `p95TickMs` stays below the budget during a live match.
 17. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish
     without a target miss or unfinished match.
+18. Choose **Two-legged tie** in match setup and ready up. Finish the first leg;
+    the stats board should show the aggregate and **Second leg starts shortly**,
+    then leg two should start automatically after eight seconds. At the final
+    whistle the board should name the aggregate winner or report a level tie.
+    The HUD rule chip should include **Two legs** in both legs.
 
 ## Layout
 
