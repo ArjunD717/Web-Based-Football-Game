@@ -1016,7 +1016,9 @@ function updateRuleChip(state: GameClientState): void {
   const difficulty = settings.aiDifficulty
     .replace("worldClass", "world class")
     .replace(/^./, (letter) => letter.toUpperCase());
-  matchRulesChip.textContent = `Ref ${settings.refereeStrictness} · AI ${difficulty}`;
+  matchRulesChip.textContent = `Ref ${settings.refereeStrictness} · AI ${difficulty}${
+    settings.tieLegs === 2 ? " · Two legs" : ""
+  }`;
 }
 
 function updatePauseControl(
@@ -1067,19 +1069,34 @@ function updateStatsScreen(state: GameClientState): void {
     ? ""
     : `${latestScore("home")} – ${latestScore("away")}`;
   const notes: string[] = [];
+  const series = stats.series;
+  const teamName = (side: "home" | "away"): string =>
+    (side === "home" ? setup?.home.name : setup?.away.name) ?? side;
+  if (series !== null) {
+    notes.push(
+      `Leg ${series.leg}/${series.legs} · aggregate ${series.homeAggregate}–${series.awayAggregate}`,
+    );
+  }
   if (stats.shootout !== null) {
     notes.push(
       `Penalties ${stats.shootout.homeScore}–${stats.shootout.awayScore}`,
     );
   }
-  if (stats.forfeitSide !== null) {
-    const side = stats.forfeitSide === "home" ? setup?.home.name : setup?.away.name;
-    notes.push(`${side ?? stats.forfeitSide} forfeited`);
+  if (series?.complete === true) {
+    notes.push(
+      series.winner === null
+        ? "Tie level on aggregate"
+        : `${teamName(series.winner)} won the tie`,
+    );
+  } else if (stats.forfeitSide !== null) {
+    notes.push(`${teamName(stats.forfeitSide)} forfeited`);
   } else if (stats.winner !== null) {
-    const side = stats.winner === "home" ? setup?.home.name : setup?.away.name;
-    notes.push(`${side ?? stats.winner} won`);
+    notes.push(`${teamName(stats.winner)} won`);
   } else {
     notes.push("Draw");
+  }
+  if (series !== null && !series.complete) {
+    notes.push("Second leg starts shortly");
   }
   const note = notes.join(" · ");
   const homeTicks = stats.home.possessionTicks;

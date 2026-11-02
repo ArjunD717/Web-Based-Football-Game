@@ -20,6 +20,7 @@ import {
   type SnapshotFrame,
   type TeamSheet,
   type WireTeamSide,
+  type WireTieSeries,
 } from "@fb/shared";
 import {
   isRefereePlayable,
@@ -92,6 +93,11 @@ interface RoomMatch {
   };
 }
 
+interface RoomSeries {
+  readonly legs: 2;
+  readonly scores: { readonly home: number; readonly away: number }[];
+}
+
 interface Room {
   readonly code: string;
   host: Seat | null;
@@ -102,6 +108,10 @@ interface Room {
   manualPaused: boolean;
   pauseDeadlineMs: number | null;
   settings: MatchSettingsWire;
+  /** Two-legged tie state; null for one-off matches. */
+  series: RoomSeries | null;
+  /** Seconds before the second leg starts automatically. */
+  seriesBreakSeconds: number;
 }
 
 export interface RoomManagerOptions {
@@ -311,6 +321,9 @@ export class RoomManager {
     );
 
     for (const room of this.rooms.values()) {
+      if (this.startSecondLegIfDue(room, dt)) {
+        continue;
+      }
       const match = room.match;
       if (match === null || room.phase !== "live") {
         continue;
@@ -382,6 +395,8 @@ export class RoomManager {
       manualPaused: false,
       pauseDeadlineMs: null,
       settings: { ...DEFAULT_MATCH_SETTINGS },
+      series: null,
+      seriesBreakSeconds: 0,
     };
     this.rooms.set(code, room);
     this.membership.set(client.token, room);
@@ -787,11 +802,56 @@ export class RoomManager {
       !match.resultSent
     ) {
       match.resultSent = true;
+      this.recordSeriesLeg(room, match.state);
       this.broadcast(room, {
         t: "matchStats",
-        stats: buildMatchStats(match.state),
+        stats: buildMatchStats(match.state, this.seriesWire(room)),
       });
     }
+  }
+
+  private recordSeriesLeg(room: Room, state: MatchState): void {
+    const series = room.series;
+    if (series === null || series.scores.length >= series.legs) {
+      return;
+    }
+    series.scores.push({
+      home: state.referee.scoreHome,
+      away: state.referee.scoreAway,
+    });
+    if (series.scores.length === 1) {
+      room.seriesBreakSeconds = TUNING.competition.tieBreakSeconds;
+    }
+  }
+
+  private seriesWire(room: Room): WireTieSeries | null {
+    const series = room.series;
+    if (series === null || series.scores.length === 0) {
+      return null;
+    }
+    const homeAggregate = series.scores.reduce(
+      (total, score) => total + score.home,
+      0,
+    );
+    const awayAggregate = series.scores.reduce(
+      (total, score) => total + score.away,
+      0,
+    );
+    const complete = series.scores.length >= series.legs;
+    return {
+      legs: series.legs,
+      leg: complete ? 2 : 1,
+      complete,
+      homeAggregate,
+      awayAggregate,
+      winner: !complete
+        ? null
+        : homeAggregate === awayAggregate
+          ? null
+          : homeAggregate > awayAggregate
+            ? "home"
+            : "away",
+    };
   }
 
   private leaveRoom(client: ClientConnection): void {
@@ -910,6 +970,33 @@ export class RoomManager {
     }
   }
 
+  /**
+   * Start leg two after the full-time board has had a short window. Keeping the
+   * break deterministic (manager ticks, not wall clock) means a reconnect sees
+   * the same countdown.
+   */
+  private startSecondLegIfDue(room: Room, dt: number): boolean {
+    const series = room.series;
+    const match = room.match;
+    if (
+      series === null ||
+      series.scores.length !== 1 ||
+      match === null ||
+      !match.finished ||
+      room.host?.client == null ||
+      room.guest?.client == null ||
+      room.phase !== "live"
+    ) {
+      return false;
+    }
+    room.seriesBreakSeconds = Math.max(0, room.seriesBreakSeconds - dt);
+    if (room.seriesBreakSeconds > 0) {
+      return false;
+    }
+    this.startMatch(room);
+    return room.match !== match;
+  }
+
   private startMatch(room: Room): void {
     const host = room.host;
     const guest = room.guest;
@@ -929,9 +1016,26 @@ export class RoomManager {
       this.failMatchStart(room, "Selected team is no longer available");
       return;
     }
+    if (room.series === null && room.settings.tieLegs === 2) {
+      room.series = { legs: 2, scores: [] };
+    }
+    if (room.series !== null && room.series.scores.length >= 2) {
+      return;
+    }
+    const baseRules = rulesFromSettings(room.settings);
+    const rules =
+      room.series === null
+        ? baseRules
+        : {
+            ...baseRules,
+            // A two-legged tie is decided across both legs; a knockout finish
+            // inside one leg would make the aggregate ambiguous.
+            extraTimeEnabled: false,
+            shootoutEnabled: false,
+          };
     try {
       const serverMatch = createServerMatch({
-        rules: rulesFromSettings(room.settings),
+        rules,
         home: {
           team: hostTeam,
           sheet: host.sheet,
@@ -975,6 +1079,7 @@ export class RoomManager {
     room.phase = "live";
     room.manualPaused = false;
     room.pauseDeadlineMs = null;
+    room.seriesBreakSeconds = 0;
 
     for (const seat of this.seats(room)) {
       seat.lastAckedSeq = 0;
@@ -1035,6 +1140,8 @@ export class RoomManager {
     room.phase = "waiting";
     room.manualPaused = false;
     room.pauseDeadlineMs = null;
+    room.series = null;
+    room.seriesBreakSeconds = 0;
   }
 
   private broadcastSnapshot(room: Room): void {
@@ -1101,7 +1208,7 @@ export class RoomManager {
     if (room.match.state.referee.phase === "fullTime") {
       seat.client.send({
         t: "matchStats",
-        stats: buildMatchStats(room.match.state),
+        stats: buildMatchStats(room.match.state, this.seriesWire(room)),
       });
     }
 

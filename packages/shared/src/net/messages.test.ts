@@ -221,6 +221,7 @@ describe("M2 lobby messages", () => {
         reconnectSeconds: null,
         settings: {
           halfRealMinutes: 6 as const,
+          tieLegs: 1 as const,
           extraTime: false,
           shootout: false,
           varEnabled: false,
@@ -332,6 +333,7 @@ describe("M10 match management messages", () => {
   it("parses host settings and substitution commands", () => {
     const settings = {
       halfRealMinutes: 8 as const,
+      tieLegs: 2 as const,
       extraTime: true,
       shootout: true,
       varEnabled: true,
@@ -446,6 +448,14 @@ describe("M10 match management messages", () => {
       },
       forfeitSide: null,
       winner: "home" as const,
+      series: {
+        legs: 2 as const,
+        leg: 1 as const,
+        complete: false,
+        homeAggregate: 2,
+        awayAggregate: 1,
+        winner: null,
+      },
     };
     const statsMessage = { t: "matchStats" as const, stats };
     expect(parseServerMessage(encodeServerMessage(statsMessage))).toEqual(

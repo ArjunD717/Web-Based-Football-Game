@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CONTROL_BUTTONS,
   PLAYER_STATE_CODES,
+  TUNING,
   buildDefaultSheet,
   encodeInputFrame,
   encodeSnapshotAck,
@@ -483,6 +484,7 @@ describe("match management", () => {
 
     const hostSettings = {
       halfRealMinutes: 8 as const,
+      tieLegs: 1 as const,
       extraTime: true,
       shootout: true,
       varEnabled: true,
@@ -505,6 +507,7 @@ describe("match management", () => {
       t: "updateSettings",
       settings: {
         halfRealMinutes: 4,
+        tieLegs: 1,
         extraTime: false,
         shootout: false,
         varEnabled: false,
@@ -684,6 +687,89 @@ describe("match management", () => {
     expect(
       fixture.host.json.filter((message) => message.t === "matchStats"),
     ).toHaveLength(2);
+  });
+
+  it("records both legs and declares the aggregate winner", () => {
+    const fixture = setupRoom();
+    const settings = fixture.host.lastLobby().room?.settings;
+    if (settings === undefined) {
+      throw new Error("Room settings missing");
+    }
+    fixture.manager.onMessage(fixture.host, {
+      t: "updateSettings",
+      settings: {
+        ...settings,
+        tieLegs: 2,
+        extraTime: true,
+        shootout: true,
+      },
+    });
+    startReadyMatch(fixture);
+    const internal = fixture.manager as unknown as {
+      rooms: Map<
+        string,
+        {
+          match: {
+            state: MatchState;
+            finished: boolean;
+          } | null;
+        }
+      >;
+    };
+    const room = [...internal.rooms.values()][0];
+    const first = room?.match;
+    if (first === null || first === undefined) {
+      throw new Error("Room has no first leg");
+    }
+    expect(first.state.rules.extraTimeEnabled).toBe(false);
+    expect(first.state.rules.shootoutEnabled).toBe(false);
+    first.state.referee.scoreHome = 2;
+    first.state.referee.scoreAway = 1;
+    first.state.referee.phase = "fullTime";
+    fixture.manager.tick(1 / 60);
+
+    const firstStats = fixture.host.lastMessageType("matchStats");
+    expect(firstStats?.stats.series).toMatchObject({
+      legs: 2,
+      leg: 1,
+      complete: false,
+      homeAggregate: 2,
+      awayAggregate: 1,
+      winner: null,
+    });
+
+    const startsBefore = fixture.host.json.filter(
+      (message) => message.t === "matchStart",
+    ).length;
+    const breakTicks =
+      Math.ceil(TUNING.competition.tieBreakSeconds * TUNING.sim.tickHz) + 2;
+    for (let tick = 0; tick < breakTicks; tick += 1) {
+      fixture.manager.tick(1 / TUNING.sim.tickHz);
+    }
+    expect(
+      fixture.host.json.filter((message) => message.t === "matchStart"),
+    ).toHaveLength(startsBefore + 1);
+
+    const second = room?.match;
+    if (second === null || second === undefined || second === first) {
+      throw new Error("Second leg did not start");
+    }
+    expect(second.state.rules.extraTimeEnabled).toBe(false);
+    expect(second.state.rules.shootoutEnabled).toBe(false);
+    second.state.referee.scoreHome = 1;
+    second.state.referee.scoreAway = 1;
+    second.state.referee.phase = "fullTime";
+    fixture.manager.tick(1 / 60);
+
+    const finalStats = fixture.host.lastMessageType("matchStats");
+    expect(finalStats?.stats.series).toEqual({
+      legs: 2,
+      leg: 2,
+      complete: true,
+      homeAggregate: 3,
+      awayAggregate: 2,
+      winner: "home",
+    });
   });
 });
 

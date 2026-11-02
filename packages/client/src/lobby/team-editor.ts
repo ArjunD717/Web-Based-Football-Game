@@ -128,6 +128,8 @@ export class TeamEditor {
     byId<HTMLSelectElement>("match-half-length");
   private readonly strictness =
     byId<HTMLSelectElement>("match-strictness");
+  private readonly tieLegs =
+    byId<HTMLSelectElement>("match-tie-legs");
   private readonly aiDifficulty =
     byId<HTMLSelectElement>("match-ai-difficulty");
   private readonly extraTime =
@@ -269,6 +271,7 @@ export class TeamEditor {
     for (const control of [
       this.halfLength,
       this.strictness,
+      this.tieLegs,
       this.aiDifficulty,
       this.extraTime,
       this.shootout,
@@ -277,6 +280,7 @@ export class TeamEditor {
       control.addEventListener("change", () => {
         const half = Number(this.halfLength.value);
         const strictness = this.strictness.value;
+        const tieLegs = this.tieLegs.value === "2" ? 2 : 1;
         const aiDifficulty = this.aiDifficulty.value;
         if (
           (half !== 4 && half !== 6 && half !== 8 && half !== 10) ||
@@ -293,6 +297,7 @@ export class TeamEditor {
         }
         this.callbacks.onUpdateSettings({
           halfRealMinutes: half,
+          tieLegs,
           extraTime: this.extraTime.checked,
           shootout: this.shootout.checked,
           varEnabled: this.varEnabled.checked,
@@ -1140,6 +1145,7 @@ export class TeamEditor {
     const settings = room.settings;
     this.halfLength.value = String(settings.halfRealMinutes);
     this.strictness.value = settings.refereeStrictness;
+    this.tieLegs.value = String(settings.tieLegs);
     this.aiDifficulty.value = settings.aiDifficulty;
     this.extraTime.checked = settings.extraTime;
     this.shootout.checked = settings.shootout;
@@ -1147,9 +1153,10 @@ export class TeamEditor {
     const host = this.self?.host === true;
     this.halfLength.disabled = !host;
     this.strictness.disabled = !host;
+    this.tieLegs.disabled = !host;
     this.aiDifficulty.disabled = !host;
-    this.extraTime.disabled = !host;
-    this.shootout.disabled = !host;
+    this.extraTime.disabled = !host || settings.tieLegs === 2;
+    this.shootout.disabled = !host || settings.tieLegs === 2;
     this.varEnabled.disabled = !host;
     this.settingsOwner.textContent = host
       ? "Host controls"

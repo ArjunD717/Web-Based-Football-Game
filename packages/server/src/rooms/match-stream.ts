@@ -9,6 +9,7 @@ import {
   type SnapshotFrame,
   type WireMatchStats,
   type WirePitch,
+  type WireTieSeries,
   type WireRosterPlayer,
   type WireShootout,
   type WireTeam,
@@ -219,7 +220,10 @@ export function buildShootoutWire(state: MatchState): WireShootout | null {
   };
 }
 
-export function buildMatchStats(state: MatchState): WireMatchStats {
+export function buildMatchStats(
+  state: MatchState,
+  series: WireTieSeries | null = null,
+): WireMatchStats {
   const home = state.stats.home;
   const away = state.stats.away;
   const shootout = buildShootoutWire(state);
@@ -241,5 +245,6 @@ export function buildMatchStats(state: MatchState): WireMatchStats {
     shootout,
     forfeitSide: forfeit,
     winner,
+    series,
   };
 }

@@ -112,6 +112,8 @@ export type MatchAiDifficulty = (typeof AI_DIFFICULTY_LEVELS)[number];
 export interface MatchSettingsWire {
   /** Real-time half length in minutes: one of 4, 6, 8 or 10. */
   readonly halfRealMinutes: 4 | 6 | 8 | 10;
+  /** One-off match, or a two-legged tie decided on aggregate. */
+  readonly tieLegs: 1 | 2;
   readonly extraTime: boolean;
   readonly shootout: boolean;
   readonly varEnabled: boolean;
@@ -121,6 +123,7 @@ export interface MatchSettingsWire {
 
 export const DEFAULT_MATCH_SETTINGS: MatchSettingsWire = {
   halfRealMinutes: 6,
+  tieLegs: 1,
   extraTime: false,
   shootout: false,
   varEnabled: false,
@@ -339,12 +342,24 @@ export interface WireShootout {
   readonly winner: WireTeamSide | null;
 }
 
+export interface WireTieSeries {
+  readonly legs: 1 | 2;
+  readonly leg: 1 | 2;
+  readonly complete: boolean;
+  readonly homeAggregate: number;
+  readonly awayAggregate: number;
+  /** Aggregate winner; null while incomplete or when the tie is level. */
+  readonly winner: WireTeamSide | null;
+}
+
 export interface WireMatchStats {
   readonly home: WireTeamMatchStats;
   readonly away: WireTeamMatchStats;
   readonly shootout: WireShootout | null;
   readonly forfeitSide: WireTeamSide | null;
   readonly winner: WireTeamSide | null;
+  /** Present for two-legged ties; null for one-off matches. */
+  readonly series: WireTieSeries | null;
 }
 
 export interface ServerRosterMessage {
@@ -877,6 +892,9 @@ function parseMatchSettings(value: unknown): MatchSettingsWire | null {
       record.halfRealMinutes !== 6 &&
       record.halfRealMinutes !== 8 &&
       record.halfRealMinutes !== 10) ||
+    (record.tieLegs !== undefined &&
+      record.tieLegs !== 1 &&
+      record.tieLegs !== 2) ||
     typeof record.extraTime !== "boolean" ||
     typeof record.shootout !== "boolean" ||
     typeof record.varEnabled !== "boolean" ||
@@ -887,6 +905,7 @@ function parseMatchSettings(value: unknown): MatchSettingsWire | null {
   }
   return {
     halfRealMinutes: record.halfRealMinutes,
+    tieLegs: record.tieLegs === 2 ? 2 : 1,
     extraTime: record.extraTime,
     shootout: record.shootout,
     varEnabled: record.varEnabled,
@@ -996,12 +1015,19 @@ function parseMatchStats(value: unknown): WireMatchStats | null {
   const away = parseTeamStats(record.away);
   const shootout =
     record.shootout === null ? null : parseShootout(record.shootout);
+  const series =
+    record.series === undefined || record.series === null
+      ? null
+      : parseTieSeries(record.series);
   if (
     home === null ||
     away === null ||
     (record.shootout !== null && shootout === null) ||
     (record.forfeitSide !== null && !isWireTeamSide(record.forfeitSide)) ||
-    (record.winner !== null && !isWireTeamSide(record.winner))
+    (record.winner !== null && !isWireTeamSide(record.winner)) ||
+    (record.series !== undefined &&
+      record.series !== null &&
+      series === null)
   ) {
     return null;
   }
@@ -1010,6 +1036,34 @@ function parseMatchStats(value: unknown): WireMatchStats | null {
     away,
     shootout,
     forfeitSide: record.forfeitSide,
+    winner: record.winner,
+    series,
+  };
+}
+
+function parseTieSeries(value: unknown): WireTieSeries | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    (record.legs !== 1 && record.legs !== 2) ||
+    (record.leg !== 1 && record.leg !== 2) ||
+    typeof record.complete !== "boolean" ||
+    !Number.isInteger(record.homeAggregate) ||
+    !Number.isInteger(record.awayAggregate) ||
+    (record.homeAggregate as number) < 0 ||
+    (record.awayAggregate as number) < 0 ||
+    (record.winner !== null && !isWireTeamSide(record.winner))
+  ) {
+    return null;
+  }
+  return {
+    legs: record.legs,
+    leg: record.leg,
+    complete: record.complete,
+    homeAggregate: record.homeAggregate as number,
+    awayAggregate: record.awayAggregate as number,
     winner: record.winner,
   };
 }

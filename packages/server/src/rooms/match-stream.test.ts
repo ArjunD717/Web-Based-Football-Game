@@ -8,6 +8,7 @@ describe("lobby match rules", () => {
     expect(
       rulesFromSettings({
         halfRealMinutes: 8,
+        tieLegs: 1,
         extraTime: true,
         shootout: true,
         varEnabled: true,
