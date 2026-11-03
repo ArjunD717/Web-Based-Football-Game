@@ -663,8 +663,9 @@ Implemented:
   player has a cyan/white ring and the switch target a second amber ring in both
   renderers (3D adds a chevron)
 - Two-legged tie option: both legs play automatically after an eight-second
-  full-time break, the aggregate is shown on the statistics board, and a level
-  aggregate is a draw; extra time and penalties are skipped in this format
+  full-time break, the aggregate is shown on the statistics board, red cards
+  from leg one suspend that player for leg two, and a level aggregate is a
+  draw; extra time and penalties are skipped in this format
 - Standard-mapping gamepad: stick move, A pass, B/RT shoot, X tackle, Y through,
   LB switch, RB lob, LT sprint, L3 finesse (mapping is fixed; keyboard is
   rebindable)
@@ -680,8 +681,9 @@ Implemented:
 
 Not implemented yet (by milestone design):
 
-- Full cup/knockout brackets, away-goals and suspensions carried across
-  matches; two-legged aggregate ties are implemented as a standalone format
+- Full cup/knockout brackets and away-goals; two-legged aggregate ties,
+  automatic leg progression and red-card suspension carry-over are implemented
+  as a standalone competition format
 - Mid-match rule changes; referee strictness and AI difficulty are locked at
   kick-off and apply to both seats
 - A pause command on the phone controller; only the host's match screen can
@@ -849,9 +851,10 @@ The two-minute match check:
     without a target miss or unfinished match.
 18. Choose **Two-legged tie** in match setup and ready up. Finish the first leg;
     the stats board should show the aggregate and **Second leg starts shortly**,
-    then leg two should start automatically after eight seconds. At the final
-    whistle the board should name the aggregate winner or report a level tie.
-    The HUD rule chip should include **Two legs** in both legs.
+    then leg two should start automatically after eight seconds. A player sent
+    off in leg one must be absent from the leg-two sheet. At the final whistle
+    the board should name the aggregate winner or report a level tie. The HUD
+    rule chip should include **Two legs** in both legs.
 
 ## Layout
 
