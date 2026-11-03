@@ -723,6 +723,14 @@ describe("match management", () => {
     }
     expect(first.state.rules.extraTimeEnabled).toBe(false);
     expect(first.state.rules.shootoutEnabled).toBe(false);
+    const suspended = first.state.home.players.find(
+      (player) => player.role !== "GK",
+    );
+    if (suspended === undefined) {
+      throw new Error("No outfield player to suspend");
+    }
+    suspended.sentOff = true;
+    const suspendedId = suspended.id;
     first.state.referee.scoreHome = 2;
     first.state.referee.scoreAway = 1;
     first.state.referee.phase = "fullTime";
@@ -756,6 +764,10 @@ describe("match management", () => {
     }
     expect(second.state.rules.extraTimeEnabled).toBe(false);
     expect(second.state.rules.shootoutEnabled).toBe(false);
+    expect(
+      second.state.home.players.some((player) => player.id === suspendedId),
+    ).toBe(false);
+    expect(second.state.home.players).toHaveLength(11);
     second.state.referee.scoreHome = 1;
     second.state.referee.scoreAway = 1;
     second.state.referee.phase = "fullTime";

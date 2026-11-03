@@ -4,6 +4,7 @@ import {
   CLOSE_CODES,
   DEFAULT_MATCH_SETTINGS,
   TUNING,
+  buildDefaultSheet,
   decodeClientBinaryMessage,
   encodeSnapshot,
   isRoomCode,
@@ -96,6 +97,11 @@ interface RoomMatch {
 interface RoomSeries {
   readonly legs: 2;
   readonly scores: { readonly home: number; readonly away: number }[];
+  /** Red-card suspensions carried into the next leg, keyed by data player ID. */
+  readonly suspended: {
+    readonly home: Set<string>;
+    readonly away: Set<string>;
+  };
 }
 
 interface Room {
@@ -815,12 +821,40 @@ export class RoomManager {
     if (series === null || series.scores.length >= series.legs) {
       return;
     }
+    const firstLeg = series.scores.length === 0;
     series.scores.push({
       home: state.referee.scoreHome,
       away: state.referee.scoreAway,
     });
-    if (series.scores.length === 1) {
+    if (firstLeg) {
+      this.collectSuspended(
+        state.home.players,
+        "home",
+        series.suspended.home,
+      );
+      this.collectSuspended(
+        state.away.players,
+        "away",
+        series.suspended.away,
+      );
       room.seriesBreakSeconds = TUNING.competition.tieBreakSeconds;
+    }
+  }
+
+  private collectSuspended(
+    players: MatchState["home"]["players"],
+    side: WireTeamSide,
+    target: Set<string>,
+  ): void {
+    const prefix = `${side}:`;
+    for (const player of players) {
+      if (player.sentOff) {
+        target.add(
+          player.id.startsWith(prefix)
+            ? player.id.slice(prefix.length)
+            : player.id,
+        );
+      }
     }
   }
 
@@ -971,6 +1005,47 @@ export class RoomManager {
   }
 
   /**
+   * Rebuild a lineup only when a red card has removed someone from leg two.
+   * Keeping the original sheet when nobody is suspended preserves the user's
+   * curated XI and bench.
+   */
+  private sheetForLeg(
+    sheet: TeamSheet,
+    teamId: string,
+    series: RoomSeries | null,
+    side: WireTeamSide,
+  ): TeamSheet {
+    if (series === null || series.scores.length !== 1) {
+      return sheet;
+    }
+    const suspended = series.suspended[side];
+    if (suspended.size === 0) {
+      return sheet;
+    }
+    const available = this.registry
+      .getPlayers(teamId)
+      .filter((player) => !suspended.has(player.id));
+    try {
+      const built = buildDefaultSheet(
+        available,
+        sheet.formation,
+        sheet.bench.length,
+      ).sheet;
+      return {
+        ...built,
+        kit: sheet.kit,
+        tactics: { ...sheet.tactics },
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Could not rebuild a suspended lineup for ${teamId}`,
+        error,
+      );
+      return sheet;
+    }
+  }
+
+  /**
    * Start leg two after the full-time board has had a short window. Keeping the
    * break deterministic (manager ticks, not wall clock) means a reconnect sees
    * the same countdown.
@@ -1017,7 +1092,11 @@ export class RoomManager {
       return;
     }
     if (room.series === null && room.settings.tieLegs === 2) {
-      room.series = { legs: 2, scores: [] };
+      room.series = {
+        legs: 2,
+        scores: [],
+        suspended: { home: new Set(), away: new Set() },
+      };
     }
     if (room.series !== null && room.series.scores.length >= 2) {
       return;
@@ -1038,12 +1117,12 @@ export class RoomManager {
         rules,
         home: {
           team: hostTeam,
-          sheet: host.sheet,
+          sheet: this.sheetForLeg(host.sheet, hostTeam.id, room.series, "home"),
           players: this.registry.getPlayers(hostTeam.id),
         },
         away: {
           team: guestTeam,
-          sheet: guest.sheet,
+          sheet: this.sheetForLeg(guest.sheet, guestTeam.id, room.series, "away"),
           players: this.registry.getPlayers(guestTeam.id),
         },
       });
