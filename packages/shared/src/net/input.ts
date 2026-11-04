@@ -16,6 +16,7 @@ export const CONTROL_BUTTONS = {
   SKILL_DOWN: 1 << 9,
   SKILL_LEFT: 1 << 10,
   SKILL_RIGHT: 1 << 11,
+  DRIVEN_PASS: 1 << 12,
 } as const;
 
 export interface InputFrame {

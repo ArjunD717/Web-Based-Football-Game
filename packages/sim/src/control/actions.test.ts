@@ -63,6 +63,27 @@ describe("human actions", () => {
     );
   });
 
+  it("drives a ground pass lower and faster", () => {
+    const state = createMatch({ seed: 112 });
+    const player = state.home.players.find((entry) => entry.role === "ST")!;
+    const teammate = state.home.players.find((entry) => entry.role === "CM")!;
+    teammate.x = player.x + 8;
+    teammate.y = player.y;
+    placeBallAtFeet(state, player);
+
+    expect(playPass(state, player, "pass", 1, 0)).toBe(true);
+    const normalLift = state.ball.vz;
+    const normalSpeed = Math.hypot(state.ball.vx, state.ball.vy);
+
+    player.kickCooldown = 0;
+    placeBallAtFeet(state, player);
+    expect(playPass(state, player, "pass", 1, 0, 0.35, true)).toBe(true);
+    expect(state.ball.vz).toBeLessThan(normalLift);
+    expect(Math.hypot(state.ball.vx, state.ball.vy)).toBeGreaterThan(
+      normalSpeed,
+    );
+  });
+
   it("lifts a lob and drives a through ball", () => {
     const state = createMatch({ seed: 12 });
     const player = state.home.players.find((entry) => entry.role === "ST")!;

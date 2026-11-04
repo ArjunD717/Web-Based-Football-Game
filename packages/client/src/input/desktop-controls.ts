@@ -47,7 +47,8 @@ export type ControlAction =
   | "skillUp"
   | "skillDown"
   | "skillLeft"
-  | "skillRight";
+  | "skillRight"
+  | "drivenPass";
 
 export type KeyBindings = Readonly<Record<ControlAction, readonly string[]>>;
 
@@ -68,6 +69,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   skillDown: ["Numpad2"],
   skillLeft: ["Numpad4"],
   skillRight: ["Numpad6"],
+  drivenPass: ["KeyB"],
 };
 
 const BINDINGS_KEY = "fb.keybindings.v1";
@@ -158,6 +160,7 @@ export class DesktopControls {
     if (this.isPressed("skillDown")) buttons |= CONTROL_BUTTONS.SKILL_DOWN;
     if (this.isPressed("skillLeft")) buttons |= CONTROL_BUTTONS.SKILL_LEFT;
     if (this.isPressed("skillRight")) buttons |= CONTROL_BUTTONS.SKILL_RIGHT;
+    if (this.isPressed("drivenPass")) buttons |= CONTROL_BUTTONS.DRIVEN_PASS;
 
     const pad = readGamepad(this.gamepadBindings);
     if (pad !== null) {
@@ -252,6 +255,9 @@ export class DesktopControls {
     if (this.bindings.skillDown.includes(code)) return CONTROL_BUTTONS.SKILL_DOWN;
     if (this.bindings.skillLeft.includes(code)) return CONTROL_BUTTONS.SKILL_LEFT;
     if (this.bindings.skillRight.includes(code)) return CONTROL_BUTTONS.SKILL_RIGHT;
+    if (this.bindings.drivenPass.includes(code)) {
+      return CONTROL_BUTTONS.DRIVEN_PASS;
+    }
     return 0;
   }
 }

@@ -320,6 +320,59 @@ describe("control selection", () => {
     );
   });
 
+  it("applies the driven modifier on pass release", () => {
+    const state = createMatch({ seed: 120 });
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.setPiece = null;
+    state.referee.timerSeconds = 0;
+    const home = createTeamControlRuntime();
+    prepareTeamControl(state, "home", home, DT);
+    const active = state.home.players.find(
+      (player) => player.isUserControlled,
+    )!;
+    state.ball.x = active.x + 0.3;
+    state.ball.y = active.y;
+    state.ball.z = 0.11;
+    state.ball.vx = 0;
+    state.ball.vy = 0;
+    active.kickCooldown = 0;
+
+    updateControlInput(
+      home,
+      {
+        seq: 1,
+        moveX: 1,
+        moveY: 0,
+        buttons: CONTROL_BUTTONS.PASS | CONTROL_BUTTONS.DRIVEN_PASS,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+    updateControlInput(
+      home,
+      {
+        seq: 2,
+        moveX: 1,
+        moveY: 0,
+        buttons: CONTROL_BUTTONS.DRIVEN_PASS,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+
+    expect(state.lastTouch?.playerId).toBe(active.id);
+    expect(state.ball.vz).toBeCloseTo(
+      TUNING.control.drivenPassLiftMps,
+      2,
+    );
+    expect(Math.hypot(state.ball.vx, state.ball.vy)).toBeGreaterThan(
+      TUNING.control.passSpeedMps,
+    );
+  });
+
   it("ignores stale input and older sequences", () => {
     const state = createMatch({ seed: 103 });
     const home = createTeamControlRuntime();

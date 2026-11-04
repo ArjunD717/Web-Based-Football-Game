@@ -666,6 +666,7 @@ function renderBindings(): void {
     skillDown: "Skill back",
     skillLeft: "Skill left",
     skillRight: "Skill right",
+    drivenPass: "Driven pass",
   };
   const gamepadLabels: Record<GamepadAction, string> = {
     sprint: "Sprint",
@@ -676,6 +677,7 @@ function renderBindings(): void {
     tackle: "Tackle",
     switch: "Switch player",
     finesse: "Finesse modifier",
+    drivenPass: "Driven pass",
   };
 
   bindingsKeyboardTab.classList.toggle(
@@ -1007,6 +1009,8 @@ function updateControlLoop(now: number, loopDt: number): void {
   updatePowerMeter(
     lastControlFrame?.chargePower ?? 0,
     lastControlFrame?.chargeKind ?? "none",
+    lastControlFrame !== null &&
+      (lastControlFrame.buttons & CONTROL_BUTTONS.DRIVEN_PASS) !== 0,
   );
 }
 
@@ -1053,6 +1057,7 @@ function hideCameraIndicators(): void {
 function updatePowerMeter(
   charge: number,
   kind: "shot" | "pass" | "none",
+  driven = false,
 ): void {
   if (charge <= 0.005 || kind === "none") {
     hidePowerMeter();
@@ -1063,7 +1068,12 @@ function updatePowerMeter(
   powerMeter.dataset.kind = kind;
   powerMeter.dataset.level =
     percent >= 85 ? "max" : percent >= 55 ? "high" : "normal";
-  powerLabel.textContent = kind === "pass" ? "Pass power" : "Shot power";
+  powerLabel.textContent =
+    kind === "pass"
+      ? driven
+        ? "Driven pass"
+        : "Pass power"
+      : "Shot power";
   powerFill.style.width = `${percent}%`;
   powerValue.textContent = `${percent}%`;
 }

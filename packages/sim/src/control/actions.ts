@@ -27,6 +27,7 @@ export function playPass(
   aimX: number,
   aimY: number,
   power01: number = TUNING.control.minPassPower,
+  driven = false,
 ): boolean {
   if (!canPlayBall(state, player)) {
     return false;
@@ -92,12 +93,15 @@ export function playPass(
       targetY = state.ball.y + aim.y * 25;
     }
   } else {
-    speed = lerp(
-      TUNING.control.passSpeedMps,
-      TUNING.control.maxPassSpeedMps,
-      charge,
-    );
-    lift = TUNING.control.passLiftMps;
+    speed =
+      lerp(
+        TUNING.control.passSpeedMps,
+        TUNING.control.maxPassSpeedMps,
+        charge,
+      ) * (driven ? TUNING.control.drivenPassSpeedFactor : 1);
+    lift = driven
+      ? TUNING.control.drivenPassLiftMps
+      : TUNING.control.passLiftMps;
     if (target !== null) {
       targetX =
         target.x + target.vx * TUNING.control.passLeadSeconds;

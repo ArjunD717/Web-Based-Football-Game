@@ -332,8 +332,8 @@ Implemented:
   vertex displacement, pitch layout/asset-free mesh construction,
   replay-buffer goal detection, trimming, full-capture replay, goal-clip
   preservation and playback sampling, haptic state/cue transitions,
-  gamepad binding sanitisation/stealing, right-stick skill direction, and skill
-  touch cooldown/direction
+  gamepad binding sanitisation/stealing, right-stick skill direction, skill
+  touch cooldown/direction, and driven-pass input/trajectory routing
 
 Known M11 limitations (by design):
 
@@ -355,12 +355,14 @@ Known M11 limitations (by design):
   per-contact directional feedback. Gamepad rebinding covers button indices
   from the first connected pad; stick axes are fixed and a captured button can
   leave another action visibly unbound
-- Pass charge is a single hold-to-power curve over the existing pass kinds;
-  there is no separate driven-pass button or new animation. First-time passes
-  use the existing 0.3 s action buffer and release timing, not a distinct
-  first-time modifier. Skill moves are a quick ball touch without a dedicated
-  move/animation set, weak-foot variation or tackle-evasion window; right-stick
-  directions are player-relative rather than camera-relative
+- Pass charge is a single hold-to-power curve over the existing pass kinds. The
+  driven modifier flattens and speeds up a ground pass but has no dedicated
+  animation or AI selection; driven-through and driven-lob are not distinct.
+  First-time passes use the existing 0.3 s action buffer and release timing,
+  not a distinct first-time modifier. Skill moves are a quick ball touch
+  without a dedicated move/animation set, weak-foot variation or
+  tackle-evasion window; right-stick directions are player-relative rather
+  than camera-relative
 - Edge arrows cover the ball and controlled player only. They are HUD primitives,
   not a live tactical mini-map, and may overlap when both points leave on the
   same edge
@@ -525,7 +527,7 @@ Implemented:
 
 Known M8 limitations (by design):
 
-- There is no separate cross/driven-pass decision yet; long passes already use
+- AI has no separate cross/driven-pass decision yet; long passes already use
   lift, curve and long-passing accuracy, but dedicated crossing routines are
   future work
 - AI skill moves, weak-foot selection, work rates, PlayStyles and body-type
@@ -756,11 +758,14 @@ Implemented:
   cooldown with a small stamina cost
 - Ground pass, through pass and lob/cross with lead targeting. Pass, through
   and cross power charges from a tap to a driven ball while the button is held
-  and commits on release; release timing also supplies first-time passes. A
-  charged shot keeps its server-authoritative hold timing and finesse modifier;
+  and commits on release; release timing also supplies first-time passes. Hold
+  the driven modifier while releasing a ground pass for a flat, faster ball;
+  the modifier combines with charge power and first-time contacts. A charged
+  shot keeps its server-authoritative hold timing and finesse modifier;
   standing tackle completes the action set
-- Keyboard defaults: WASD/arrows move, Shift sprint, X pass, C through, V lob,
-  Z shoot, F tackle, Space switch, E finesse, Numpad 8/2/4/6 skill moves;
+- Keyboard defaults: WASD/arrows move, Shift sprint, X pass, B driven pass,
+  C through, V lob, Z shoot, F tackle, Space switch, E finesse,
+  Numpad 8/2/4/6 skill moves;
   bindings are rebindable from the
   **Controls** dialog and persist in `localStorage`; reassigning a key steals it
   from the old action and a missing binding falls back to a default instead of
@@ -776,14 +781,15 @@ Implemented:
   extra time and penalties are skipped in this format
 - Standard-mapping gamepad defaults: left stick move, right stick skill moves,
   A pass, B/RT shoot, X tackle, Y through, LB switch, RB lob, LT sprint,
-  L3 finesse. The **Controls** dialog
+  L3 finesse, R3 driven pass. The **Controls** dialog
   switches between keyboard and gamepad tabs; gamepad buttons are captured by
   pressing them, persisted in `localStorage`, and duplicate assignments steal
   the button from the old action. Stick movement is fixed. An action that loses
   its last button is shown as **Unbound** rather than silently disappearing
 - Phone controller at `/controller.html?room=CODE`: virtual stick, touch action
-  buttons, a four-way skill pad, live connection state,
-  score/clock/phase/card counts, rule-event banner and its own power meter
+  buttons including a held **Driven** pass modifier, a four-way skill pad,
+  live connection state, score/clock/phase/card counts, rule-event banner and
+  its own power meter
 - Match console: team-colour scoreboard, referee event strip, controlled-player
   label, white active-player ring, shot/pass power bar, replay banner, compact
   telemetry, semantic restart/VAR/pause overlays and a responsive full-time
@@ -800,7 +806,6 @@ Not implemented yet (by milestone design):
   kick-off and apply to both seats
 - A pause command on the phone controller; only the host's match screen can
   pause or resume
-- A dedicated driven-pass modifier (charged pass power and first-time release are in)
 - Real CSV registry and further national-team competition modes; M9 ships the
   call-up pipeline and playable national teams, but the bundled dataset is
   still clearly marked fake sample data
@@ -838,7 +843,8 @@ Not implemented yet (by milestone design):
   delta carries no changed players.
 - Input frames are binary type 17, 12 bytes: type, uint32 sequence, uint16
   buttons, two int16 stick axes and a uint8 local charge. Bits 8-11 carry the
-  four player-relative skill directions. The server accepts at most eight
+  four player-relative skill directions and bit 12 the driven-pass modifier.
+  The server accepts at most eight
   queued frames per seat per tick and drains them before the match step;
   actions only affect the seat's currently selected player.
 - Shot and pass power are measured by how long the relevant button is held on
@@ -938,8 +944,9 @@ The two-minute match check:
    away. Tap Z before the ball reaches you and verify the buffered shot fires on
    contact; hold Z and verify the shot power bar rises and clears on release.
    Hold X on the ball and verify the meter switches to **Pass power**, then
-   release for a driven pass; hold X while a pass arrives and release on
-   contact for a first-time pass. Flick the gamepad right stick (or press
+   release for a powered pass; hold B while releasing for a flat driven pass.
+   Hold X while a pass arrives and release on contact for a first-time pass.
+   Flick the gamepad right stick (or press
    Numpad 4/6/8/2) while dribbling and confirm the ball is knocked in a
    player-relative direction. Open **Controls & shortcuts** → **Edit
    bindings**, rebind a key, assign a key
@@ -950,8 +957,9 @@ The two-minute match check:
    action shows **Unbound** instead of failing silently.
 9. On the phone, move with the stick, fire a charged shot (power shows) and tap
    **Switch**; verify the white active-player ring moves. Hold Pass and confirm
-   the meter labels **Pass**, then release for a driven pass. Tap Pass/Through/
-   Lob/Tackle/Sprint/Finesse to exercise the same input path.
+   the meter labels **Pass**, then hold **Driven** and release Pass for a low
+   driven ball. Tap Pass/Through/Lob/Tackle/Sprint/Finesse to exercise the
+   same input path.
 10. Verify the feed bar reads `Ref strict · AI Legendary`. The host sees
     **Pause**; the guest does not. Pause on the host: both overlays say the match
     is paused, the clock freezes and the host button becomes **Resume**. Reload
@@ -961,7 +969,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 64 test files and 567 tests passing.
+13. `pnpm check`: expect 64 test files and 569 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the

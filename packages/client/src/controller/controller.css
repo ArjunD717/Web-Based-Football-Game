@@ -501,6 +501,10 @@ input {
   font-size: 0.66rem;
 }
 
+.touch-button[data-control="drivenPass"] {
+  grid-column: span 2;
+}
+
 .controller-overlay {
   position: absolute;
   inset: 0;
@@ -610,6 +614,10 @@ input {
 
   .touch-button.hold {
     min-height: 2.4rem;
+  }
+
+  .touch-button[data-control="drivenPass"] {
+    grid-column: span 4;
   }
 
   .controller-note {

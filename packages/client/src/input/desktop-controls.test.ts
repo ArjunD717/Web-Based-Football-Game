@@ -69,9 +69,12 @@ describe("gamepadSnapshot", () => {
     expect(snapshot?.buttons).toBe(CONTROL_BUTTONS.SPRINT | CONTROL_BUTTONS.SHOOT);
   });
 
-  it("maps the left-stick click to finesse", () => {
+  it("maps the left-stick click to finesse and R3 to driven pass", () => {
     expect(gamepadSnapshot(pad({ pressed: [10] }))?.buttons).toBe(
       CONTROL_BUTTONS.FINESSE,
+    );
+    expect(gamepadSnapshot(pad({ pressed: [11] }))?.buttons).toBe(
+      CONTROL_BUTTONS.DRIVEN_PASS,
     );
   });
 

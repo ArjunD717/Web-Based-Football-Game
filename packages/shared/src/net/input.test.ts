@@ -18,7 +18,8 @@ describe("input frame codec", () => {
         CONTROL_BUTTONS.PASS |
         CONTROL_BUTTONS.FINESSE |
         CONTROL_BUTTONS.SKILL_UP |
-        CONTROL_BUTTONS.SKILL_RIGHT,
+        CONTROL_BUTTONS.SKILL_RIGHT |
+        CONTROL_BUTTONS.DRIVEN_PASS,
       chargePower: 0.6,
     });
     expect(encoded).toHaveLength(12);
@@ -32,7 +33,8 @@ describe("input frame codec", () => {
         CONTROL_BUTTONS.PASS |
         CONTROL_BUTTONS.FINESSE |
         CONTROL_BUTTONS.SKILL_UP |
-        CONTROL_BUTTONS.SKILL_RIGHT,
+        CONTROL_BUTTONS.SKILL_RIGHT |
+        CONTROL_BUTTONS.DRIVEN_PASS,
     );
     expect(decoded?.chargePower).toBeCloseTo(0.6, 2);
   });

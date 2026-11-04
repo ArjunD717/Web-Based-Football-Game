@@ -491,6 +491,10 @@ export const TUNING = {
     maxPassSpeedMps: 25,
     maxThroughSpeedMps: 24,
     maxLobSpeedMps: 26,
+    /** Speed multiplier for a driven ground pass. */
+    drivenPassSpeedFactor: 1.15,
+    /** Keep a driven pass flat while preserving charge power. */
+    drivenPassLiftMps: 0.1,
     passCooldownSeconds: 0.28,
     passLeadSeconds: 0.2,
     throughSpeedMps: 19,

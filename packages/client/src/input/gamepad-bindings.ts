@@ -11,6 +11,7 @@ export const GAMEPAD_ACTIONS = [
   "tackle",
   "switch",
   "finesse",
+  "drivenPass",
 ] as const;
 
 export type GamepadAction = (typeof GAMEPAD_ACTIONS)[number];
@@ -28,6 +29,7 @@ export const DEFAULT_GAMEPAD_BINDINGS: GamepadBindings = {
   tackle: [2],
   switch: [4],
   finesse: [10],
+  drivenPass: [11],
 };
 
 export const GAMEPAD_ACTION_BUTTONS: Readonly<
@@ -41,6 +43,7 @@ export const GAMEPAD_ACTION_BUTTONS: Readonly<
   tackle: CONTROL_BUTTONS.TACKLE,
   switch: CONTROL_BUTTONS.SWITCH,
   finesse: CONTROL_BUTTONS.FINESSE,
+  drivenPass: CONTROL_BUTTONS.DRIVEN_PASS,
 };
 
 const STORAGE_KEY = "fb.gamepad.bindings.v1";

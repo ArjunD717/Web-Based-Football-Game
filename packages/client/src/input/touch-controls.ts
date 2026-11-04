@@ -15,6 +15,7 @@ const CONTROL_BITS: Readonly<Record<string, number>> = {
   skillDown: CONTROL_BUTTONS.SKILL_DOWN,
   skillLeft: CONTROL_BUTTONS.SKILL_LEFT,
   skillRight: CONTROL_BUTTONS.SKILL_RIGHT,
+  drivenPass: CONTROL_BUTTONS.DRIVEN_PASS,
 };
 
 /** Virtual joystick + holdable action buttons for the phone controller page. */

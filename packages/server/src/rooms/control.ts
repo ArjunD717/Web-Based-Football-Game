@@ -57,6 +57,7 @@ interface BufferedPass {
   readonly aimX: number;
   readonly aimY: number;
   readonly power: number;
+  readonly driven: boolean;
   remainingSeconds: number;
 }
 
@@ -402,9 +403,20 @@ function applyActions(
         TUNING.control.minPassPower,
         runtime.passCharge,
       );
+      const driven = (input.buttons & CONTROL_BUTTONS.DRIVEN_PASS) !== 0;
       clearPassCharge(runtime);
       actionAttempted = true;
-      if (playPass(state, player, passKind, passAim.x, passAim.y, power)) {
+      if (
+        playPass(
+          state,
+          player,
+          passKind,
+          passAim.x,
+          passAim.y,
+          power,
+          driven,
+        )
+      ) {
         clearActionBuffers(runtime);
         runtime.shootCharge = 0;
         runtime.dribbleCooldown =
@@ -416,6 +428,7 @@ function applyActions(
           aimX: passAim.x,
           aimY: passAim.y,
           power,
+          driven,
           remainingSeconds: TUNING.control.actionBufferSeconds,
         };
       }
@@ -567,6 +580,7 @@ function applyBufferedAction(
         pass.aimX,
         pass.aimY,
         pass.power,
+        pass.driven,
       )
     ) {
       clearActionBuffers(runtime);
