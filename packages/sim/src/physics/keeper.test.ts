@@ -3,7 +3,10 @@
 import { TUNING } from "@fb/shared";
 import { describe, expect, it } from "vitest";
 import { createMatch } from "../match";
-import { resolveGoalkeeperSave } from "./keeper";
+import {
+  keeperDiveReachAdjustment,
+  resolveGoalkeeperSave,
+} from "./keeper";
 
 describe("goalkeeper save window", () => {
   it("starts a directional dive for a shot inside the keeper's reach", () => {
@@ -32,6 +35,27 @@ describe("goalkeeper save window", () => {
 
     expect(keeper.state).toBe("diveLeft");
     expect(keeper.actionTimer).toBe(TUNING.player.actionStateSeconds);
+  });
+
+  it("extends reach toward a manual dive and shortens it the wrong way", () => {
+    const state = createMatch({ seed: 9 });
+    const goal = state.pitch.awayGoal;
+    const keeper = state.away.players.find((player) => player.role === "GK");
+    if (keeper === undefined) {
+      throw new Error("Expected an away goalkeeper");
+    }
+    keeper.x = goal.lineX - 2.5;
+    keeper.y = goal.centreY;
+    keeper.facing = 0;
+    keeper.actionTimer = TUNING.player.actionStateSeconds / 2;
+    keeper.state = "diveLeft";
+
+    expect(
+      keeperDiveReachAdjustment(keeper, goal.lineX, goal.centreY + 1),
+    ).toBe(TUNING.control.keeperDiveReachBonusM);
+    expect(
+      keeperDiveReachAdjustment(keeper, goal.lineX, goal.centreY - 1),
+    ).toBe(-TUNING.control.keeperDiveWrongWayPenaltyM);
   });
 
   it("does not restart an active dive on the next shot tick", () => {

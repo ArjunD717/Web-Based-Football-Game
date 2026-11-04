@@ -84,6 +84,38 @@ export function updateTeamMovement(
       : 1;
     const staminaFactor = staminaSpeedFactor(player) * injuryFactor;
     const maxSpeed = topSpeedFor(player.attributes) * staminaFactor;
+    const existingSpeed = Math.hypot(player.vx, player.vy);
+    const diving =
+      player.isUserControlled &&
+      player.actionTimer > 0 &&
+      (player.state === "diveLeft" || player.state === "diveRight") &&
+      existingSpeed > 0.5;
+    if (diving) {
+      player.x += player.vx * dt;
+      player.y += player.vy * dt;
+      const drag = Math.exp(
+        -TUNING.control.keeperDiveDragPerSecond * dt,
+      );
+      player.vx *= drag;
+      player.vy *= drag;
+      const margin = TUNING.player.pitchMarginM;
+      if (player.x < margin) {
+        player.x = margin;
+        player.vx = Math.max(0, player.vx);
+      } else if (player.x > pitch.lengthM - margin) {
+        player.x = pitch.lengthM - margin;
+        player.vx = Math.min(0, player.vx);
+      }
+      if (player.y < margin) {
+        player.y = margin;
+        player.vy = Math.max(0, player.vy);
+      } else if (player.y > pitch.widthM - margin) {
+        player.y = pitch.widthM - margin;
+        player.vy = Math.min(0, player.vy);
+      }
+      updateStamina(player, Math.hypot(player.vx, player.vy), dt);
+      return;
+    }
     const baseAcceleration = accelerationFor(player.attributes) * staminaFactor;
     const brakingAcceleration =
       baseAcceleration * TUNING.player.brakeAccelerationMultiplier;

@@ -278,8 +278,10 @@ Implemented:
   readability without touching the physics capsule or ball radius
 - On-target shots inside the goalkeeper's reach trigger a directional
   **diveLeft / diveRight** animation before the save roll. Catch, parry and
-  goal outcomes still come from the existing deterministic save probability;
-  the dive state is presentation-only. It is appended to the wire state
+  goal outcomes still come from the deterministic save probability; the AI
+  dive state is presentation-only. A human-controlled goalkeeper can launch a
+  manual dive with the skill directions, which moves the capsule and adjusts
+  the save reach before that roll. Dive states are appended to the wire state
   vocabulary, so protocol 10 is required
 - The pitch now has corner flags and a low-cost procedural crowd stand around
   all four sides. A fast-ball line trail, predicted landing ring for aerial
@@ -331,16 +333,16 @@ Implemented:
   replay-buffer goal detection, trimming, full-capture replay, goal-clip
   preservation and playback sampling, haptic state/cue transitions,
   gamepad binding sanitisation/stealing, right-stick skill direction, skill
-  touch cooldown/direction, and driven-pass input/trajectory routing
+  touch cooldown/direction, driven-pass input/trajectory routing, and manual
+  keeper dive routing/reach/movement
 
 Known M11 limitations (by design):
 
 - Players are procedural low-poly rigs; there are no GLTF/skeletal animation
   assets, facial animation or broadcast-quality cutscenes
-- Goalkeeper dives use the existing probability-based save window; the dive
-  direction is chosen from the projected shot, but there is no manual keeper
-  control, ball-tracking IK, or physical dive reach beyond the current save
-  tuning
+- Manual goalkeeper dives adjust the existing probability-based save window;
+  there is no ball-tracking IK or deterministic hand contact, and the AI dive
+  animation remains presentation-only
 - The Player camera is a damped chase view, not a collision-aware third-person
   rig; it can pass close to the stand geometry at the edges of the pitch
 - The crowd is a flat procedural texture band, not seated 3D geometry or a
@@ -754,6 +756,12 @@ Implemented:
   phone skill pad. They are player-relative, use the Skill Moves rating plus
   dribbling/ball control/agility to determine aim error, and have a 0.48 s
   cooldown with a small stamina cost
+- Goalkeeper control when the ball enters the box: the skill directions become
+  a manual left/right dive instead of an outfield skill touch. A dive launches
+  the keeper laterally for 0.4 s, costs a little stamina, extends the save
+  reach toward the commanded side and shortens it the wrong way. Up/down
+  commands are ignored, and the normal probability save still decides
+  catch/parry
 - Ground pass, through pass and lob/cross with lead targeting. Pass, through
   and cross power charges from a tap to a driven ball while the button is held
   and commits on release; release timing also supplies first-time passes. Hold
@@ -763,7 +771,7 @@ Implemented:
   standing tackle completes the action set
 - Keyboard defaults: WASD/arrows move, Shift sprint, X pass, B driven pass,
   C through, V lob, Z shoot, F tackle, Space switch, E finesse,
-  Numpad 8/2/4/6 skill moves;
+  Numpad 8/2/4/6 skill moves (Numpad 4/6 dives when controlling the keeper);
   bindings are rebindable from the
   **Controls** dialog and persist in `localStorage`; reassigning a key steals it
   from the old action and a missing binding falls back to a default instead of
@@ -777,16 +785,17 @@ Implemented:
   red cards from leg one suspend that player, replacing only the suspended
   starter while preserving the rest of the XI, and a level aggregate is a draw;
   extra time and penalties are skipped in this format
-- Standard-mapping gamepad defaults: left stick move, right stick skill moves,
-  A pass, B/RT shoot, X tackle, Y through, LB switch, RB lob, LT sprint,
-  L3 finesse, R3 driven pass. The **Controls** dialog
+- Standard-mapping gamepad defaults: left stick move, right stick skill moves
+  (and keeper dives), A pass, B/RT shoot, X tackle, Y through, LB switch, RB
+  lob, LT sprint, L3 finesse, R3 driven pass. The **Controls** dialog
   switches between keyboard and gamepad tabs; gamepad buttons are captured by
   pressing them, persisted in `localStorage`, and duplicate assignments steal
   the button from the old action. Stick movement is fixed. An action that loses
   its last button is shown as **Unbound** rather than silently disappearing
 - Phone controller at `/controller.html?room=CODE`: virtual stick, touch action
-  buttons including a held **Driven** pass modifier, a four-way skill pad,
-  Pause/Resume, live connection state, score/clock/phase/card counts,
+  buttons including a held **Driven** pass modifier, a four-way skill pad
+  that dives when keeping goal, Pause/Resume, live connection state,
+  score/clock/phase/card counts,
   rule-event banner and its own power meter
 - Match console: team-colour scoreboard, referee event strip, controlled-player
   label, white active-player ring, shot/pass power bar, replay banner, compact
@@ -966,7 +975,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 64 test files and 569 tests passing.
+13. `pnpm check`: expect 64 test files and 574 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -982,7 +991,11 @@ The two-minute match check:
     knees bend through the stride, elbows counter-swing, and the shooting leg
     swings from backswing through contact. Take an on-target shot: the opposing
     goalkeeper must tilt into a left/right dive before the save or goal resolves.
-    In Player camera, pass the ball away and
+    Bring the ball into your own box, switch to the keeper, and press Numpad
+    4/6 or flick the right stick: the keeper must launch laterally and the
+    save reach must extend toward that side. Try the opposite side on a
+    repeatable shot and confirm the reach is reduced. In Player camera, pass
+    the ball away and
     confirm the white ball arrow appears at the screen edge; switch away from a
     player during a camera cut and confirm the orange controlled-player arrow
     appears. Open **Settings** before kick-off and try **3D quality** Low,

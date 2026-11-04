@@ -4,7 +4,37 @@ import { TUNING, clamp } from "@fb/shared";
 import { getDefendingGoalForDirection } from "../pitch";
 import { eventRng } from "../random";
 import { recordShotOnTarget, statsFor } from "../stats";
-import type { MatchState } from "../types";
+import type { MatchState, PlayerState } from "../types";
+
+/**
+ * Reach adjustment for a manually commanded dive. Diving toward the projected
+ * shot extends the save window; diving the wrong way shortens it. This is
+ * deliberately separate from the AI save so automatic dives do not gain the
+ * manual bonus.
+ */
+export function keeperDiveReachAdjustment(
+  keeper: PlayerState,
+  goalLineX: number,
+  projectedY: number,
+): number {
+  if (
+    keeper.actionTimer <= 0 ||
+    (keeper.state !== "diveLeft" && keeper.state !== "diveRight")
+  ) {
+    return 0;
+  }
+  const targetDx = goalLineX - keeper.x;
+  const targetDy = projectedY - keeper.y;
+  const cross =
+    Math.cos(keeper.facing) * targetDy -
+    Math.sin(keeper.facing) * targetDx;
+  const correct =
+    (cross >= 0 && keeper.state === "diveLeft") ||
+    (cross < 0 && keeper.state === "diveRight");
+  return correct
+    ? TUNING.control.keeperDiveReachBonusM
+    : -TUNING.control.keeperDiveWrongWayPenaltyM;
+}
 
 /**
  * Goalkeeper save window. The body collision model can block a ball that hits
@@ -66,23 +96,37 @@ export function resolveGoalkeeperSave(state: MatchState): boolean {
       continue;
     }
 
+    const committedDive =
+      keeper.actionTimer > 0 &&
+      (keeper.state === "diveLeft" || keeper.state === "diveRight");
     const gk = keeper.attributes.goalkeeper;
     const diving = gk?.diving ?? keeper.attributes.agility;
     const handling = gk?.handling ?? keeper.attributes.ballControl;
     const reflexes = gk?.reflexes ?? keeper.attributes.reactions;
     const positioning = gk?.positioning ?? keeper.attributes.defAwareness;
-    const reach =
+    let reach =
       TUNING.ai.saveReachBaseM + (diving / 99) * TUNING.ai.saveReachRatingM;
+    if (keeper.isUserControlled && committedDive) {
+      reach = Math.max(
+        0.25,
+        reach +
+          keeperDiveReachAdjustment(
+            keeper,
+            goal.lineX,
+            projectedY,
+          ),
+      );
+    }
     const lateralOffset = Math.abs(keeper.y - projectedY);
     if (lateralOffset > reach) {
       continue;
     }
 
-    // The dive is a presentation state, not a physics change. Trigger it as
-    // soon as a shot is projected inside the keeper's reach so the body is
-    // already moving when the save is resolved; an unsuccessful dive should
-    // still be visible. Do not restart it on every tick of the same shot.
-    if (keeper.actionTimer <= 0) {
+    // The AI dive is a presentation state; a human keeper must command a dive
+    // so the input is not overridden by the automatic save animation. Trigger
+    // it as soon as a shot is projected inside the keeper's reach, without
+    // restarting it on every tick of the same shot.
+    if (keeper.actionTimer <= 0 && !keeper.isUserControlled) {
       const targetDx = goal.lineX - keeper.x;
       const targetDy = projectedY - keeper.y;
       const cross =

@@ -9,6 +9,7 @@ import {
   isAvailablePlayer,
   isInsidePenaltyArea,
   playDribbleTouch,
+  playGoalkeeperDive,
   playPass,
   playShot,
   playSkillMove,
@@ -381,7 +382,21 @@ function applyActions(
     actionAttempted = true;
     clearActionBuffers(runtime);
     runtime.shootCharge = 0;
-    if (playSkillMove(state, player, skillDirection.x, skillDirection.y)) {
+    const acted =
+      player.role === "GK"
+        ? playGoalkeeperDive(
+            state,
+            player,
+            skillDirection.x,
+            skillDirection.y,
+          )
+        : playSkillMove(
+            state,
+            player,
+            skillDirection.x,
+            skillDirection.y,
+          );
+    if (acted) {
       runtime.dribbleCooldown =
         TUNING.control.dribbleTouchIntervalSeconds;
       runtime.lastKickAtMs = runtime.lastInputAtMs;

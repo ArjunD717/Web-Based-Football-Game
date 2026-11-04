@@ -503,6 +503,39 @@ describe("control selection", () => {
     expect(home.activePlayerId).toBe(active.id);
   });
 
+  it("routes a lateral skill press to a goalkeeper dive", () => {
+    const state = createMatch({ seed: 107 });
+    const home = createTeamControlRuntime();
+    state.ball.x = 10;
+    state.ball.y = state.pitch.centreY;
+    state.ball.z = 0.11;
+    prepareTeamControl(state, "home", home, DT);
+
+    const keeper = state.home.players.find(
+      (player) => player.isUserControlled,
+    )!;
+    expect(keeper.role).toBe("GK");
+    keeper.facing = 0;
+    keeper.actionTimer = 0;
+
+    updateControlInput(
+      home,
+      {
+        seq: 1,
+        moveX: 0,
+        moveY: 0,
+        buttons: CONTROL_BUTTONS.SKILL_LEFT,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+
+    expect(keeper.state).toBe("diveLeft");
+    expect(keeper.vy).toBeLessThan(-1);
+    expect(keeper.actionTimer).toBe(TUNING.player.actionStateSeconds);
+  });
+
   it("hands goalkeeper control to the human when the ball enters the box", () => {
     const state = createMatch({ seed: 105 });
     const home = createTeamControlRuntime();

@@ -312,6 +312,53 @@ export function playSkillMove(
   return true;
 }
 
+/**
+ * Start a manual goalkeeper dive. This is not a skill move: the keeper gets a
+ * short lateral launch and the save window extends in the commanded direction.
+ * Vertical component is ignored; only a clear left/right command starts a dive.
+ */
+export function playGoalkeeperDive(
+  state: MatchState,
+  player: PlayerState,
+  aimX: number,
+  aimY: number,
+): boolean {
+  if (
+    player.role !== "GK" ||
+    player.sentOff ||
+    player.unavailable ||
+    player.actionTimer > 0
+  ) {
+    return false;
+  }
+  const ballDistance = Math.hypot(
+    state.ball.x - player.x,
+    state.ball.y - player.y,
+  );
+  if (ballDistance <= TUNING.control.actionBallReachM) {
+    return false;
+  }
+  const forwardX = Math.cos(player.facing);
+  const forwardY = Math.sin(player.facing);
+  const lateral = -forwardY * aimX + forwardX * aimY;
+  if (Math.abs(lateral) < TUNING.control.keeperDiveMinLateral) {
+    return false;
+  }
+  const sign = lateral >= 0 ? 1 : -1;
+  player.vx = -forwardY * sign * TUNING.control.keeperDiveSpeedMps;
+  player.vy = forwardX * sign * TUNING.control.keeperDiveSpeedMps;
+  player.targetX = player.x;
+  player.targetY = player.y;
+  player.targetSpeed = 0;
+  player.state = sign > 0 ? "diveRight" : "diveLeft";
+  player.actionTimer = TUNING.player.actionStateSeconds;
+  player.stamina = Math.max(
+    0,
+    player.stamina - TUNING.control.keeperDiveStaminaCost,
+  );
+  return true;
+}
+
 function nearestOpponentDistance(
   state: MatchState,
   player: PlayerState,

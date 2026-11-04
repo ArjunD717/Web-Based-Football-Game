@@ -5,6 +5,7 @@ import { createMatch, stepMatch } from "../match";
 import type { MatchState, PlayerState } from "../types";
 import {
   playDribbleTouch,
+  playGoalkeeperDive,
   playPass,
   playShot,
   playSkillMove,
@@ -179,6 +180,63 @@ describe("human actions", () => {
     expect(playPass(state, player, "pass", 1, 0)).toBe(false);
     expect(playShot(state, player, 0, 0, 1, false)).toBe(false);
     expect(state.lastTouch).toBeNull();
+  });
+});
+
+describe("manual goalkeeper dive", () => {
+  it("launches laterally and ignores non-lateral input", () => {
+    const state = createMatch({ seed: 155 });
+    const keeper = state.home.players.find((entry) => entry.role === "GK")!;
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.setPiece = null;
+    keeper.facing = 0;
+    keeper.actionTimer = 0;
+    state.ball.x = state.pitch.centreX;
+    state.ball.y = state.pitch.centreY;
+    state.ball.z = TUNING.ball.radiusM;
+
+    expect(playGoalkeeperDive(state, keeper, 1, 0)).toBe(false);
+    expect(playGoalkeeperDive(state, keeper, 0, -1)).toBe(true);
+    expect(keeper.state).toBe("diveLeft");
+    expect(keeper.vy).toBeLessThan(-1);
+    expect(keeper.actionTimer).toBe(TUNING.player.actionStateSeconds);
+
+    keeper.actionTimer = 0;
+    expect(playGoalkeeperDive(state, keeper, 1, 0)).toBe(false);
+  });
+
+  it("moves the keeper body during a dive tick", () => {
+    const state = createMatch({ seed: 157 });
+    const keeper = state.home.players.find((entry) => entry.role === "GK")!;
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.timerSeconds = 0;
+    state.referee.setPiece = null;
+    keeper.isUserControlled = true;
+    keeper.facing = 0;
+    keeper.actionTimer = 0;
+    state.ball.x = state.pitch.centreX;
+    state.ball.y = state.pitch.centreY;
+    state.ball.z = TUNING.ball.radiusM;
+    state.ball.vx = 0;
+    state.ball.vy = 0;
+    const y = keeper.y;
+
+    expect(playGoalkeeperDive(state, keeper, 0, -1)).toBe(true);
+    stepMatch(state);
+
+    expect(keeper.y).toBeLessThan(y);
+    expect(keeper.state).toBe("diveLeft");
+  });
+
+  it("rejects outfield players", () => {
+    const state = createMatch({ seed: 156 });
+    const striker = state.home.players.find((entry) => entry.role === "ST")!;
+    state.ball.x = state.pitch.centreX;
+    state.ball.y = state.pitch.centreY;
+
+    expect(playGoalkeeperDive(state, striker, 0, -1)).toBe(false);
   });
 });
 

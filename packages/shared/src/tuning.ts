@@ -580,6 +580,18 @@ export const TUNING = {
     tackleBallSpeedMps: 7,
     tackleLiftMps: 0.4,
     tackleCooldownSeconds: 0.8,
+    /** Lateral launch speed of a manually commanded goalkeeper dive, m/s. */
+    keeperDiveSpeedMps: 5.5,
+    /** Exponential lateral velocity decay during a dive, per second. */
+    keeperDiveDragPerSecond: 2.4,
+    /** Extra reach while diving toward the projected shot, metres. */
+    keeperDiveReachBonusM: 0.9,
+    /** Reach lost when diving away from the projected shot, metres. */
+    keeperDiveWrongWayPenaltyM: 1.1,
+    /** Minimum lateral command to start a dive. */
+    keeperDiveMinLateral: 0.35,
+    /** Stamina fraction spent on a dive. */
+    keeperDiveStaminaCost: 0.012,
   },
   referee: {
     /** Relative closing speed mapped to the top of the foul severity curve. */
