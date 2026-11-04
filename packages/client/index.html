@@ -411,7 +411,7 @@
                   <p class="ui-kicker">Match night</p>
                   <h2 class="ui-context-panel__title">Settings</h2>
                   <p class="ui-context-panel__lede">
-                    Match sound for this browser.
+                    Match sound and 3D quality for this browser.
                   </p>
                 </header>
                 <div class="ui-panel ui-panel--padded">
@@ -428,6 +428,14 @@
                         <span class="ui-toggle__thumb"></span>
                       </span>
                     </button>
+                    <label class="ui-settings-field">
+                      <span>3D quality</span>
+                      <select id="settings-quality" class="ui-select">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </label>
                   </div>
                   <button
                     class="ui-button"
@@ -1008,6 +1016,11 @@
             <canvas id="pitch" aria-label="Top-down football pitch">
               Canvas rendering is required to view the match.
             </canvas>
+
+            <div id="camera-indicators" class="camera-indicators" aria-hidden="true" hidden>
+              <span class="camera-indicator camera-indicator--ball" data-indicator="ball" hidden></span>
+              <span class="camera-indicator camera-indicator--controlled" data-indicator="controlled" hidden></span>
+            </div>
 
             <div id="power-meter" class="power-meter" hidden>
               <div class="power-head">

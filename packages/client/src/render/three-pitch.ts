@@ -3,6 +3,8 @@
 import * as THREE from "three";
 import { TUNING } from "@fb/shared";
 import type { GoalGeometry, Pitch } from "@fb/sim";
+import { createStadiumVisual } from "./three-stadium";
+import { VISUAL_TUNING } from "./visualTuning";
 
 const PIXELS_PER_METRE = 20;
 const LINE_COLOUR = "rgba(239, 250, 243, 0.88)";
@@ -10,6 +12,7 @@ const LINE_COLOUR = "rgba(239, 250, 243, 0.88)";
 export interface PitchVisual {
   readonly group: THREE.Group;
   readonly texture: THREE.CanvasTexture;
+  readonly stadium: THREE.Group;
 }
 
 /** Texture-based markings keep the 3D pitch crisp without thousands of lines. */
@@ -46,7 +49,10 @@ export function createPitchVisual(pitch: Pitch): PitchVisual {
 
   group.add(createGoalVisual(pitch, pitch.homeGoal));
   group.add(createGoalVisual(pitch, pitch.awayGoal));
-  return { group, texture };
+  group.add(createCornerFlags(pitch));
+  const stadium = createStadiumVisual(pitch).group;
+  group.add(stadium);
+  return { group, texture, stadium };
 }
 
 function createPitchTexture(pitch: Pitch): THREE.CanvasTexture {
@@ -176,6 +182,48 @@ function createPitchTexture(pitch: Pitch): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
+}
+
+function createCornerFlags(pitch: Pitch): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "corner-flags";
+  const flagTuning = VISUAL_TUNING.cornerFlag;
+  const poleGeometry = new THREE.CylinderGeometry(
+    flagTuning.poleRadiusM,
+    flagTuning.poleRadiusM,
+    flagTuning.poleHeightM,
+    6,
+  );
+  const poleMaterial = new THREE.MeshStandardMaterial({
+    color: 0xe8f0e8,
+    roughness: 0.55,
+  });
+  const flagGeometry = new THREE.PlaneGeometry(
+    flagTuning.flagWidthM,
+    flagTuning.flagHeightM,
+  );
+  const flagMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff8a1e,
+    side: THREE.DoubleSide,
+  });
+  const halfLength = pitch.lengthM / 2;
+  const halfWidth = pitch.widthM / 2;
+  for (const x of [-halfLength, halfLength] as const) {
+    for (const z of [-halfWidth, halfWidth] as const) {
+      const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+      pole.position.set(x, flagTuning.poleHeightM / 2, z);
+      group.add(pole);
+      const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+      flag.position.set(
+        x + Math.sign(x) * flagTuning.flagWidthM * 0.45,
+        flagTuning.poleHeightM - flagTuning.flagHeightM * 0.5,
+        z,
+      );
+      flag.rotation.y = Math.PI / 4;
+      group.add(flag);
+    }
+  }
+  return group;
 }
 
 function createNetTexture(): THREE.CanvasTexture {

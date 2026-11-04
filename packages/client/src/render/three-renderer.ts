@@ -1,8 +1,9 @@
 // packages/client/src/render/three-renderer.ts
 
 import * as THREE from "three";
+import { TUNING } from "@fb/shared";
 import type { Pitch } from "@fb/sim";
-import type { MatchRenderer } from "./renderer";
+import type { MatchRenderer, ScreenIndicator } from "./renderer";
 import { CameraDebugOverlay } from "../camera/CameraDebugOverlay";
 import { CameraDirector } from "../camera/CameraDirector";
 import { cameraGroundBasis } from "../camera/cameraMath";
@@ -18,13 +19,20 @@ import type {
   CameraRenderState,
   CameraShot,
 } from "../camera/types";
+import { predictLandingPoint } from "./ball-effects";
 import { pitchToWorld } from "./three-layout";
 import { createPitchVisual } from "./three-pitch";
+import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig } from "./three-player";
+import {
+  VISUAL_QUALITY,
+  VISUAL_TUNING,
+  type VisualQuality,
+} from "./visualTuning";
 import type { MatchView } from "./view";
 
-const MAX_PIXEL_RATIO = 2;
 const BALL_RADIUS_M = 0.16;
+const BALL_LANDING_WORLD_HEIGHT_M = 0.025;
 
 /**
  * Three.js presentation layer. It consumes the same immutable MatchView as the
@@ -45,7 +53,17 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly ballShadow: THREE.Mesh;
   private readonly ballShadowMaterial: THREE.MeshBasicMaterial;
   private readonly backdrop: THREE.CanvasTexture;
+  private readonly keyLight: THREE.DirectionalLight;
+  private readonly ballTrail: THREE.Line;
+  private readonly trailPositions: Float32Array;
+  private readonly trailGeometry: THREE.BufferGeometry;
+  private trailCount = 0;
+  private readonly landingMarker: THREE.Mesh;
+  private readonly landingMaterial: THREE.MeshBasicMaterial;
   private readonly pitchGroup = new THREE.Group();
+  private stadium: THREE.Group | null = null;
+  private visualQuality: VisualQuality = "high";
+  private lastView: MatchView | null = null;
   private pitch: Pitch | null = null;
   private pitchKey = "";
   private width = 1;
@@ -71,13 +89,16 @@ export class ThreeMatchRenderer implements MatchRenderer {
       powerPreference: "high-performance",
     });
     this.renderer.setPixelRatio(
-      Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO),
+      Math.min(
+        window.devicePixelRatio || 1,
+        VISUAL_QUALITY[this.visualQuality].maxPixelRatio,
+      ),
     );
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.08;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.backdrop = createBackdropTexture();
     this.scene.background = this.backdrop;
@@ -95,7 +116,8 @@ export class ThreeMatchRenderer implements MatchRenderer {
     const key = new THREE.DirectionalLight(0xffffff, 2.3);
     key.position.set(35, 72, 26);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    const shadowSize = VISUAL_QUALITY[this.visualQuality].shadowMapSize;
+    key.shadow.mapSize.set(shadowSize, shadowSize);
     key.shadow.camera.left = -68;
     key.shadow.camera.right = 68;
     key.shadow.camera.top = 56;
@@ -104,6 +126,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     key.shadow.camera.far = 180;
     key.shadow.bias = -0.0007;
     key.shadow.normalBias = 0.025;
+    this.keyLight = key;
     this.scene.add(key);
 
     const fill = new THREE.DirectionalLight(0x9ed7ff, 0.55);
@@ -116,8 +139,52 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.ball = ballAssets.mesh;
     this.ballShadowMaterial = ballAssets.shadowMaterial;
     this.ballShadow = ballAssets.shadow;
+    this.ball.scale.setScalar(VISUAL_TUNING.ballScale);
     this.scene.add(this.ballShadow);
     this.scene.add(this.ball);
+
+    this.trailPositions = new Float32Array(
+      VISUAL_TUNING.trail.maxPoints * 3,
+    );
+    this.trailGeometry = new THREE.BufferGeometry();
+    this.trailGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(this.trailPositions, 3),
+    );
+    this.trailGeometry.setDrawRange(0, 0);
+    this.ballTrail = new THREE.Line(
+      this.trailGeometry,
+      new THREE.LineBasicMaterial({
+        color: 0xbef8ff,
+        transparent: true,
+        opacity: VISUAL_TUNING.trail.opacity,
+        depthWrite: false,
+      }),
+    );
+    this.ballTrail.name = "ball-trail";
+    this.ballTrail.frustumCulled = false;
+    this.scene.add(this.ballTrail);
+
+    this.landingMaterial = new THREE.MeshBasicMaterial({
+      color: 0x8af6ff,
+      transparent: true,
+      opacity: VISUAL_TUNING.landing.opacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.landingMarker = new THREE.Mesh(
+      new THREE.RingGeometry(
+        VISUAL_TUNING.landing.radiusM,
+        VISUAL_TUNING.landing.radiusM * 1.12,
+        32,
+      ),
+      this.landingMaterial,
+    );
+    this.landingMarker.name = "ball-landing-marker";
+    this.landingMarker.rotation.x = -Math.PI / 2;
+    this.landingMarker.position.y = BALL_LANDING_WORLD_HEIGHT_M;
+    this.landingMarker.visible = false;
+    this.scene.add(this.landingMarker);
 
     this.resizeObserver = new ResizeObserver(() => {
       this.resize();
@@ -130,6 +197,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.resize();
     this.contextController = new ContextCameraController(this.cameraDirector);
     this.cameraDebug = new CameraDebugOverlay();
+    this.applyQuality();
   }
 
   resize(): void {
@@ -138,7 +206,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.width = Math.max(1, Math.floor(rect?.width ?? 1));
     this.height = Math.max(1, Math.floor(rect?.height ?? 1));
     this.renderer.setPixelRatio(
-      Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO),
+      Math.min(
+        window.devicePixelRatio || 1,
+        VISUAL_QUALITY[this.visualQuality].maxPixelRatio,
+      ),
     );
     this.renderer.setSize(this.width, this.height, false);
     this.camera.aspect = this.width / this.height;
@@ -162,6 +233,8 @@ export class ThreeMatchRenderer implements MatchRenderer {
 
     this.syncPlayers(view);
     this.updateBall(view);
+    this.updateBallEffects(view);
+    this.lastView = view;
 
     const now = performance.now();
     const dt =
@@ -214,6 +287,59 @@ export class ThreeMatchRenderer implements MatchRenderer {
       : cameraGroundBasis(this.lastCameraPose);
   }
 
+  setQuality(quality: VisualQuality): void {
+    if (quality === this.visualQuality) {
+      return;
+    }
+    this.visualQuality = quality;
+    this.applyQuality();
+  }
+
+  indicatorStates(): readonly ScreenIndicator[] {
+    const view = this.lastView;
+    if (view === null || this.lastCameraPose === null) {
+      return [];
+    }
+    const points: {
+      readonly id: ScreenIndicator["id"];
+      readonly x: number;
+      readonly y: number;
+      readonly z: number;
+    }[] = [
+      {
+        id: "ball",
+        x: view.ball.x,
+        y: view.ball.y,
+        z: Math.max(0, view.ball.z),
+      },
+    ];
+    const controlled = [...view.home.players, ...view.away.players].find(
+      (player) => player.controlled && !player.sentOff,
+    );
+    if (controlled !== undefined) {
+      points.push({
+        id: "controlled",
+        x: controlled.x,
+        y: controlled.y,
+        z: 0,
+      });
+    }
+
+    const indicators: ScreenIndicator[] = [];
+    for (const point of points) {
+      const world = pitchToWorld(view.pitch, point.x, point.y, point.z);
+      const indicator = projectScreenIndicator(
+        point.id,
+        new THREE.Vector3(world.x, world.y, world.z),
+        this.camera,
+      );
+      if (indicator !== null) {
+        indicators.push(indicator);
+      }
+    }
+    return indicators;
+  }
+
   destroy(): void {
     this.resizeObserver.disconnect();
     window.removeEventListener("resize", this.onWindowResize);
@@ -226,6 +352,86 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.renderer.forceContextLoss();
   }
 
+  private applyQuality(): void {
+    const profile = VISUAL_QUALITY[this.visualQuality];
+    this.renderer.shadowMap.enabled = profile.shadows;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.keyLight.castShadow = profile.shadows;
+    this.keyLight.shadow.mapSize.set(
+      profile.shadowMapSize,
+      profile.shadowMapSize,
+    );
+    const shadowMap = this.keyLight.shadow.map;
+    if (shadowMap !== null) {
+      shadowMap.dispose();
+      this.keyLight.shadow.map = null;
+    }
+    if (this.stadium !== null) {
+      this.stadium.visible = profile.crowd;
+    }
+    this.ballTrail.visible = profile.ballTrail;
+    if (!profile.landingMarker) {
+      this.landingMarker.visible = false;
+    }
+    const stage = this.canvas.parentElement;
+    if (stage !== null) {
+      stage.dataset.quality = this.visualQuality;
+    }
+    this.resize();
+  }
+
+  private updateBallEffects(view: MatchView): void {
+    const profile = VISUAL_QUALITY[this.visualQuality];
+    const speed = Math.hypot(view.ball.vx, view.ball.vy, view.ball.vz);
+    const trail = VISUAL_TUNING.trail;
+    const showTrail =
+      profile.ballTrail &&
+      speed >= trail.minSpeedMps &&
+      this.trailPositions.length >= 3;
+    this.ballTrail.visible = showTrail;
+    if (showTrail) {
+      this.trailPositions.copyWithin(3, 0, trail.maxPoints * 3 - 3);
+      this.trailPositions[0] = this.ball.position.x;
+      this.trailPositions[1] = this.ball.position.y;
+      this.trailPositions[2] = this.ball.position.z;
+      this.trailCount = Math.min(trail.maxPoints, this.trailCount + 1);
+      this.trailGeometry.setDrawRange(0, this.trailCount);
+      const position = this.trailGeometry.getAttribute("position");
+      position.needsUpdate = true;
+      const material = this.ballTrail.material as THREE.LineBasicMaterial;
+      material.opacity = trail.opacity;
+    } else {
+      this.trailCount = 0;
+      this.trailGeometry.setDrawRange(0, 0);
+    }
+
+    if (!profile.landingMarker) {
+      this.landingMarker.visible = false;
+      return;
+    }
+    const landing = predictLandingPoint(
+      view.ball,
+      view.pitch,
+      TUNING.ball.gravityMps2,
+      VISUAL_TUNING.landing.minHeightM,
+    );
+    if (landing === null) {
+      this.landingMarker.visible = false;
+      return;
+    }
+    const world = pitchToWorld(
+      view.pitch,
+      landing.x,
+      landing.y,
+      BALL_LANDING_WORLD_HEIGHT_M,
+    );
+    this.landingMarker.position.set(world.x, world.y, world.z);
+    this.landingMarker.visible = true;
+    const pulse = 1 + Math.sin(view.tick * 0.16) * 0.08;
+    this.landingMarker.scale.setScalar(pulse);
+    this.landingMaterial.opacity = VISUAL_TUNING.landing.opacity;
+  }
+
   private installPitch(pitch: Pitch): void {
     if (this.pitchGroup.children.length > 0) {
       disposeObject(this.pitchGroup);
@@ -233,6 +439,8 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
     const visual = createPitchVisual(pitch);
     this.pitchGroup.add(visual.group);
+    this.stadium = visual.stadium;
+    this.stadium.visible = VISUAL_QUALITY[this.visualQuality].crowd;
     this.pitch = pitch;
     this.pitchKey = pitchKey(pitch);
     this.cameraDirector.reset();

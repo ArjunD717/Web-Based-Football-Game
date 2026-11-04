@@ -5,6 +5,7 @@ import { clamp } from "@fb/shared";
 import type { Pitch } from "@fb/sim";
 import type { PlayerStateName } from "@fb/sim";
 import { facingToRotationY, pitchToWorld } from "./three-layout";
+import { VISUAL_TUNING } from "./visualTuning";
 import type { RenderPlayer, RenderTeamColors } from "./view";
 
 export interface PlayerPose {
@@ -173,7 +174,7 @@ export class PlayerRig {
     });
 
     this.root.name = `player-${player.id}`;
-    this.root.scale.setScalar(1.15);
+    this.root.scale.setScalar(VISUAL_TUNING.playerScale);
 
     this.shadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.58, 20),

@@ -38,6 +38,13 @@ import {
   type RendererMode,
 } from "./render/factory";
 import type { MatchView, RenderPlayer } from "./render/view";
+import {
+  loadVisualQuality,
+  parseVisualQuality,
+  saveVisualQuality,
+  type VisualQuality,
+} from "./render/visualTuning";
+import type { ScreenIndicator } from "./render/renderer";
 import { movementToWorld } from "./camera/cameraMath";
 import {
   CAMERA_MODES,
@@ -82,6 +89,15 @@ const STATUS_LABELS: Record<GameLinkStatus, string> = {
 };
 
 const pitchStage = byId<HTMLElement>("pitch-stage");
+const cameraIndicatorLayer = byId<HTMLElement>("camera-indicators");
+const cameraIndicatorElements: Readonly<
+  Record<ScreenIndicator["id"], HTMLElement | null>
+> = {
+  ball: pitchStage.querySelector<HTMLElement>('[data-indicator="ball"]'),
+  controlled: pitchStage.querySelector<HTMLElement>(
+    '[data-indicator="controlled"]',
+  ),
+};
 let mounted = mountMatchRenderer(pitchStage, preferredRendererMode());
 let renderer = mounted.renderer;
 let rendererMode: RendererMode = mounted.mode;
@@ -118,6 +134,8 @@ const openHelpButton = byId<HTMLButtonElement>("open-help");
 const helpDialog = byId<HTMLDialogElement>("help-dialog");
 const closeHelpButton = byId<HTMLButtonElement>("close-help");
 const settingsSoundButton = byId<HTMLButtonElement>("settings-sound");
+const settingsQualitySelect =
+  byId<HTMLSelectElement>("settings-quality");
 const homeSwatch = byId<HTMLElement>("home-swatch");
 const awaySwatch = byId<HTMLElement>("away-swatch");
 const homeName = byId<HTMLElement>("home-name");
@@ -189,6 +207,7 @@ let currentState: GameClientState | null = null;
 let toastTimer: number | null = null;
 let lastQrRoomCode: string | null = null;
 let cameraMode: CameraMode = loadCameraMode();
+let visualQuality: VisualQuality = loadVisualQuality();
 
 const substitutionPanel = new SubstitutionPanel({
   onSubstitute: (outId, inId) => client.substitute(outId, inId),
@@ -221,6 +240,16 @@ cameraModeSelect.addEventListener("change", () => {
 });
 updateCameraControl();
 renderer.setCameraMode?.(cameraMode);
+
+settingsQualitySelect.value = visualQuality;
+settingsQualitySelect.addEventListener("change", () => {
+  visualQuality = parseVisualQuality(settingsQualitySelect.value);
+  saveVisualQuality(visualQuality);
+  renderer.setQuality?.(visualQuality);
+  updateQualityControl();
+});
+renderer.setQuality?.(visualQuality);
+updateQualityControl();
 
 updateRendererControl();
 updateAudioControl();
@@ -642,6 +671,7 @@ function renderLoop(now: number): void {
       stopReplay();
     } else {
       renderer.render(sample.view);
+      hideCameraIndicators();
       replayBanner.hidden = false;
       replayProgress.textContent = `${(sample.elapsedMs / 1_000).toFixed(
         1,
@@ -655,6 +685,7 @@ function renderLoop(now: number): void {
       if (view !== null) {
         latestView = view;
         renderer.render(view);
+        updateCameraIndicators();
         if (
           replay.record(
             view,
@@ -669,6 +700,7 @@ function renderLoop(now: number): void {
       }
     } else if (latestView !== null) {
       renderer.render(latestView);
+      updateCameraIndicators();
     }
   }
 
@@ -737,6 +769,33 @@ function cameraRelativeFrame(frame: ControlFrame): ControlFrame {
   }
   const world = movementToWorld(frame.moveX, frame.moveY, basis);
   return { ...frame, moveX: world.x, moveY: world.y };
+}
+
+function updateCameraIndicators(): void {
+  const states = renderer.indicatorStates?.() ?? [];
+  const byId = new Map(states.map((state) => [state.id, state]));
+  cameraIndicatorLayer.hidden = states.length === 0;
+  for (const [id, element] of Object.entries(cameraIndicatorElements)) {
+    if (element === null) {
+      continue;
+    }
+    const state = byId.get(id as ScreenIndicator["id"]);
+    if (state === undefined) {
+      element.hidden = true;
+      continue;
+    }
+    element.hidden = false;
+    element.style.left = `${(state.x * 100).toFixed(2)}%`;
+    element.style.top = `${(state.y * 100).toFixed(2)}%`;
+    element.style.setProperty("--indicator-angle", `${state.angle}rad`);
+  }
+}
+
+function hideCameraIndicators(): void {
+  cameraIndicatorLayer.hidden = true;
+  for (const element of Object.values(cameraIndicatorElements)) {
+    element?.setAttribute("hidden", "");
+  }
 }
 
 function updatePowerMeter(charge: number): void {
@@ -1534,11 +1593,17 @@ function switchRenderer(next: RendererMode): void {
   rendererMode = mounted.mode;
   rendererFellBack = mounted.fellBack;
   renderer.setCameraMode?.(cameraMode);
+  renderer.setQuality?.(visualQuality);
   saveRendererMode(rendererMode);
+  if (rendererMode !== "3d") {
+    delete pitchStage.dataset.quality;
+  }
   updateRendererControl();
   updateCameraControl();
+  updateQualityControl();
   if (latestView !== null) {
     renderer.render(latestView);
+    updateCameraIndicators();
   }
   renderer.resize();
   if (rendererFellBack) {
@@ -1560,6 +1625,15 @@ function updateCameraControl(): void {
     rendererMode === "3d"
       ? (option?.description ?? "Gameplay camera")
       : "Switch to the 3D view to change the camera";
+}
+
+function updateQualityControl(): void {
+  settingsQualitySelect.value = visualQuality;
+  settingsQualitySelect.disabled = rendererMode !== "3d";
+  settingsQualitySelect.title =
+    rendererMode === "3d"
+      ? "3D shadows, crowd and effects quality"
+      : "Switch to the 3D view to change quality";
 }
 
 function updateRendererControl(): void {

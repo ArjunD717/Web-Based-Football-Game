@@ -1,7 +1,20 @@
 // packages/client/src/render/renderer.ts
 import type { CameraMode } from "../camera/modes";
 import type { CameraInputBasis } from "../camera/types";
+import type { VisualQuality } from "./visualTuning";
 import type { MatchView } from "./view";
+
+/**
+ * A HUD arrow for an important world point that left the rendered frame.
+ * Coordinates are viewport fractions with the origin at the top-left.
+ */
+export interface ScreenIndicator {
+  readonly id: "ball" | "controlled";
+  readonly x: number;
+  readonly y: number;
+  /** Screen-space angle in radians; zero points right. */
+  readonly angle: number;
+}
 
 /**
  * M11 can swap this contract for a Three.js implementation without touching
@@ -15,4 +28,8 @@ export interface MatchRenderer {
   setCameraMode?(mode: CameraMode): void;
   /** Screen-relative pitch basis for converting local stick input. */
   inputBasis?(): CameraInputBasis | null;
+  /** Select a 3D quality preset; the 2D renderer ignores this. */
+  setQuality?(quality: VisualQuality): void;
+  /** Off-screen markers for the ball and controlled player. */
+  indicatorStates?(): readonly ScreenIndicator[];
 }
