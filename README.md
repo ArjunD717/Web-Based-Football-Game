@@ -232,7 +232,7 @@ Known M12 limitations (by design):
 - `pnpm start` still requires Node, pnpm and mkcert plus guest CA trust; it is
   not a standalone binary or container
 - The Three.js client bundle is still loaded with the lobby and exceeds Vite's
-  500 kB chunk warning threshold (about 189 kB gzip)
+  500 kB chunk warning threshold (about 192 kB gzip)
 
 ## Milestone 11 scope
 
@@ -270,7 +270,17 @@ Implemented:
 - Players are low-poly capsule rigs with team kits, shorts, socks, skin/hair
   variation, shirt numbers and a card marker. Local-space animation poses drive
   sprint lean, kick/header/volley, tackle/slide/fall, dribble and celebration
-  states; facing comes from the authoritative snapshot
+  states; facing comes from the authoritative snapshot. A render-only 1.22x
+  player scale and 1.45x ball scale improve readability without touching the
+  physics capsule or ball radius
+- The pitch now has corner flags and a low-cost procedural crowd stand around
+  all four sides. A fast-ball line trail, predicted landing ring for aerial
+  balls, and edge arrows for an off-screen ball or controlled player keep the
+  presentation readable from every gameplay camera
+- The Settings panel stores a **Low / Medium / High** 3D quality preset:
+  resolution cap, shadow-map size, crowd, trail, landing marker and edge
+  vignette. Changes apply to the live renderer and survive reloads; the 2D
+  renderer disables the control
 - The canvas 2D renderer remains the practice renderer and the automatic
   fallback. WebGL failures are caught, reported as a toast and keep the match
   playable. Renderer mode survives reloads and can be overridden with
@@ -286,8 +296,9 @@ Implemented:
   broadcast weighting/dead-zone/framing, all six gameplay camera framings,
   camera-to-pitch input mapping, director stacking/replacement and blends,
   context trigger priority/deduplication, kick-off/restart/celebration/incident
-  framing, tuning editor coverage, pitch layout/asset-free mesh construction and
-  replay-buffer goal detection, trimming and playback sampling
+  framing, tuning editor coverage, visual quality presets, off-screen edge
+  projection, aerial landing prediction, pitch layout/asset-free mesh
+  construction and replay-buffer goal detection, trimming and playback sampling
 
 Known M11 limitations (by design):
 
@@ -295,8 +306,11 @@ Known M11 limitations (by design):
   assets, facial animation or broadcast-quality cutscenes
 - The Player camera is a damped chase view, not a collision-aware third-person
   rig; it can pass close to the stand geometry at the edges of the pitch
-- Off-screen indicators and the render-only player/ball scale pass are not
-  implemented yet; the controlled-player ring remains the primary locator
+- The crowd is a flat procedural texture band, not seated 3D geometry or a
+  modelled roof; Low quality hides it and real shadow maps entirely
+- Edge arrows cover the ball and controlled player only. They are HUD primitives,
+  not a live tactical mini-map, and may overlap when both points leave on the
+  same edge
 - Camera-relative movement is applied by the desktop client. The phone
   controller has no view of the match, so its stick continues to send pitch
   axes directly
@@ -871,7 +885,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 56 test files and 532 tests passing.
+13. `pnpm check`: expect 59 test files and 542 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -883,8 +897,13 @@ The two-minute match check:
     survives a reload. In End to end and Player, push the stick toward the top
     of the screen and confirm the player moves toward the far end, not sideways.
     Switch to **2D view** and confirm the Camera picker disables. Switch back and
-    confirm the 3D camera returns. Append `?renderer=2d` to load the canvas
-    renderer directly.
+    confirm the 3D camera returns. In Player camera, pass the ball away and
+    confirm the white ball arrow appears at the screen edge; switch away from a
+    player during a camera cut and confirm the orange controlled-player arrow
+    appears. Open **Settings** before kick-off and try **3D quality** Low,
+    Medium and High; confirm Low hides the crowd, shadows and vignette, High
+    restores them, and the choice survives a reload. Append `?renderer=2d` to
+    load the canvas renderer directly.
 15. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
     replay banner, progress and stop control. Toggle **Sound** and confirm the
     whistle/kick/goal effects and crowd bed respect the setting. Disable WebGL
