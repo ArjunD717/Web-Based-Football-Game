@@ -287,6 +287,11 @@ Implemented:
   all four sides. A fast-ball line trail, predicted landing ring for aerial
   balls, and edge arrows for an off-screen ball or controlled player keep the
   presentation readable from every gameplay camera
+- A confirmed score change ripples the conceding goal net for **1.4 s** and
+  pulses the crowd for **2.8 s**. The net deformation is local vertex motion on
+  the existing net planes; it does not alter ball collisions, the goal-line
+  law or the authoritative score. The same effect replays when a stored goal
+  clip crosses its score change
 - The Settings panel stores a **Low / Medium / High** 3D quality preset:
   resolution cap, shadow-map size, crowd, trail, landing marker and edge
   vignette. Changes apply to the live renderer and survive reloads; the 2D
@@ -314,9 +319,10 @@ Implemented:
   framing, tuning editor coverage, visual quality presets, off-screen edge
   projection, aerial landing prediction, articulated sprint/kick/header pose
   progression, goalkeeper dive poses and save-state triggers, joint
-  cross-fading, dive-state wire round-trips, pitch layout/asset-free mesh
-  construction and replay-buffer goal detection, trimming, full-capture replay,
-  goal-clip preservation and playback sampling
+  cross-fading, dive-state wire round-trips, goal ripple/crowd envelopes, net
+  vertex displacement, pitch layout/asset-free mesh construction and
+  replay-buffer goal detection, trimming, full-capture replay, goal-clip
+  preservation and playback sampling
 
 Known M11 limitations (by design):
 
@@ -330,6 +336,9 @@ Known M11 limitations (by design):
   rig; it can pass close to the stand geometry at the edges of the pitch
 - The crowd is a flat procedural texture band, not seated 3D geometry or a
   modelled roof; Low quality hides it and real shadow maps entirely
+- Goal-net motion is a decaying vertex ripple on four flat net planes. There
+  is no cloth simulation, per-ball contact point, net collision or individual
+  crowd animation; the crowd reaction is a shared material pulse
 - Edge arrows cover the ball and controlled player only. They are HUD primitives,
   not a live tactical mini-map, and may overlap when both points leave on the
   same edge
@@ -908,7 +917,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 60 test files and 550 tests passing.
+13. `pnpm check`: expect 62 test files and 553 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -931,14 +940,16 @@ The two-minute match check:
     Medium and High; confirm Low hides the crowd, shadows and vignette, High
     restores them, and the choice survives a reload. Append `?renderer=2d` to
     load the canvas renderer directly.
-15. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
-    replay banner, progress and stop control. Press **Last 15s** to replay the
-    retained capture without a goal. Switch the replay camera between **TV**,
-    **Goal**, **Player** and **Drone**, then stop: the live gameplay camera
-    must return and the full-time statistics board must reappear if finished.
-    Toggle **Sound** and confirm the whistle/kick/goal effects and crowd bed
-    respect the setting. Disable WebGL in a test browser to verify the
-    automatic 2D fallback toast.
+15. Score a goal: watch the conceding net ripple and the crowd brighten before
+    pressing **Replay goal** (or `R`). Verify the slow-motion replay banner,
+    progress and stop control, and that the net ripple fires again as the clip
+    crosses the score change. Press **Last 15s** to replay the retained capture
+    without a goal. Switch the replay camera between **TV**, **Goal**,
+    **Player** and **Drone**, then stop: the live gameplay camera must return
+    and the full-time statistics board must reappear if finished. Toggle
+    **Sound** and confirm the whistle/kick/goal effects and crowd bed respect
+    the setting. Disable WebGL in a test browser to verify the automatic 2D
+    fallback toast.
 16. Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
     16.67 ms and `p95TickMs` stays below the budget during a live match.
 17. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish
