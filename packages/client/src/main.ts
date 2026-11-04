@@ -1109,7 +1109,7 @@ function updateStatsScreen(state: GameClientState): void {
     notes.push("Draw");
   }
   if (series !== null && !series.complete) {
-    notes.push("Second leg starts shortly");
+    notes.push("Host prepares the second leg");
   }
   const note = notes.join(" · ");
   const homeTicks = stats.home.possessionTicks;
