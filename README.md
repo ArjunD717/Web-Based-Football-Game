@@ -7,8 +7,8 @@ server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
 time, extra time, shootouts, VAR-lite and full-time statistics, an animated
-Three.js match presentation, local goal replays and procedural audio. M12 was
-the release pass: one-command packaging, full-match balance validation,
+Three.js match presentation, multi-angle local replays and procedural audio.
+M12 was the release pass: one-command packaging, full-match balance validation,
 server/client performance profiling, bug fixes and final documentation. M13
 adds host-owned referee/AI rules, a live rules readout and a host-only manual
 pause that survives reloads and reconnects.
@@ -285,10 +285,15 @@ Implemented:
   fallback. WebGL failures are caught, reported as a toast and keep the match
   playable. Renderer mode survives reloads and can be overridden with
   `?renderer=2d` / `?renderer=3d`
-- The client keeps a bounded 12-second ring of rendered match views. When the
-  scoreline changes it freezes the preceding 5.5 seconds; the **Replay goal**
-  button (or `R`) plays this locally in a slow-motion 3D replay with a progress
-  banner and a stop button. The live server simulation keeps running
+- The client keeps a bounded **15-second** ring of rendered match views. A
+  score freezes the preceding **8 seconds**; the **Replay goal** button (or
+  `R`) plays that clip locally in slow motion. **Last 15s** replays the whole
+  retained capture at any point in the match. While a replay is active the
+  banner exposes four cameras — **TV**, **Goal**, **Player** and **Drone** —
+  and the replay director suspends automatic context cuts. The live server
+  simulation keeps running; the full-time statistics board and HUD overlays
+  are hidden for the duration. The 2D renderer replays the same frames without
+  the camera picker
 - Procedural Web Audio supplies kick/whistle/goal sounds and a quiet crowd bed
   with no bundled audio assets. The **Sound on/off** control persists its
   preference and the context unlocks on the first pointer/key gesture
@@ -298,7 +303,8 @@ Implemented:
   context trigger priority/deduplication, kick-off/restart/celebration/incident
   framing, tuning editor coverage, visual quality presets, off-screen edge
   projection, aerial landing prediction, pitch layout/asset-free mesh
-  construction and replay-buffer goal detection, trimming and playback sampling
+  construction and replay-buffer goal detection, trimming, full-capture
+  replay, goal-clip preservation and playback sampling
 
 Known M11 limitations (by design):
 
@@ -314,9 +320,9 @@ Known M11 limitations (by design):
 - Camera-relative movement is applied by the desktop client. The phone
   controller has no view of the match, so its stick continues to send pitch
   axes directly
-- Replays are local to the client, cover the last goal only, render through the
-  3D scene even if the pitch is currently in 2D mode, and are not persisted or
-  shared over the network
+- Replays are local to the client, use the selected renderer, and are not
+  persisted, exported or shared over the network. The 2D renderer has no
+  replay-camera selection; the angle buttons are hidden
 - Audio is synthesized; there is no commentary, music, positional audio or
   pre-match crowd recording. Browsers require the first user gesture before
   sound can start
@@ -742,7 +748,7 @@ Not implemented yet (by milestone design):
   call-up pipeline and playable national teams, but the bundled dataset is
   still clearly marked fake sample data
 - Real animation assets (GLTF/skeletal), commentary audio, server-side replay
-  clips/export, broadcast camera cuts and a career/competition mode
+  clips/export and a career/competition mode
 - Local prediction/reconciliation; controls feel the RTT on a LAN
 - Authentication. The server is intended for a trusted private LAN only.
 
@@ -885,7 +891,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 59 test files and 542 tests passing.
+13. `pnpm check`: expect 59 test files and 544 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -905,9 +911,13 @@ The two-minute match check:
     restores them, and the choice survives a reload. Append `?renderer=2d` to
     load the canvas renderer directly.
 15. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
-    replay banner, progress and stop control. Toggle **Sound** and confirm the
-    whistle/kick/goal effects and crowd bed respect the setting. Disable WebGL
-    in a test browser to verify the automatic 2D fallback toast.
+    replay banner, progress and stop control. Press **Last 15s** to replay the
+    retained capture without a goal. Switch the replay camera between **TV**,
+    **Goal**, **Player** and **Drone**, then stop: the live gameplay camera
+    must return and the full-time statistics board must reappear if finished.
+    Toggle **Sound** and confirm the whistle/kick/goal effects and crowd bed
+    respect the setting. Disable WebGL in a test browser to verify the
+    automatic 2D fallback toast.
 16. Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
     16.67 ms and `p95TickMs` stays below the budget during a live match.
 17. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish
