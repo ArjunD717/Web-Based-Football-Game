@@ -48,6 +48,7 @@ function view(options: {
   const nearestX = options.nearestX ?? ballX;
   const spread = options.spread ?? 4;
   return {
+    matchId: "test-match",
     pitch,
     tick: 1,
     elapsedSeconds: 1 / 60,
@@ -78,6 +79,7 @@ function view(options: {
     },
     selfSide: options.selfSide ?? "home",
     half: options.half ?? 1,
+    match: null,
   };
 }
 

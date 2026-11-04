@@ -19,9 +19,11 @@ export class WireViewBuilder {
   private readonly away: RenderTeam;
   private readonly tickHz: number;
   private readonly selfSide: "home" | "away" | null;
+  private readonly matchId: string;
 
   constructor(setup: MatchSetupWire, selfSide: "home" | "away" | null = null) {
     this.pitch = createPitch(setup.pitch);
+    this.matchId = setup.matchId;
     this.tickHz = setup.tickHz;
     this.selfSide = selfSide;
     this.home = {
@@ -95,6 +97,7 @@ export class WireViewBuilder {
           );
     const targetId = nextTarget?.id ?? null;
     return {
+      matchId: this.matchId,
       pitch: this.pitch,
       tick: frame.tick,
       elapsedSeconds: frame.tick / this.tickHz,
@@ -125,6 +128,7 @@ export class WireViewBuilder {
       },
       selfSide: this.selfSide,
       half: frame.match.half,
+      match: frame.match,
     };
   }
 

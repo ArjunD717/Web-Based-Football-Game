@@ -6,6 +6,7 @@ import type { MatchRenderer } from "./renderer";
 import { CameraDebugOverlay } from "../camera/CameraDebugOverlay";
 import { CameraDirector } from "../camera/CameraDirector";
 import { CAMERA_TUNING } from "../camera/cameraTuning";
+import { ContextCameraController } from "../camera/context/ContextCameraController";
 import { BroadcastShot } from "../camera/shots/broadcast";
 import type { CameraPose, CameraRenderState } from "../camera/types";
 import { pitchToWorld } from "./three-layout";
@@ -41,11 +42,13 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private width = 1;
   private height = 1;
   private lastRenderAtMs: number | null = null;
+  private lastMatchId: string | null = null;
   private lastFovDegrees = CAMERA_TUNING.broadcast.fovDegrees;
   private lastNearClipM = CAMERA_TUNING.camera.nearClipM;
   private lastFarClipM = CAMERA_TUNING.camera.farClipM;
   private readonly cameraDirector = new CameraDirector();
   private readonly broadcastShot = new BroadcastShot();
+  private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -113,6 +116,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
     window.addEventListener("resize", this.onWindowResize);
     this.resize();
+    this.contextController = new ContextCameraController(this.cameraDirector);
     this.cameraDebug = new CameraDebugOverlay();
   }
 
@@ -136,6 +140,12 @@ export class ThreeMatchRenderer implements MatchRenderer {
     if (this.pitch === null || this.pitchKey !== pitchKey(view.pitch)) {
       this.installPitch(view.pitch);
     }
+    if (view.matchId !== this.lastMatchId) {
+      this.lastMatchId = view.matchId;
+      this.cameraDirector.reset();
+      this.contextController.reset();
+      this.lastRenderAtMs = null;
+    }
 
     this.syncPlayers(view);
     this.updateBall(view);
@@ -155,7 +165,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
     };
     if (this.cameraDirector.depth === 0) {
       this.cameraDirector.setBase(this.broadcastShot, state);
+      // Establish the base pose before a context shot can blend away from it.
+      this.cameraDirector.update(0, state);
     }
+    this.contextController.update(dt, state);
     const frame = this.cameraDirector.update(dt, state);
     if (frame !== null) {
       this.applyCameraPose(frame.pose);
@@ -168,6 +181,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
   destroy(): void {
     this.resizeObserver.disconnect();
     window.removeEventListener("resize", this.onWindowResize);
+    this.contextController.destroy();
     this.cameraDebug.destroy();
     disposeObject(this.scene);
     this.players.clear();
@@ -186,6 +200,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.pitch = pitch;
     this.pitchKey = pitchKey(pitch);
     this.cameraDirector.reset();
+    this.contextController.reset();
     this.lastRenderAtMs = null;
   }
 

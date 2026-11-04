@@ -253,6 +253,12 @@ Implemented:
 - Press `F2` during a match to open the live camera panel. It shows the active
   shot, target, FOV, zoom and blend state, and exposes every camera tuning
   value as a slider (`packages/client/src/camera/cameraTuning.ts`)
+- Automatic presentation cuts run from authoritative phase, restart and event
+  metadata without touching the simulation: a wide kick-off establishing shot,
+  dedicated corner/free-kick/penalty/throw-in/goal-kick framings, a low
+  scorer orbit, foul/card/injury push-ins, substitution and half-time calm
+  views, and a slow full-time orbit. Every cut has its own duration and blend;
+  `Enter` or the on-screen control skips it back to broadcast
 - Players are low-poly capsule rigs with team kits, shorts, socks, skin/hair
   variation, shirt numbers and a card marker. Local-space animation poses drive
   sprint lean, kick/header/volley, tackle/slide/fall, dribble and celebration
@@ -269,19 +275,19 @@ Implemented:
   with no bundled audio assets. The **Sound on/off** control persists its
   preference and the context unlocks on the first pointer/key gesture
 - Unit tests cover renderer pose mapping, critically damped camera springs,
-  broadcast weighting/dead-zone/framing, director stacking and blends, tuning
-  editor coverage, pitch layout/asset-free mesh construction and replay-buffer
-  goal detection, trimming and playback sampling
+  broadcast weighting/dead-zone/framing, director stacking and blends, context
+  trigger priority/deduplication, kick-off/restart/celebration/incident framing,
+  tuning editor coverage, pitch layout/asset-free mesh construction and
+  replay-buffer goal detection, trimming and playback sampling
 
 Known M11 limitations (by design):
 
 - Players are procedural low-poly rigs; there are no GLTF/skeletal animation
   assets, facial animation or broadcast-quality cutscenes
-- Broadcast is currently the only selectable shot. Context cuts (goals,
-  corners, free kicks, penalties, cards) and the alternate tele/wide/co-op/
-  player/drone cameras are the next camera milestone
+- Automatic context cuts are in; the alternate tele/wide/co-op/player/drone
+  cameras are still the next camera milestone
 - Camera-relative movement, off-screen indicators and the render-only player/
-  ball scale pass are not part of this camera step yet
+  ball scale pass are not part of the context-shot step yet
 - Replays are local to the client, cover the last goal only, render through the
   3D scene even if the pitch is currently in 2D mode, and are not persisted or
   shared over the network
@@ -853,15 +859,16 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 53 test files and 510 tests passing.
-14. Verify the 3D presentation: the match opens in 3D with the side-on
-    broadcast camera, not the old full-pitch fit. The controlled player and ball
-    stay in frame during a run, short touches do not shake the view, and
-    resizing keeps the same framing. Press `F2` and confirm the live camera
-    panel shows the shot, target, FOV and zoom. Edit a value and see it take
-    effect immediately. The **2D view** button switches renderers. Reload and
-    confirm the mode persisted. Append `?renderer=2d` to load the canvas
-    renderer directly.
+13. `pnpm check`: expect 55 test files and 522 tests passing.
+14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
+    establishing shot that settles into the side-on broadcast camera. The
+    controlled player and ball stay in frame during a run, short touches do not
+    shake the view, and resizing keeps the same framing. Press `F2` and confirm
+    the live camera panel shows the shot, target, FOV and zoom. Edit a value and
+    see it take effect immediately. Press `Enter` during a context shot and
+    confirm it returns to broadcast. The **2D view** button switches renderers.
+    Reload and confirm the mode persisted. Append `?renderer=2d` to load the
+    canvas renderer directly.
 15. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
     replay banner, progress and stop control. Toggle **Sound** and confirm the
     whistle/kick/goal effects and crowd bed respect the setting. Disable WebGL

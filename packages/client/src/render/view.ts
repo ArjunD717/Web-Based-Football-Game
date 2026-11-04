@@ -5,6 +5,7 @@ import type {
   PlayerStateName,
   TeamSide,
 } from "@fb/sim";
+import type { SnapshotMatch } from "@fb/shared";
 
 export interface RenderTeamColors {
   readonly primary: string;
@@ -48,6 +49,7 @@ export interface RenderBall {
 
 /** Network-agnostic presentation frame consumed by every renderer. */
 export interface MatchView {
+  readonly matchId: string | null;
   readonly pitch: Pitch;
   readonly tick: number;
   readonly elapsedSeconds: number;
@@ -58,11 +60,14 @@ export interface MatchView {
   readonly selfSide: TeamSide | null;
   /** 1-4, used to select the attacking end after a half-time swap. */
   readonly half: number;
+  /** Authoritative phase/restart/event context used by presentation shots. */
+  readonly match: SnapshotMatch | null;
 }
 
 /** Adapter for the local practice page, which owns a full MatchState. */
 export function matchStateToView(state: MatchState): MatchView {
   return {
+    matchId: null,
     pitch: state.pitch,
     tick: state.tick,
     elapsedSeconds: state.elapsedSeconds,
@@ -115,5 +120,6 @@ export function matchStateToView(state: MatchState): MatchView {
     },
     selfSide: null,
     half: state.referee.half,
+    match: null,
   };
 }
