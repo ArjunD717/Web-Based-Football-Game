@@ -5,10 +5,19 @@ import type { Pitch } from "@fb/sim";
 import type { MatchRenderer } from "./renderer";
 import { CameraDebugOverlay } from "../camera/CameraDebugOverlay";
 import { CameraDirector } from "../camera/CameraDirector";
+import { cameraGroundBasis } from "../camera/cameraMath";
 import { CAMERA_TUNING } from "../camera/cameraTuning";
 import { ContextCameraController } from "../camera/context/ContextCameraController";
-import { BroadcastShot } from "../camera/shots/broadcast";
-import type { CameraPose, CameraRenderState } from "../camera/types";
+import {
+  createCameraShot,
+  type CameraMode,
+} from "../camera/modes";
+import type {
+  CameraInputBasis,
+  CameraPose,
+  CameraRenderState,
+  CameraShot,
+} from "../camera/types";
 import { pitchToWorld } from "./three-layout";
 import { createPitchVisual } from "./three-pitch";
 import { PlayerRig } from "./three-player";
@@ -47,7 +56,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private lastNearClipM = CAMERA_TUNING.camera.nearClipM;
   private lastFarClipM = CAMERA_TUNING.camera.farClipM;
   private readonly cameraDirector = new CameraDirector();
-  private readonly broadcastShot = new BroadcastShot();
+  private cameraMode: CameraMode = "broadcast";
+  private baseShot: CameraShot = createCameraShot(this.cameraMode);
+  private lastCameraState: CameraRenderState | null = null;
+  private lastCameraPose: CameraPose | null = null;
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -144,6 +156,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.lastMatchId = view.matchId;
       this.cameraDirector.reset();
       this.contextController.reset();
+      this.lastCameraPose = null;
       this.lastRenderAtMs = null;
     }
 
@@ -163,19 +176,42 @@ export class ThreeMatchRenderer implements MatchRenderer {
       half: view.half,
       pitch: view.pitch,
     };
+    this.lastCameraState = state;
     if (this.cameraDirector.depth === 0) {
-      this.cameraDirector.setBase(this.broadcastShot, state);
+      this.cameraDirector.setBase(this.baseShot, state);
       // Establish the base pose before a context shot can blend away from it.
       this.cameraDirector.update(0, state);
     }
     this.contextController.update(dt, state);
     const frame = this.cameraDirector.update(dt, state);
     if (frame !== null) {
+      this.lastCameraPose = frame.pose;
       this.applyCameraPose(frame.pose);
       this.cameraDebug.update(frame);
     }
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  setCameraMode(mode: CameraMode): void {
+    if (mode === this.cameraMode) {
+      return;
+    }
+    this.cameraMode = mode;
+    this.baseShot = createCameraShot(mode);
+    if (this.lastCameraState !== null) {
+      this.cameraDirector.replaceBase(
+        this.baseShot,
+        this.lastCameraState,
+        CAMERA_TUNING.director.modeSwitchBlendSeconds,
+      );
+    }
+  }
+
+  inputBasis(): CameraInputBasis | null {
+    return this.lastCameraPose === null
+      ? null
+      : cameraGroundBasis(this.lastCameraPose);
   }
 
   destroy(): void {
@@ -201,6 +237,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.pitchKey = pitchKey(pitch);
     this.cameraDirector.reset();
     this.contextController.reset();
+    this.lastCameraPose = null;
     this.lastRenderAtMs = null;
   }
 

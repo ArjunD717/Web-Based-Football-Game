@@ -38,6 +38,14 @@ import {
   type RendererMode,
 } from "./render/factory";
 import type { MatchView, RenderPlayer } from "./render/view";
+import { movementToWorld } from "./camera/cameraMath";
+import {
+  CAMERA_MODES,
+  loadCameraMode,
+  parseCameraMode,
+  saveCameraMode,
+  type CameraMode,
+} from "./camera/modes";
 import { describeMatchEvent, formatCardCounts } from "./match/event-label";
 import { SubstitutionPanel } from "./match/substitution-panel";
 import { MatchAudio } from "./audio/match-audio";
@@ -136,6 +144,8 @@ const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
 const pauseMatchButton = byId<HTMLButtonElement>("pause-match");
 const rendererToggleButton =
   byId<HTMLButtonElement>("renderer-toggle");
+const cameraModeSelect =
+  byId<HTMLSelectElement>("camera-mode");
 const replayButton = byId<HTMLButtonElement>("replay-button");
 const replayStopButton = byId<HTMLButtonElement>("replay-stop");
 const replayBanner = byId<HTMLElement>("replay-banner");
@@ -178,6 +188,7 @@ const toast = byId<HTMLElement>("toast");
 let currentState: GameClientState | null = null;
 let toastTimer: number | null = null;
 let lastQrRoomCode: string | null = null;
+let cameraMode: CameraMode = loadCameraMode();
 
 const substitutionPanel = new SubstitutionPanel({
   onSubstitute: (outId, inId) => client.substitute(outId, inId),
@@ -194,6 +205,22 @@ const teamEditor = new TeamEditor({
     }
   },
 });
+
+for (const option of CAMERA_MODES) {
+  const element = document.createElement("option");
+  element.value = option.id;
+  element.textContent = option.label;
+  element.title = option.description;
+  cameraModeSelect.append(element);
+}
+cameraModeSelect.addEventListener("change", () => {
+  cameraMode = parseCameraMode(cameraModeSelect.value);
+  saveCameraMode(cameraMode);
+  renderer.setCameraMode?.(cameraMode);
+  updateCameraControl();
+});
+updateCameraControl();
+renderer.setCameraMode?.(cameraMode);
 
 updateRendererControl();
 updateAudioControl();
@@ -688,7 +715,7 @@ function updateControlLoop(now: number, loopDt: number): void {
   ) {
     const frame = desktopControls.read(now);
     lastControlFrame = frame;
-    client.sendInput(frame);
+    client.sendInput(cameraRelativeFrame(frame));
     controlAccumulator -= tickSeconds;
     steps += 1;
   }
@@ -697,6 +724,19 @@ function updateControlLoop(now: number, loopDt: number): void {
   }
 
   updatePowerMeter(lastControlFrame?.chargePower ?? 0);
+}
+
+/**
+ * Keyboard and gamepad sticks are screen-relative. Rotate them into pitch
+ * coordinates with the rendered camera so "up" is always away from the view.
+ */
+function cameraRelativeFrame(frame: ControlFrame): ControlFrame {
+  const basis = renderer.inputBasis?.();
+  if (basis === null || basis === undefined) {
+    return frame;
+  }
+  const world = movementToWorld(frame.moveX, frame.moveY, basis);
+  return { ...frame, moveX: world.x, moveY: world.y };
 }
 
 function updatePowerMeter(charge: number): void {
@@ -1493,8 +1533,10 @@ function switchRenderer(next: RendererMode): void {
   renderer = mounted.renderer;
   rendererMode = mounted.mode;
   rendererFellBack = mounted.fellBack;
+  renderer.setCameraMode?.(cameraMode);
   saveRendererMode(rendererMode);
   updateRendererControl();
+  updateCameraControl();
   if (latestView !== null) {
     renderer.render(latestView);
   }
@@ -1508,6 +1550,16 @@ function updateAudioControl(): void {
   audioToggleButton.textContent = audio.isEnabled ? "Sound on" : "Sound off";
   audioToggleButton.setAttribute("aria-pressed", String(audio.isEnabled));
   settingsSoundButton.setAttribute("aria-checked", String(audio.isEnabled));
+}
+
+function updateCameraControl(): void {
+  const option = CAMERA_MODES.find((entry) => entry.id === cameraMode);
+  cameraModeSelect.value = cameraMode;
+  cameraModeSelect.disabled = rendererMode !== "3d";
+  cameraModeSelect.title =
+    rendererMode === "3d"
+      ? (option?.description ?? "Gameplay camera")
+      : "Switch to the 3D view to change the camera";
 }
 
 function updateRendererControl(): void {

@@ -232,7 +232,7 @@ Known M12 limitations (by design):
 - `pnpm start` still requires Node, pnpm and mkcert plus guest CA trust; it is
   not a standalone binary or container
 - The Three.js client bundle is still loaded with the lobby and exceeds Vite's
-  500 kB chunk warning threshold (about 171 kB gzip)
+  500 kB chunk warning threshold (about 189 kB gzip)
 
 ## Milestone 11 scope
 
@@ -258,7 +258,15 @@ Implemented:
   dedicated corner/free-kick/penalty/throw-in/goal-kick framings, a low
   scorer orbit, foul/card/injury push-ins, substitution and half-time calm
   views, and a slow full-time orbit. Every cut has its own duration and blend;
-  `Enter` or the on-screen control skips it back to broadcast
+  `Enter` or the on-screen control skips it back to the selected gameplay camera
+- The match header has a **Camera** picker with Broadcast, Tele, Wide, End to
+  end, Player and Drone. Each is a separate shot with its own framing and
+  tuning values; the choice persists in `localStorage`. End to end follows from
+  behind the attacked goal, Player is a damped chase camera and Drone is the
+  high tactical view. Keyboard and gamepad sticks are rotated by the rendered
+  camera basis before they reach the server, so screen-up is always away from
+  the current view, including during half-time transitions. The picker is
+  disabled while the 2D renderer is active; the 2D input path is unchanged
 - Players are low-poly capsule rigs with team kits, shorts, socks, skin/hair
   variation, shirt numbers and a card marker. Local-space animation poses drive
   sprint lean, kick/header/volley, tackle/slide/fall, dribble and celebration
@@ -275,19 +283,23 @@ Implemented:
   with no bundled audio assets. The **Sound on/off** control persists its
   preference and the context unlocks on the first pointer/key gesture
 - Unit tests cover renderer pose mapping, critically damped camera springs,
-  broadcast weighting/dead-zone/framing, director stacking and blends, context
-  trigger priority/deduplication, kick-off/restart/celebration/incident framing,
-  tuning editor coverage, pitch layout/asset-free mesh construction and
+  broadcast weighting/dead-zone/framing, all six gameplay camera framings,
+  camera-to-pitch input mapping, director stacking/replacement and blends,
+  context trigger priority/deduplication, kick-off/restart/celebration/incident
+  framing, tuning editor coverage, pitch layout/asset-free mesh construction and
   replay-buffer goal detection, trimming and playback sampling
 
 Known M11 limitations (by design):
 
 - Players are procedural low-poly rigs; there are no GLTF/skeletal animation
   assets, facial animation or broadcast-quality cutscenes
-- Automatic context cuts are in; the alternate tele/wide/co-op/player/drone
-  cameras are still the next camera milestone
-- Camera-relative movement, off-screen indicators and the render-only player/
-  ball scale pass are not part of the context-shot step yet
+- The Player camera is a damped chase view, not a collision-aware third-person
+  rig; it can pass close to the stand geometry at the edges of the pitch
+- Off-screen indicators and the render-only player/ball scale pass are not
+  implemented yet; the controlled-player ring remains the primary locator
+- Camera-relative movement is applied by the desktop client. The phone
+  controller has no view of the match, so its stick continues to send pitch
+  axes directly
 - Replays are local to the client, cover the last goal only, render through the
   3D scene even if the pitch is currently in 2D mode, and are not persisted or
   shared over the network
@@ -859,16 +871,20 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 55 test files and 522 tests passing.
+13. `pnpm check`: expect 56 test files and 532 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
-    establishing shot that settles into the side-on broadcast camera. The
-    controlled player and ball stay in frame during a run, short touches do not
-    shake the view, and resizing keeps the same framing. Press `F2` and confirm
-    the live camera panel shows the shot, target, FOV and zoom. Edit a value and
-    see it take effect immediately. Press `Enter` during a context shot and
-    confirm it returns to broadcast. The **2D view** button switches renderers.
-    Reload and confirm the mode persisted. Append `?renderer=2d` to load the
-    canvas renderer directly.
+    establishing shot that settles into the selected camera. The controlled
+    player and ball stay in frame during a run, short touches do not shake the
+    view, and resizing keeps the same framing. Press `F2` and confirm the live
+    camera panel shows the shot, target, FOV and zoom. Edit a value and see it
+    take effect immediately. Press `Enter` during a context shot and confirm it
+    returns to the selected camera. Use the **Camera** picker to try Tele, Wide,
+    End to end, Player and Drone; confirm the view changes and the choice
+    survives a reload. In End to end and Player, push the stick toward the top
+    of the screen and confirm the player moves toward the far end, not sideways.
+    Switch to **2D view** and confirm the Camera picker disables. Switch back and
+    confirm the 3D camera returns. Append `?renderer=2d` to load the canvas
+    renderer directly.
 15. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
     replay banner, progress and stop control. Toggle **Sound** and confirm the
     whistle/kick/goal effects and crowd bed respect the setting. Disable WebGL

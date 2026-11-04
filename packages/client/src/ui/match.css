@@ -154,6 +154,36 @@ body[data-view="match"] ::selection {
   outline-color: var(--ui-focus);
 }
 
+.match-camera {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.match-camera__label {
+  color: var(--ui-muted);
+  font-size: var(--ui-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--ui-tracking-label);
+  text-transform: uppercase;
+}
+
+.match-camera .ui-select {
+  width: auto;
+  min-height: 2.1rem;
+  padding: 0.35rem 1.4rem 0.35rem 0.55rem;
+  border-color: var(--ui-line);
+  background-color: var(--ui-carbon);
+  font-size: var(--ui-text-xs);
+}
+
+.match-camera .ui-select:disabled {
+  color: var(--ui-muted);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* Scoreboard ------------------------------------------------------------- */
 .match-scoreboard {
   position: relative;
@@ -1348,6 +1378,10 @@ body[data-view="match"] ::selection {
     padding-inline: 0.55rem;
   }
 
+  .match-camera__label {
+    display: none;
+  }
+
   .match-team__name {
     font-size: clamp(1.2rem, 2.8vw, 2rem);
   }
@@ -1390,6 +1424,11 @@ body[data-view="match"] ::selection {
     flex: 0 1 auto;
     min-height: 2.75rem;
     padding: 0.35rem 0.5rem;
+    font-size: 0.6875rem;
+  }
+
+  .match-camera .ui-select {
+    min-height: 2.75rem;
     font-size: 0.6875rem;
   }
 
