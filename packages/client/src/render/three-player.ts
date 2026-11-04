@@ -9,132 +9,280 @@ import { VISUAL_TUNING } from "./visualTuning";
 import type { RenderPlayer, RenderTeamColors } from "./view";
 
 export interface PlayerPose {
+  /** Hip rotation around the lateral axis; positive swings forward. */
   readonly leftLeg: number;
   readonly rightLeg: number;
+  /** Knee flexion; negative bends the lower leg behind the thigh. */
+  readonly leftKnee: number;
+  readonly rightKnee: number;
+  /** Shoulder rotation around the lateral axis; positive swings forward. */
   readonly leftArm: number;
   readonly rightArm: number;
+  /** Elbow flexion; positive brings the forearm forward. */
+  readonly leftElbow: number;
+  readonly rightElbow: number;
   readonly bodyY: number;
+  /** Sideways tilt used by falls and slides. */
   readonly bodyTilt: number;
+  /** Forward/back lean around the local lateral axis. */
   readonly bodyLean: number;
+  /** Counter-rotation of the torso against the legs. */
+  readonly bodyTwist: number;
+  /** Nod around the neck's lateral axis. */
+  readonly headPitch: number;
+  /** Head turn toward the running direction. */
+  readonly headYaw: number;
+}
+
+const clamp01 = (value: number): number => clamp(value, 0, 1);
+
+const smoothstep = (edge0: number, edge1: number, value: number): number => {
+  const t = clamp01((value - edge0) / Math.max(0.0001, edge1 - edge0));
+  return t * t * (3 - 2 * t);
+};
+
+const lerp = (from: number, to: number, t: number): number =>
+  from + (to - from) * t;
+
+interface KickPose {
+  readonly hip: number;
+  readonly knee: number;
+}
+
+/**
+ * One-shot kicking cycle. The state timer is 0.4 s, so the strike lands just
+ * after half-way and the follow-through settles without snapping back.
+ */
+function kickPose(stateAgeSeconds: number, power: number): KickPose {
+  const progress = clamp01(stateAgeSeconds / 0.4);
+  const swing = smoothstep(0.06, 0.55, progress);
+  const followThrough = smoothstep(0.78, 1, progress);
+  return {
+    hip: -0.45 + (1.6 + power * 0.25) * swing - 0.35 * followThrough,
+    knee: lerp(-0.9, -0.05, smoothstep(0.16, 0.52, progress)),
+  };
 }
 
 /**
  * Pose math is kept pure and separate from Three.js so animation behaviour can
- * be tested without a WebGL context.
+ * be tested without a WebGL context. `stateAgeSeconds` drives one-shot actions;
+ * locomotion is phase-driven and stamina-scaled.
  */
 export function computePlayerPose(
   state: PlayerStateName,
   phase: number,
   stamina: number,
+  stateAgeSeconds = 0,
 ): PlayerPose {
   const energy = 0.65 + clamp(stamina, 0, 1) * 0.35;
   const swing = Math.sin(phase);
   const idle = Math.sin(phase * 0.75);
 
   switch (state) {
-    case "jog":
+    case "jog": {
+      const kneeLift = 0.55 * energy;
       return {
-        leftLeg: swing * 0.52 * energy,
-        rightLeg: -swing * 0.52 * energy,
-        leftArm: -swing * 0.34 * energy,
-        rightArm: swing * 0.34 * energy,
+        leftLeg: swing * 0.5 * energy,
+        rightLeg: -swing * 0.5 * energy,
+        leftKnee: -0.12 - Math.max(0, swing) * kneeLift,
+        rightKnee: -0.12 - Math.max(0, -swing) * kneeLift,
+        leftArm: -swing * 0.36 * energy,
+        rightArm: swing * 0.36 * energy,
+        leftElbow: 0.25 + Math.max(0, -swing) * 0.18,
+        rightElbow: 0.25 + Math.max(0, swing) * 0.18,
         bodyY: Math.abs(swing) * 0.025,
         bodyTilt: 0,
-        bodyLean: -0.035,
+        bodyLean: -0.045,
+        bodyTwist: -swing * 0.055,
+        headPitch: 0.015,
+        headYaw: 0,
       };
-    case "sprint":
+    }
+    case "sprint": {
+      const kneeLift = 0.95 * energy;
       return {
-        leftLeg: swing * 0.9 * energy,
-        rightLeg: -swing * 0.9 * energy,
-        leftArm: -swing * 0.68 * energy,
-        rightArm: swing * 0.68 * energy,
+        leftLeg: swing * 0.88 * energy,
+        rightLeg: -swing * 0.88 * energy,
+        leftKnee: -0.17 - Math.max(0, swing) * kneeLift,
+        rightKnee: -0.17 - Math.max(0, -swing) * kneeLift,
+        leftArm: -swing * 0.7 * energy,
+        rightArm: swing * 0.7 * energy,
+        leftElbow: 0.72 + Math.max(0, -swing) * 0.3,
+        rightElbow: 0.72 + Math.max(0, swing) * 0.3,
         bodyY: Math.abs(swing) * 0.045,
         bodyTilt: 0,
-        bodyLean: -0.13,
+        bodyLean: -0.17,
+        bodyTwist: -swing * 0.1,
+        headPitch: 0.035,
+        headYaw: 0,
       };
-    case "dribble":
+    }
+    case "dribble": {
+      const kneeLift = 0.42 * energy;
       return {
         leftLeg: swing * 0.34 * energy,
         rightLeg: -swing * 0.34 * energy,
-        leftArm: -swing * 0.24 * energy,
-        rightArm: swing * 0.24 * energy,
+        leftKnee: -0.14 - Math.max(0, swing) * kneeLift,
+        rightKnee: -0.14 - Math.max(0, -swing) * kneeLift,
+        leftArm: -swing * 0.26 * energy,
+        rightArm: swing * 0.26 * energy,
+        leftElbow: 0.34 + Math.max(0, -swing) * 0.15,
+        rightElbow: 0.34 + Math.max(0, swing) * 0.15,
         bodyY: Math.abs(swing) * 0.02,
         bodyTilt: 0,
         bodyLean: -0.06,
+        bodyTwist: -swing * 0.04,
+        headPitch: 0.055,
+        headYaw: 0,
       };
-    case "pass":
+    }
+    case "pass": {
+      const kick = kickPose(stateAgeSeconds, 0.35);
+      return {
+        leftLeg: -0.14,
+        rightLeg: kick.hip * 0.62,
+        leftKnee: -0.18,
+        rightKnee: lerp(-0.65, -0.12, clamp01(kick.hip + 0.45)),
+        leftArm: -0.42,
+        rightArm: 0.3,
+        leftElbow: 0.3,
+        rightElbow: 0.24,
+        bodyY: 0.015,
+        bodyTilt: 0,
+        bodyLean: 0.055,
+        bodyTwist: 0.12,
+        headPitch: 0.04,
+        headYaw: -0.05,
+      };
+    }
     case "shoot":
-    case "volley":
+    case "volley": {
+      const volley = state === "volley";
+      const kick = kickPose(stateAgeSeconds, volley ? 1 : 0.7);
       return {
-        leftLeg: -0.22,
-        rightLeg: 1.05,
-        leftArm: -0.55,
-        rightArm: 0.4,
-        bodyY: 0.02,
-        bodyTilt: 0,
-        bodyLean: 0.04,
+        leftLeg: -0.16,
+        rightLeg: kick.hip,
+        leftKnee: -0.22,
+        rightKnee: kick.knee,
+        leftArm: volley ? -1.45 : -0.8,
+        rightArm: volley ? 1.15 : 0.48,
+        leftElbow: 0.38,
+        rightElbow: 0.52,
+        bodyY: volley ? 0.05 : 0.02,
+        bodyTilt: volley ? -0.12 : 0,
+        bodyLean: volley ? 0.02 : 0.09,
+        bodyTwist: volley ? -0.08 : 0.16,
+        headPitch: volley ? -0.1 : 0.04,
+        headYaw: 0,
       };
-    case "header":
+    }
+    case "header": {
+      const jump = Math.sin(Math.PI * clamp01(stateAgeSeconds / 0.32));
       return {
-        leftLeg: -0.08,
-        rightLeg: 0.08,
-        leftArm: -2.35,
-        rightArm: 2.35,
-        bodyY: 0.11,
+        leftLeg: -0.1,
+        rightLeg: 0.1,
+        leftKnee: -0.42,
+        rightKnee: -0.42,
+        leftArm: -2.3,
+        rightArm: 2.3,
+        leftElbow: 0.28,
+        rightElbow: 0.28,
+        bodyY: 0.02 + jump * 0.16,
         bodyTilt: 0,
-        bodyLean: 0,
+        bodyLean: -0.04,
+        bodyTwist: 0,
+        headPitch: -0.28 * jump,
+        headYaw: 0,
       };
-    case "tackle":
+    }
+    case "tackle": {
+      const lunge = Math.sin(Math.PI * clamp01(stateAgeSeconds / 0.32));
       return {
-        leftLeg: 0.42,
-        rightLeg: -0.35,
-        leftArm: -0.55,
-        rightArm: 0.5,
-        bodyY: -0.12,
+        leftLeg: 0.45,
+        rightLeg: -0.38,
+        leftKnee: -0.5 - lunge * 0.18,
+        rightKnee: -0.38,
+        leftArm: -0.62,
+        rightArm: 0.56,
+        leftElbow: 0.42,
+        rightElbow: 0.34,
+        bodyY: -0.1 * lunge,
         bodyTilt: 0,
-        bodyLean: 0.15,
+        bodyLean: 0.16 + lunge * 0.12,
+        bodyTwist: -0.08,
+        headPitch: 0.06,
+        headYaw: 0,
       };
+    }
     case "slide":
       return {
-        leftLeg: 0.28,
-        rightLeg: -0.2,
-        leftArm: -0.9,
-        rightArm: 0.8,
+        leftLeg: 0.32,
+        rightLeg: -0.26,
+        leftKnee: -0.18,
+        rightKnee: -0.7,
+        leftArm: -0.95,
+        rightArm: 0.82,
+        leftElbow: 0.24,
+        rightElbow: 0.3,
         bodyY: 0.28,
         bodyTilt: 1.35,
-        bodyLean: 0,
+        bodyLean: 0.06,
+        bodyTwist: 0,
+        headPitch: 0.2,
+        headYaw: 0,
       };
     case "fall":
     case "injured":
       return {
         leftLeg: 0.16,
         rightLeg: -0.12,
-        leftArm: -0.65,
-        rightArm: 0.62,
+        leftKnee: -0.36,
+        rightKnee: -0.12,
+        leftArm: -0.68,
+        rightArm: 0.64,
+        leftElbow: 0.16,
+        rightElbow: 0.22,
         bodyY: 0.22,
         bodyTilt: 1.38,
-        bodyLean: 0,
+        bodyLean: 0.04,
+        bodyTwist: 0,
+        headPitch: 0.22,
+        headYaw: 0,
       };
     case "celebrate":
       return {
         leftLeg: -0.12,
         rightLeg: 0.12,
+        leftKnee: -0.1,
+        rightKnee: -0.1,
         leftArm: -2.7,
         rightArm: 2.7,
+        leftElbow: 0.16 + Math.abs(Math.sin(phase)) * 0.1,
+        rightElbow: 0.16 + Math.abs(Math.sin(phase)) * 0.1,
         bodyY: Math.abs(Math.sin(phase * 2)) * 0.18,
         bodyTilt: 0,
         bodyLean: 0,
+        bodyTwist: Math.sin(phase * 0.5) * 0.12,
+        headPitch: -0.1,
+        headYaw: 0,
       };
     case "idle":
     default:
       return {
         leftLeg: 0,
         rightLeg: 0,
+        leftKnee: -0.035,
+        rightKnee: -0.035,
         leftArm: idle * 0.06,
         rightArm: -idle * 0.06,
+        leftElbow: 0.08 + Math.abs(idle) * 0.02,
+        rightElbow: 0.08 + Math.abs(idle) * 0.02,
         bodyY: idle * 0.015,
         bodyTilt: 0,
         bodyLean: 0,
+        bodyTwist: idle * 0.015,
+        headPitch: 0.01,
+        headYaw: idle * 0.04,
       };
   }
 }
@@ -144,15 +292,24 @@ const SKIN_TONES = [0xd7a16f, 0xb8794f, 0x8d5b3c, 0x6f452f, 0xe2b78a] as const;
 export class PlayerRig {
   readonly root = new THREE.Group();
   private readonly body = new THREE.Group();
+  private readonly upperBody = new THREE.Group();
+  private readonly head = new THREE.Group();
   private readonly leftLeg = new THREE.Group();
   private readonly rightLeg = new THREE.Group();
+  private readonly leftKnee = new THREE.Group();
+  private readonly rightKnee = new THREE.Group();
   private readonly leftArm = new THREE.Group();
   private readonly rightArm = new THREE.Group();
+  private readonly leftElbow = new THREE.Group();
+  private readonly rightElbow = new THREE.Group();
   private readonly ring: THREE.Mesh;
   private readonly switchRing: THREE.Mesh;
   private readonly marker: THREE.Sprite;
   private readonly shadow: THREE.Mesh;
   private readonly card: THREE.Mesh;
+  private lastState: PlayerStateName | null = null;
+  private stateStartedElapsed = 0;
+  private lastElapsed: number | null = null;
 
   constructor(player: RenderPlayer, colors: RenderTeamColors) {
     const skin = new THREE.MeshStandardMaterial({
@@ -224,42 +381,52 @@ export class PlayerRig {
     this.root.add(this.marker);
 
     const hipY = 0.92;
-    for (const [group, z] of [
-      [this.leftLeg, -0.13] as const,
-      [this.rightLeg, 0.13] as const,
-    ]) {
-      group.position.set(0, hipY, z);
-      const leg = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.085, 0.48, 3, 7),
+    const legSides = [
+      {
+        hip: this.leftLeg,
+        knee: this.leftKnee,
+        z: -0.13,
+      },
+      {
+        hip: this.rightLeg,
+        knee: this.rightKnee,
+        z: 0.13,
+      },
+    ] as const;
+    for (const { hip, knee, z } of legSides) {
+      hip.position.set(0, hipY, z);
+      const thigh = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.085, 0.22, 3, 7),
         skin,
       );
-      leg.position.y = -0.31;
-      leg.castShadow = true;
-      group.add(leg);
+      thigh.position.y = -0.18;
+      thigh.castShadow = true;
+      hip.add(thigh);
+      knee.position.y = -0.36;
+      hip.add(knee);
+      const shin = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.068, 0.24, 3, 7),
+        skin,
+      );
+      shin.position.y = -0.17;
+      shin.castShadow = true;
+      knee.add(shin);
       const sock = new THREE.Mesh(
-        new THREE.BoxGeometry(0.2, 0.2, 0.2),
+        new THREE.BoxGeometry(0.19, 0.19, 0.19),
         jersey,
       );
-      sock.position.y = -0.57;
+      sock.position.y = -0.28;
       sock.castShadow = true;
-      group.add(sock);
+      knee.add(sock);
       const boot = new THREE.Mesh(
         new THREE.BoxGeometry(0.18, 0.09, 0.3),
         boots,
       );
-      boot.position.set(0.06, -0.7, 0);
+      boot.position.set(0.06, -0.36, 0);
       boot.castShadow = true;
-      group.add(boot);
-      this.body.add(group);
+      knee.add(boot);
+      this.body.add(hip);
     }
-
-    const torso = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.25, 0.5, 4, 10),
-      jersey,
-    );
-    torso.position.y = 1.22;
-    torso.castShadow = true;
-    this.body.add(torso);
 
     const shortsMesh = new THREE.Mesh(
       new THREE.BoxGeometry(0.46, 0.26, 0.4),
@@ -269,32 +436,55 @@ export class PlayerRig {
     shortsMesh.castShadow = true;
     this.body.add(shortsMesh);
 
-    for (const [group, z] of [
-      [this.leftArm, -0.3] as const,
-      [this.rightArm, 0.3] as const,
-    ]) {
-      group.position.set(0, 1.48, z);
-      const arm = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.06, 0.38, 3, 7),
+    const torso = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.25, 0.5, 4, 10),
+      jersey,
+    );
+    torso.position.y = 1.22;
+    torso.castShadow = true;
+    this.upperBody.add(torso);
+
+    const armSides = [
+      { shoulder: this.leftArm, elbow: this.leftElbow, z: -0.3 },
+      { shoulder: this.rightArm, elbow: this.rightElbow, z: 0.3 },
+    ] as const;
+    for (const { shoulder, elbow, z } of armSides) {
+      shoulder.position.set(0, 1.48, z);
+      const upperArm = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.06, 0.2, 3, 7),
         skin,
       );
-      arm.position.y = -0.21;
-      arm.castShadow = true;
-      group.add(arm);
-      this.body.add(group);
+      upperArm.position.y = -0.14;
+      upperArm.castShadow = true;
+      shoulder.add(upperArm);
+      elbow.position.y = -0.29;
+      shoulder.add(elbow);
+      const forearm = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.054, 0.19, 3, 7),
+        skin,
+      );
+      forearm.position.y = -0.13;
+      forearm.castShadow = true;
+      elbow.add(forearm);
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.062, 7, 6), skin);
+      hand.position.y = -0.28;
+      hand.castShadow = true;
+      elbow.add(hand);
+      this.upperBody.add(shoulder);
     }
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 9), skin);
-    head.position.y = 1.82;
-    head.castShadow = true;
-    this.body.add(head);
+    this.head.position.y = 1.82;
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 9), skin);
+    skull.castShadow = true;
+    this.head.add(skull);
     const hair = new THREE.Mesh(
       new THREE.SphereGeometry(0.175, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
       new THREE.MeshStandardMaterial({ color: 0x1a1712, roughness: 1 }),
     );
-    hair.position.y = 1.84;
-    this.body.add(hair);
-
+    hair.position.y = 0.02;
+    this.head.add(hair);
+    this.upperBody.add(this.head);
+    this.body.add(this.upperBody);
     this.root.add(this.body);
 
     const number = createNumberSprite(player.number);
@@ -327,6 +517,18 @@ export class PlayerRig {
     this.marker.position.y = 2.75 + Math.sin(tick * 0.12) * 0.09;
     this.card.visible = player.yellowCards > 0;
 
+    // Replays and match restarts can move the presentation clock backwards.
+    // Re-arm one-shot actions instead of producing a negative state age.
+    if (this.lastElapsed !== null && elapsed < this.lastElapsed) {
+      this.lastState = null;
+    }
+    if (player.state !== this.lastState) {
+      this.lastState = player.state;
+      this.stateStartedElapsed = elapsed;
+    }
+    this.lastElapsed = elapsed;
+    const stateAge = Math.max(0, elapsed - this.stateStartedElapsed);
+
     const cadence =
       player.state === "sprint"
         ? 11
@@ -338,16 +540,23 @@ export class PlayerRig {
               ? 4
               : 3;
     const phase = elapsed * cadence + player.number * 0.63;
-    const pose = computePlayerPose(player.state, phase, player.stamina);
+    const pose = computePlayerPose(player.state, phase, player.stamina, stateAge);
     this.leftLeg.rotation.z = pose.leftLeg;
     this.rightLeg.rotation.z = pose.rightLeg;
+    this.leftKnee.rotation.z = pose.leftKnee;
+    this.rightKnee.rotation.z = pose.rightKnee;
     this.leftArm.rotation.z = pose.leftArm;
     this.rightArm.rotation.z = pose.rightArm;
+    this.leftElbow.rotation.z = pose.leftElbow;
+    this.rightElbow.rotation.z = pose.rightElbow;
     this.body.position.y = pose.bodyY;
     this.body.rotation.x = pose.bodyTilt;
     this.body.rotation.z = pose.bodyLean;
+    this.upperBody.rotation.y = pose.bodyTwist;
+    this.head.rotation.z = pose.headPitch;
+    this.head.rotation.y = pose.headYaw;
     this.shadow.scale.setScalar(
-      1 - clamp((player.state === "slide" ? 0.18 : 0), 0, 0.3),
+      1 - clamp(player.state === "slide" ? 0.18 : 0, 0, 0.3),
     );
   }
 }

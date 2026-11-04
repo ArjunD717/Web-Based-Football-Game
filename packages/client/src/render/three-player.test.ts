@@ -11,14 +11,33 @@ describe("player animation pose", () => {
     expect(Math.abs(jog.leftLeg)).toBeGreaterThan(Math.abs(idle.leftLeg));
     expect(Math.abs(sprint.leftLeg)).toBeGreaterThan(Math.abs(jog.leftLeg));
     expect(Math.abs(sprint.leftArm)).toBeGreaterThan(Math.abs(jog.leftArm));
+    expect(Math.abs(sprint.leftKnee)).toBeGreaterThan(
+      Math.abs(jog.leftKnee),
+    );
+    expect(sprint.leftElbow).toBeGreaterThan(jog.leftElbow);
+  });
+
+  it("drives a kick from backswing through contact", () => {
+    const backswing = computePlayerPose("shoot", 1, 1, 0.02);
+    const contact = computePlayerPose("shoot", 1, 1, 0.24);
+    expect(backswing.rightLeg).toBeLessThan(0);
+    expect(contact.rightLeg).toBeGreaterThan(backswing.rightLeg + 0.8);
+    expect(contact.rightKnee).toBeGreaterThan(backswing.rightKnee);
   });
 
   it("uses a kicking pose for shots and a grounded pose for injuries", () => {
-    const shot = computePlayerPose("shoot", 1, 1);
+    const shot = computePlayerPose("shoot", 1, 1, 0.22);
     expect(shot.rightLeg).toBeGreaterThan(0.8);
     const injury = computePlayerPose("injured", 1, 1);
     expect(injury.bodyTilt).toBeGreaterThan(1);
     expect(injury.bodyY).toBeGreaterThan(0);
+  });
+
+  it("lifts a header through its jump cycle", () => {
+    const rise = computePlayerPose("header", 1, 1, 0.16);
+    const land = computePlayerPose("header", 1, 1, 0.34);
+    expect(rise.bodyY).toBeGreaterThan(land.bodyY);
+    expect(rise.headPitch).toBeLessThan(land.headPitch);
   });
 
   it("raises the arms to celebrate and lowers stamina-dependent effort", () => {
