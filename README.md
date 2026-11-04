@@ -273,9 +273,11 @@ Implemented:
   counter-swing, elbow flex, torso counter-rotation and head look are
   stamina-scaled. Timed one-shot cycles drive pass/shot/volley backswing
   through contact, header jump, tackle lunge and the existing slide/fall/
-  celebration states. Facing comes from the authoritative snapshot. A
-  render-only 1.22x player scale and 1.45x ball scale improve readability
-  without touching the physics capsule or ball radius
+  celebration states. Joint targets cross-fade over a short blend window and
+  the stride phase accumulates independently of cadence, so jog/sprint
+  transitions do not snap the feet. Facing comes from the authoritative
+  snapshot. A render-only 1.22x player scale and 1.45x ball scale improve
+  readability without touching the physics capsule or ball radius
 - The pitch now has corner flags and a low-cost procedural crowd stand around
   all four sides. A fast-ball line trail, predicted landing ring for aerial
   balls, and edge arrows for an off-screen ball or controlled player keep the
@@ -306,9 +308,9 @@ Implemented:
   context trigger priority/deduplication, kick-off/restart/celebration/incident
   framing, tuning editor coverage, visual quality presets, off-screen edge
   projection, aerial landing prediction, articulated sprint/kick/header pose
-  progression, pitch layout/asset-free mesh construction and replay-buffer goal
-  detection, trimming, full-capture replay, goal-clip preservation and playback
-  sampling
+  progression, joint cross-fading, pitch layout/asset-free mesh construction and
+  replay-buffer goal detection, trimming, full-capture replay, goal-clip
+  preservation and playback sampling
 
 Known M11 limitations (by design):
 
@@ -895,7 +897,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 59 test files and 546 tests passing.
+13. `pnpm check`: expect 59 test files and 547 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
