@@ -51,6 +51,7 @@ const playCards = byId<HTMLElement>("play-cards");
 const playEvent = byId<HTMLElement>("play-event");
 const playPlayer = byId<HTMLElement>("play-player");
 const playSprint = byId<HTMLElement>("play-sprint");
+const togglePauseButton = byId<HTMLButtonElement>("toggle-pause");
 const leavePlayButton = byId<HTMLButtonElement>("leave-play");
 const powerMeter = byId<HTMLElement>("controller-power");
 const powerFill = byId<HTMLElement>("power-fill");
@@ -59,6 +60,7 @@ const powerLabel = byId<HTMLElement>("power-label");
 const overlay = byId<HTMLElement>("controller-overlay");
 const overlayTitle = byId<HTMLElement>("overlay-title");
 const overlayDetail = byId<HTMLElement>("overlay-detail");
+const overlayResume = byId<HTMLButtonElement>("overlay-resume");
 const toast = byId<HTMLElement>("toast");
 
 const client = new GameClient();
@@ -119,6 +121,18 @@ leaveRoomButton.addEventListener("click", () => {
   client.leaveRoom();
 });
 
+togglePauseButton.addEventListener("click", () => {
+  if (currentState?.pausedManual === true) {
+    client.resumeMatch();
+  } else {
+    client.pauseMatch();
+  }
+});
+
+overlayResume.addEventListener("click", () => {
+  client.resumeMatch();
+});
+
 leavePlayButton.addEventListener("click", () => {
   client.leaveRoom();
 });
@@ -166,6 +180,7 @@ function applyState(state: GameClientState): void {
   maybeAutoJoin(state);
   updateOverlay(state);
   updateHud(state);
+  updatePauseButton(state);
 
   if (state.notice !== null && state.notice !== lastNotice) {
     showToast(state.notice);
@@ -173,6 +188,21 @@ function applyState(state: GameClientState): void {
   } else if (state.notice === null) {
     lastNotice = null;
   }
+}
+
+function updatePauseButton(state: GameClientState): void {
+  const phase = client.latestSnapshot()?.match.phase ?? null;
+  const canToggle =
+    state.status === "online" &&
+    state.setup !== null &&
+    phase !== "fullTime" &&
+    (state.pausedManual || state.pausedReason === null);
+  togglePauseButton.textContent = state.pausedManual ? "Resume" : "Pause";
+  togglePauseButton.disabled = !canToggle;
+  togglePauseButton.setAttribute(
+    "aria-label",
+    state.pausedManual ? "Resume match" : "Pause match",
+  );
 }
 
 function renderConnection(state: GameClientState): void {
@@ -394,7 +424,8 @@ function updateOverlay(state: GameClientState): void {
     if (state.pausedManual) {
       showOverlay(
         "Match paused",
-        "The host paused play. Keep the controller connected; play resumes when the host is ready.",
+        "A player paused play. Keep the controller connected; play resumes when either seat resumes.",
+        true,
       );
       return;
     }
@@ -457,10 +488,16 @@ function updateOverlay(state: GameClientState): void {
   overlay.hidden = true;
 }
 
-function showOverlay(title: string, detail: string): void {
+function showOverlay(
+  title: string,
+  detail: string,
+  canResume = false,
+): void {
   overlay.hidden = false;
   overlayTitle.textContent = title;
   overlayDetail.textContent = detail;
+  overlayResume.hidden = !canResume;
+  overlayResume.disabled = currentState?.status !== "online";
 }
 
 function maybeAutoJoin(state: GameClientState): void {

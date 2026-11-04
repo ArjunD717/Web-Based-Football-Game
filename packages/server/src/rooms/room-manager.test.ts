@@ -519,7 +519,7 @@ describe("match management", () => {
     expect(fixture.host.lastLobby().room?.settings.halfRealMinutes).toBe(8);
   });
 
-  it("lets only the host pause and resume a live match", () => {
+  it("lets either seat pause and resume a live match", () => {
     const fixture = setupRoom();
     fixture.manager.onMessage(fixture.host, { t: "pauseMatch" });
     expect(fixture.host.lastMessageType("error")?.code).toBe("match_not_live");
@@ -531,12 +531,9 @@ describe("match management", () => {
     const snapshotsBefore = fixture.host.binary.length;
 
     fixture.manager.onMessage(fixture.guest, { t: "pauseMatch" });
-    expect(fixture.guest.lastMessageType("error")?.code).toBe("not_host");
-
-    fixture.manager.onMessage(fixture.host, { t: "pauseMatch" });
     const pausedForHost = fixture.host.lastMessageType("matchPaused");
     expect(pausedForHost?.manual).toBe(true);
-    expect(pausedForHost?.reason).toContain("Host");
+    expect(pausedForHost?.reason).toBe("A player paused the match");
     expect(fixture.guest.lastMessageType("matchPaused")?.manual).toBe(true);
     expect(fixture.host.lastLobby().room?.phase).toBe("paused");
     expect(fixture.host.lastLobby().room?.reconnectSeconds).toBeNull();
@@ -544,9 +541,6 @@ describe("match management", () => {
     fixture.manager.tick(2 / 60);
     expect(fixture.host.binary.length).toBe(snapshotsBefore);
     expect(latestFullSnapshot(fixture).tick).toBe(before);
-
-    fixture.manager.onMessage(fixture.guest, { t: "resumeMatch" });
-    expect(fixture.guest.lastMessageType("error")?.code).toBe("not_host");
 
     fixture.manager.onMessage(fixture.host, { t: "resumeMatch" });
     expect(fixture.host.lastMessageType("matchResumed")).not.toBeNull();

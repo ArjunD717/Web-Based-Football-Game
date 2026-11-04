@@ -10,8 +10,8 @@ time, extra time, shootouts, VAR-lite and full-time statistics, an animated
 Three.js match presentation, multi-angle local replays and procedural audio.
 M12 was the release pass: one-command packaging, full-match balance validation,
 server/client performance profiling, bug fixes and final documentation. M13
-adds host-owned referee/AI rules, a live rules readout and a host-only manual
-pause that survives reloads and reconnects.
+adds host-owned referee/AI rules, a live rules readout and a manual pause
+available to either seat that survives reloads and reconnects.
 
 ## Requirements
 
@@ -149,13 +149,13 @@ Implemented:
   match rules at kick-off, so strictness changes foul/card thresholds and the
   difficulty changes AI reaction/decision quality and aggression. The live
   feed bar shows `Ref … · AI …` next to the network state
-- The host match screen has a **Pause** action (not shown to the guest). It
-  sends a `pauseMatch` command, broadcasts an authoritative `matchPaused`
+- Both match screens and the phone controller have a **Pause** action. Either
+  seat can send `pauseMatch`, which broadcasts an authoritative `matchPaused`
   message with `manual: true`, stops the 60 Hz simulation and freezes the
-  clock/snapshots. The host's overlay says it paused play; the guest overlay
-  says the host paused play
-- **Resume** is sent only by the host. The command is rejected if the other seat
-  is disconnected, and both seats must be connected before play can restart.
+  clock/snapshots. Both overlays say a player paused play
+- Either seat can send **Resume**, including the phone's in-match button and
+  paused overlay. The command is rejected if the other seat is disconnected,
+  and both seats must be connected before play can restart.
   The pause survives a host or guest reload: the room keeps the manual-pause
   flag and re-broadcasts it when both seats are connected again. Automatic
   disconnect pauses use `manual: false` and still show the reconnect countdown
@@ -165,8 +165,6 @@ Known M13 limitations (by design):
 
 - Rules are locked at kick-off. There is no mid-match rule editing or a rules
   rematch shortcut yet
-- Pausing is host-only. The guest and the phone controller can see the pause
-  overlay but cannot pause or resume
 - Manual pause freezes the simulation and clock; it does not add stoppage time
   or advance any law-specific restart timer
 - The live rule chip is hidden below 1050 px to keep the feed bar compact; the
@@ -788,8 +786,8 @@ Implemented:
   its last button is shown as **Unbound** rather than silently disappearing
 - Phone controller at `/controller.html?room=CODE`: virtual stick, touch action
   buttons including a held **Driven** pass modifier, a four-way skill pad,
-  live connection state, score/clock/phase/card counts, rule-event banner and
-  its own power meter
+  Pause/Resume, live connection state, score/clock/phase/card counts,
+  rule-event banner and its own power meter
 - Match console: team-colour scoreboard, referee event strip, controlled-player
   label, white active-player ring, shot/pass power bar, replay banner, compact
   telemetry, semantic restart/VAR/pause overlays and a responsive full-time
@@ -804,8 +802,6 @@ Not implemented yet (by milestone design):
   as a standalone competition format
 - Mid-match rule changes; referee strictness and AI difficulty are locked at
   kick-off and apply to both seats
-- A pause command on the phone controller; only the host's match screen can
-  pause or resume
 - Real CSV registry and further national-team competition modes; M9 ships the
   call-up pipeline and playable national teams, but the bundled dataset is
   still clearly marked fake sample data
@@ -829,11 +825,11 @@ Not implemented yet (by milestone design):
   report aggregate `series` data on the full-time statistics message. The host's
   `prepareNextLeg` command broadcasts `matchEnded`, clears the clients' match
   state and returns both seats to the room; readying up starts leg two.
-- The host's `pauseMatch` is acknowledged by a `matchPaused` broadcast. The
+- Either seat's `pauseMatch` is acknowledged by a `matchPaused` broadcast. The
   message carries `manual` so the client can distinguish a deliberate pause
   from a disconnect countdown. In manual mode the server stops ticking and the
-  clock freezes until the host sends `resumeMatch`; the room retains the flag
-  across reloads and only allows resume when both seats are connected.
+  clock freezes until either seat sends `resumeMatch`; the room retains the
+  flag across reloads and only allows resume when both seats are connected.
 - Snapshot deltas are sent at 30 Hz. Each client acks the latest decoded
   sequence with a 5-byte binary message; the server builds the next delta from
   that ack.
@@ -893,8 +889,8 @@ M10 adds substitution windows/limits, injury risk, shootouts, extra time, VAR,
 settings/roster/statistics protocol flow and the full-time client state. M11
 adds Three.js pose/camera/pitch tests and the client replay buffer. M12 adds
 full-time soak accounting, the safety whistle, pass completion stats and server
-tick metrics. M13 adds rule-setting parsing/mapping and host-only manual pause
-and resume, including disconnect and reconnect guards.
+tick metrics. M13 adds rule-setting parsing/mapping and manual pause/resume available to
+either seat, including disconnect and reconnect guards.
 
 The two-minute data check:
 
@@ -960,12 +956,13 @@ The two-minute match check:
    the meter labels **Pass**, then hold **Driven** and release Pass for a low
    driven ball. Tap Pass/Through/Lob/Tackle/Sprint/Finesse to exercise the
    same input path.
-10. Verify the feed bar reads `Ref strict · AI Legendary`. The host sees
-    **Pause**; the guest does not. Pause on the host: both overlays say the match
-    is paused, the clock freezes and the host button becomes **Resume**. Reload
-    the host while paused; it must reconnect into the frozen match with the
-    pause overlay and resume without losing the room. **Resume** and confirm the
-    guest overlay clears and the clock advances.
+10. Verify the feed bar reads `Ref strict · AI Legendary`. Both seats see
+    **Pause**; the phone also has a pause button. Pause from the guest or phone:
+    both overlays say the match is paused, the clock freezes and the buttons
+    become **Resume**. Reload the host while paused; it must reconnect into the
+    frozen match with the pause overlay and resume without losing the room.
+    Resume from the other seat and confirm both overlays clear and the clock
+    advances.
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.

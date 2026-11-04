@@ -312,7 +312,7 @@ export interface ServerMatchPausedMessage {
   readonly t: "matchPaused";
   readonly reason: string;
   readonly reconnectSeconds: number;
-  /** True when the host paused play; false when a seat disconnected. */
+  /** True when a player paused play; false when a seat disconnected. */
   readonly manual: boolean;
 }
 

@@ -57,7 +57,7 @@ const SNAPSHOT_EVERY_TICKS = Math.max(
   Math.round(TUNING.sim.tickHz / TUNING.network.snapshotHz),
 );
 const MATCH_PAUSE_REASON = "Opponent disconnected";
-const MANUAL_PAUSE_REASON = "Host paused the match";
+const MANUAL_PAUSE_REASON = "A player paused the match";
 const HOST_NAME = "Host";
 const GUEST_NAME = "Guest";
 
@@ -572,10 +572,6 @@ export class RoomManager {
       this.sendError(client, "not_in_room", "Join a room before pausing");
       return;
     }
-    if (!seat.host) {
-      this.sendError(client, "not_host", "Only the host can pause the match");
-      return;
-    }
     if (room.match === null || room.match.finished) {
       this.sendError(client, "match_not_live", "There is no live match to pause");
       return;
@@ -605,7 +601,9 @@ export class RoomManager {
       manual: true,
     });
     this.broadcastLobby(room);
-    this.logger.info(`Room ${room.code}: host paused the match`);
+    this.logger.info(
+      `Room ${room.code}: ${seat.host ? "host" : "guest"} paused the match`,
+    );
   }
 
   private resumeMatch(client: ClientConnection): void {
@@ -615,15 +613,11 @@ export class RoomManager {
       this.sendError(client, "not_in_room", "Join a room before resuming");
       return;
     }
-    if (!seat.host) {
-      this.sendError(client, "not_host", "Only the host can resume the match");
-      return;
-    }
     if (room.match === null || room.match.finished || !room.manualPaused) {
       this.sendError(
         client,
         "match_not_live",
-        "The host has not paused the live match",
+        "The match is not manually paused",
       );
       return;
     }
@@ -643,7 +637,9 @@ export class RoomManager {
     markControlReconnected(room.match.controls.away);
     this.broadcast(room, { t: "matchResumed" });
     this.broadcastLobby(room);
-    this.logger.info(`Room ${room.code}: host resumed the match`);
+    this.logger.info(
+      `Room ${room.code}: ${seat.host ? "host" : "guest"} resumed the match`,
+    );
   }
 
   private prepareNextLeg(client: ClientConnection): void {

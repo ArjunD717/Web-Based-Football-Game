@@ -1400,7 +1400,6 @@ function updatePauseControl(
   state: GameClientState,
   phase: SnapshotFrame["match"]["phase"] | null,
 ): void {
-  const host = state.lobby?.you?.host === true;
   const room = state.lobby?.room;
   const bothConnected =
     room !== undefined &&
@@ -1413,7 +1412,7 @@ function updatePauseControl(
     phase !== null &&
     phase !== "fullTime" &&
     (!intermission || state.pausedManual);
-  pauseMatchButton.hidden = !host || !available;
+  pauseMatchButton.hidden = !available;
   if (pauseMatchButton.hidden) {
     return;
   }
@@ -1713,9 +1712,7 @@ function updateOverlay(state: GameClientState): void {
     if (state.pausedManual) {
       showOverlay(
         "Match paused",
-        state.lobby?.you?.host === true
-          ? "You paused play. Use Resume when both seats are ready."
-          : "The host paused play. The match resumes when the host is ready.",
+        "Paused by a player. Use Resume when both seats are ready.",
         "warning",
       );
       return;

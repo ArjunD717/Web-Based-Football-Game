@@ -42,7 +42,7 @@ export interface GameClientState {
   readonly setup: MatchSetupWire | null;
   readonly pausedReason: string | null;
   readonly pausedUntilMs: number | null;
-  /** True when the host paused play; false for disconnect hold. */
+  /** True when a player paused play; false for a disconnect hold. */
   readonly pausedManual: boolean;
   readonly lastSnapshotSeq: number;
   readonly lastServerTick: number;
