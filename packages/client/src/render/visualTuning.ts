@@ -83,6 +83,16 @@ export interface VisualTuning {
     readonly radiusM: number;
     readonly opacity: number;
   };
+  readonly goalMoment: {
+    /** Seconds the net keeps moving after a goal. */
+    readonly netDurationSeconds: number;
+    /** Maximum local net displacement in metres. */
+    readonly netAmplitudeM: number;
+    /** Seconds the crowd remains lit after a goal. */
+    readonly crowdDurationSeconds: number;
+    /** Extra material brightness at the peak. */
+    readonly crowdBrightness: number;
+  };
   readonly cornerFlag: {
     readonly poleHeightM: number;
     readonly flagWidthM: number;
@@ -110,6 +120,12 @@ export const VISUAL_TUNING: VisualTuning = {
     minHeightM: 1.2,
     radiusM: 1.15,
     opacity: 0.7,
+  },
+  goalMoment: {
+    netDurationSeconds: 1.4,
+    netAmplitudeM: 0.24,
+    crowdDurationSeconds: 2.8,
+    crowdBrightness: 0.65,
   },
   cornerFlag: {
     poleHeightM: 1.5,

@@ -2,17 +2,29 @@
 
 import * as THREE from "three";
 import { TUNING } from "@fb/shared";
-import type { GoalGeometry, Pitch } from "@fb/sim";
-import { createStadiumVisual } from "./three-stadium";
+import type { GoalGeometry, Pitch, TeamSide } from "@fb/sim";
+import { netRippleStrength } from "./goal-effects";
+import {
+  createStadiumVisual,
+  type StadiumVisual,
+} from "./three-stadium";
 import { VISUAL_TUNING } from "./visualTuning";
 
 const PIXELS_PER_METRE = 20;
 const LINE_COLOUR = "rgba(239, 250, 243, 0.88)";
 
+export interface GoalNetVisual {
+  readonly side: TeamSide;
+  trigger(): void;
+  update(deltaSeconds: number): void;
+  reset(): void;
+}
+
 export interface PitchVisual {
   readonly group: THREE.Group;
   readonly texture: THREE.CanvasTexture;
-  readonly stadium: THREE.Group;
+  readonly stadium: StadiumVisual;
+  readonly goalNets: readonly GoalNetVisual[];
 }
 
 /** Texture-based markings keep the 3D pitch crisp without thousands of lines. */
@@ -47,12 +59,19 @@ export function createPitchVisual(pitch: Pitch): PitchVisual {
   surround.receiveShadow = true;
   group.add(surround);
 
-  group.add(createGoalVisual(pitch, pitch.homeGoal));
-  group.add(createGoalVisual(pitch, pitch.awayGoal));
+  const homeGoal = createGoalVisual(pitch, pitch.homeGoal);
+  const awayGoal = createGoalVisual(pitch, pitch.awayGoal);
+  group.add(homeGoal.group);
+  group.add(awayGoal.group);
   group.add(createCornerFlags(pitch));
-  const stadium = createStadiumVisual(pitch).group;
-  group.add(stadium);
-  return { group, texture, stadium };
+  const stadium = createStadiumVisual(pitch);
+  group.add(stadium.group);
+  return {
+    group,
+    texture,
+    stadium,
+    goalNets: [homeGoal.net, awayGoal.net],
+  };
 }
 
 function createPitchTexture(pitch: Pitch): THREE.CanvasTexture {
@@ -265,9 +284,14 @@ function createNetMaterial(
   });
 }
 
-function createGoalVisual(pitch: Pitch, goal: GoalGeometry): THREE.Group {
+function createGoalVisual(
+  pitch: Pitch,
+  goal: GoalGeometry,
+): { group: THREE.Group; net: GoalNetVisual } {
   const group = new THREE.Group();
-  group.name = `goal-${goal.netDirection === -1 ? "home" : "away"}`;
+  const side: TeamSide = goal.netDirection === -1 ? "home" : "away";
+  group.name = `goal-${side}`;
+  const net = new GoalNetEffect(side);
   const frameMaterial = new THREE.MeshStandardMaterial({
     color: 0xf4fbf6,
     roughness: 0.48,
@@ -304,30 +328,40 @@ function createGoalVisual(pitch: Pitch, goal: GoalGeometry): THREE.Group {
   bar.castShadow = true;
   group.add(bar);
 
+  const addNetPlane = (
+    mesh: THREE.Mesh,
+    widthM: number,
+    heightM: number,
+    normalSign: number,
+  ): void => {
+    group.add(mesh);
+    net.addPlane(mesh, widthM, heightM, normalSign);
+  };
+
   const backX = worldX + goal.netDirection * goal.netDepthM;
   const netBack = new THREE.Mesh(
-    new THREE.PlaneGeometry(goal.widthM, goal.heightM),
+    new THREE.PlaneGeometry(goal.widthM, goal.heightM, 14, 8),
     createNetMaterial(netTexture, goal.widthM, goal.heightM),
   );
   netBack.rotation.y = Math.PI / 2;
   netBack.position.set(backX, goal.heightM / 2, centreZ);
-  group.add(netBack);
+  addNetPlane(netBack, goal.widthM, goal.heightM, goal.netDirection);
 
   for (const direction of [-1, 1] as const) {
-    const side = new THREE.Mesh(
-      new THREE.PlaneGeometry(goal.netDepthM, goal.heightM),
+    const sideNet = new THREE.Mesh(
+      new THREE.PlaneGeometry(goal.netDepthM, goal.heightM, 6, 8),
       createNetMaterial(netTexture, goal.netDepthM, goal.heightM),
     );
-    side.position.set(
+    sideNet.position.set(
       worldX + (goal.netDirection * goal.netDepthM) / 2,
       goal.heightM / 2,
       centreZ + direction * halfWidth,
     );
-    group.add(side);
+    addNetPlane(sideNet, goal.netDepthM, goal.heightM, direction);
   }
 
   const roof = new THREE.Mesh(
-    new THREE.PlaneGeometry(goal.netDepthM, goal.widthM),
+    new THREE.PlaneGeometry(goal.netDepthM, goal.widthM, 6, 12),
     createNetMaterial(netTexture, goal.netDepthM, goal.widthM),
   );
   roof.rotation.x = -Math.PI / 2;
@@ -336,7 +370,108 @@ function createGoalVisual(pitch: Pitch, goal: GoalGeometry): THREE.Group {
     goal.heightM,
     centreZ,
   );
-  group.add(roof);
+  addNetPlane(roof, goal.netDepthM, goal.widthM, 1);
 
-  return group;
+  return { group, net };
+}
+
+interface NetPlane {
+  readonly mesh: THREE.Mesh;
+  readonly basePositions: Float32Array;
+  readonly widthM: number;
+  readonly heightM: number;
+  readonly normalSign: number;
+}
+
+/**
+ * Goal nets are small CPU-deformed planes. The ball and goal law remain
+ * authoritative; this only makes the net react to a confirmed score.
+ */
+export class GoalNetEffect implements GoalNetVisual {
+  private readonly planes: NetPlane[] = [];
+  private elapsedSeconds = 0;
+  private active = false;
+
+  constructor(readonly side: TeamSide) {}
+
+  addPlane(
+    mesh: THREE.Mesh,
+    widthM: number,
+    heightM: number,
+    normalSign: number,
+  ): void {
+    const position = mesh.geometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
+    this.planes.push({
+      mesh,
+      basePositions: new Float32Array(position.array as ArrayLike<number>),
+      widthM,
+      heightM,
+      normalSign,
+    });
+  }
+
+  trigger(): void {
+    this.active = true;
+    this.elapsedSeconds = 0;
+  }
+
+  update(deltaSeconds: number): void {
+    if (!this.active) {
+      return;
+    }
+    const tuning = VISUAL_TUNING.goalMoment;
+    this.elapsedSeconds += Math.max(0, deltaSeconds);
+    if (this.elapsedSeconds >= tuning.netDurationSeconds) {
+      this.reset();
+      return;
+    }
+    const strength = netRippleStrength(
+      this.elapsedSeconds,
+      tuning.netDurationSeconds,
+    );
+    for (const plane of this.planes) {
+      const position = plane.mesh.geometry.getAttribute(
+        "position",
+      ) as THREE.BufferAttribute;
+      const positions = position.array as Float32Array;
+      for (let index = 0; index < positions.length; index += 3) {
+        const baseX = plane.basePositions[index] ?? 0;
+        const baseY = plane.basePositions[index + 1] ?? 0;
+        const baseZ = plane.basePositions[index + 2] ?? 0;
+        const u = baseX / plane.widthM + 0.5;
+        const v = baseY / plane.heightM + 0.5;
+        const centreWeight = Math.exp(
+          -(((u - 0.5) / 0.38) ** 2 + ((v - 0.5) / 0.42) ** 2),
+        );
+        const wave =
+          0.55 + 0.45 * Math.sin(this.elapsedSeconds * 25 - u * 7 - v * 5);
+        positions[index + 2] =
+          baseZ +
+          plane.normalSign *
+            tuning.netAmplitudeM *
+            strength *
+            centreWeight *
+            wave;
+      }
+      position.needsUpdate = true;
+    }
+  }
+
+  reset(): void {
+    if (!this.active) {
+      return;
+    }
+    for (const plane of this.planes) {
+      const position = plane.mesh.geometry.getAttribute(
+        "position",
+      ) as THREE.BufferAttribute;
+      const positions = position.array as Float32Array;
+      positions.set(plane.basePositions);
+      position.needsUpdate = true;
+    }
+    this.active = false;
+    this.elapsedSeconds = 0;
+  }
 }

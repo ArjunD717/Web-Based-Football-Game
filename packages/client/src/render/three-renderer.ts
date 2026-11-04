@@ -21,7 +21,8 @@ import type {
 } from "../camera/types";
 import { predictLandingPoint } from "./ball-effects";
 import { pitchToWorld } from "./three-layout";
-import { createPitchVisual } from "./three-pitch";
+import { createPitchVisual, type GoalNetVisual } from "./three-pitch";
+import type { StadiumVisual } from "./three-stadium";
 import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig } from "./three-player";
 import {
@@ -61,7 +62,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly landingMarker: THREE.Mesh;
   private readonly landingMaterial: THREE.MeshBasicMaterial;
   private readonly pitchGroup = new THREE.Group();
-  private stadium: THREE.Group | null = null;
+  private stadium: StadiumVisual | null = null;
+  private goalNets: readonly GoalNetVisual[] = [];
+  private lastScoreHome: number | null = null;
+  private lastScoreAway: number | null = null;
   private visualQuality: VisualQuality = "high";
   private lastView: MatchView | null = null;
   private pitch: Pitch | null = null;
@@ -230,6 +234,12 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.contextController.reset();
       this.lastCameraPose = null;
       this.lastRenderAtMs = null;
+      this.lastScoreHome = null;
+      this.lastScoreAway = null;
+      for (const net of this.goalNets) {
+        net.reset();
+      }
+      this.stadium?.reset();
     }
 
     this.syncPlayers(view);
@@ -243,6 +253,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
         ? 0
         : Math.max(0, (now - this.lastRenderAtMs) / 1_000);
     this.lastRenderAtMs = now;
+    this.updateGoalMoment(view, dt);
     const state: CameraRenderState = {
       view,
       aspect: this.width / Math.max(1, this.height),
@@ -382,7 +393,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.keyLight.shadow.map = null;
     }
     if (this.stadium !== null) {
-      this.stadium.visible = profile.crowd;
+      this.stadium.group.visible = profile.crowd;
     }
     this.ballTrail.visible = profile.ballTrail;
     if (!profile.landingMarker) {
@@ -447,6 +458,39 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.landingMaterial.opacity = VISUAL_TUNING.landing.opacity;
   }
 
+  private updateGoalMoment(view: MatchView, deltaSeconds: number): void {
+    const match = view.match;
+    if (match === null) {
+      this.lastScoreHome = null;
+      this.lastScoreAway = null;
+    } else if (
+      this.lastScoreHome === null ||
+      this.lastScoreAway === null
+    ) {
+      this.lastScoreHome = match.scoreHome;
+      this.lastScoreAway = match.scoreAway;
+    } else {
+      const homeScored = match.scoreHome > this.lastScoreHome;
+      const awayScored = match.scoreAway > this.lastScoreAway;
+      if (homeScored) {
+        this.goalNets.find((net) => net.side === "away")?.trigger();
+      }
+      if (awayScored) {
+        this.goalNets.find((net) => net.side === "home")?.trigger();
+      }
+      if (homeScored || awayScored) {
+        this.stadium?.triggerCelebration();
+      }
+      this.lastScoreHome = match.scoreHome;
+      this.lastScoreAway = match.scoreAway;
+    }
+
+    for (const net of this.goalNets) {
+      net.update(deltaSeconds);
+    }
+    this.stadium?.update(deltaSeconds);
+  }
+
   private installPitch(pitch: Pitch): void {
     if (this.pitchGroup.children.length > 0) {
       disposeObject(this.pitchGroup);
@@ -455,7 +499,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
     const visual = createPitchVisual(pitch);
     this.pitchGroup.add(visual.group);
     this.stadium = visual.stadium;
-    this.stadium.visible = VISUAL_QUALITY[this.visualQuality].crowd;
+    this.stadium.group.visible = VISUAL_QUALITY[this.visualQuality].crowd;
+    this.goalNets = visual.goalNets;
+    this.lastScoreHome = null;
+    this.lastScoreAway = null;
     this.pitch = pitch;
     this.pitchKey = pitchKey(pitch);
     this.cameraDirector.reset();

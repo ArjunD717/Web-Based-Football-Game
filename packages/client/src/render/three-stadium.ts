@@ -2,10 +2,15 @@
 
 import * as THREE from "three";
 import type { Pitch } from "@fb/sim";
+import { crowdCelebrationStrength } from "./goal-effects";
 import { VISUAL_TUNING } from "./visualTuning";
 
 export interface StadiumVisual {
   readonly group: THREE.Group;
+  /** Pulse the crowd after a goal. */
+  triggerCelebration(): void;
+  update(deltaSeconds: number): void;
+  reset(): void;
 }
 
 /**
@@ -50,7 +55,38 @@ export function createStadiumVisual(pitch: Pitch): StadiumVisual {
     );
   }
 
-  return { group };
+  const goalTuning = VISUAL_TUNING.goalMoment;
+  let celebrationElapsed: number | null = null;
+
+  const reset = (): void => {
+    celebrationElapsed = null;
+    material.color.setScalar(1);
+    texture.offset.x = 0;
+  };
+
+  return {
+    group,
+    triggerCelebration(): void {
+      celebrationElapsed = 0;
+    },
+    update(deltaSeconds: number): void {
+      if (celebrationElapsed === null) {
+        return;
+      }
+      celebrationElapsed += Math.max(0, deltaSeconds);
+      const strength = crowdCelebrationStrength(
+        celebrationElapsed,
+        goalTuning.crowdDurationSeconds,
+      );
+      if (strength <= 0) {
+        reset();
+        return;
+      }
+      material.color.setScalar(1 + goalTuning.crowdBrightness * strength);
+      texture.offset.x = Math.sin(celebrationElapsed * 9) * 0.002 * strength;
+    },
+    reset,
+  };
 }
 
 function createStand(
