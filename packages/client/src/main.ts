@@ -56,6 +56,7 @@ import {
 import { describeMatchEvent, formatCardCounts } from "./match/event-label";
 import { SubstitutionPanel } from "./match/substitution-panel";
 import { MatchAudio } from "./audio/match-audio";
+import { MatchHaptics } from "./input/haptics";
 import { MatchReplayBuffer } from "./presentation/replay";
 import {
   renderMatchStatsScreen,
@@ -105,6 +106,7 @@ let rendererFellBack = mounted.fellBack;
 const client = new GameClient();
 const replay = new MatchReplayBuffer();
 const audio = new MatchAudio();
+const haptics = new MatchHaptics();
 
 const connectionDot = byId<HTMLSpanElement>("connection-dot");
 const connectionLabel = byId<HTMLElement>("connection-label");
@@ -134,6 +136,8 @@ const openHelpButton = byId<HTMLButtonElement>("open-help");
 const helpDialog = byId<HTMLDialogElement>("help-dialog");
 const closeHelpButton = byId<HTMLButtonElement>("close-help");
 const settingsSoundButton = byId<HTMLButtonElement>("settings-sound");
+const settingsHapticsButton =
+  byId<HTMLButtonElement>("settings-haptics");
 const settingsQualitySelect =
   byId<HTMLSelectElement>("settings-quality");
 const homeSwatch = byId<HTMLElement>("home-swatch");
@@ -264,6 +268,7 @@ updateQualityControl();
 
 updateRendererControl();
 updateAudioControl();
+updateHapticsControl();
 if (rendererFellBack) {
   showToast("3D view unavailable; using the 2D renderer");
 }
@@ -420,6 +425,12 @@ audioToggleButton.addEventListener("click", () => {
 
 settingsSoundButton.addEventListener("click", () => {
   void audio.toggle().then(updateAudioControl);
+});
+
+settingsHapticsButton.addEventListener("click", () => {
+  haptics.toggle();
+  updateHapticsControl();
+  haptics.preview();
 });
 
 window.addEventListener("pointerdown", () => {
@@ -601,6 +612,7 @@ function applyState(state: GameClientState): void {
       replay.clear();
       updateReplayButtons();
       audio.reset();
+      haptics.reset();
       lastControlledPlayerId = null;
       lastControlledMatchId = null;
       controlCard.hidden = true;
@@ -703,6 +715,7 @@ function renderLoop(now: number): void {
     const frame = client.sampleSnapshot(now);
     if (frame !== null) {
       audio.handleSnapshot(frame);
+      haptics.handleSnapshot(frame, lastSelfTeam);
       const view = builder.build(frame);
       if (view !== null) {
         latestView = view;
@@ -1679,6 +1692,16 @@ function updateAudioControl(): void {
   audioToggleButton.textContent = audio.isEnabled ? "Sound on" : "Sound off";
   audioToggleButton.setAttribute("aria-pressed", String(audio.isEnabled));
   settingsSoundButton.setAttribute("aria-checked", String(audio.isEnabled));
+}
+
+function updateHapticsControl(): void {
+  settingsHapticsButton.setAttribute(
+    "aria-checked",
+    String(haptics.isEnabled),
+  );
+  settingsHapticsButton.title = haptics.isSupported
+    ? "Rumble is supported by the connected gamepad"
+    : "Connect a compatible gamepad; Chromium supports dual-rumble";
 }
 
 function updateCameraControl(): void {

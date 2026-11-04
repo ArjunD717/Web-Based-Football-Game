@@ -216,7 +216,7 @@
                     </svg>
                   </span>
                   <span class="ui-menu-item__label">Settings</span>
-                  <span class="ui-menu-item__meta">Audio</span>
+                  <span class="ui-menu-item__meta">Device</span>
                   <svg class="ui-menu-item__chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="m5.5 3 5 5-5 5" stroke="currentColor" stroke-width="1.5" />
                   </svg>
@@ -411,7 +411,8 @@
                   <p class="ui-kicker">Match night</p>
                   <h2 class="ui-context-panel__title">Settings</h2>
                   <p class="ui-context-panel__lede">
-                    Match sound and 3D quality for this browser.
+                    Match sound, controller rumble and 3D quality for this
+                    browser.
                   </p>
                 </header>
                 <div class="ui-panel ui-panel--padded">
@@ -424,6 +425,18 @@
                       aria-checked="true"
                     >
                       <span>Match sound</span>
+                      <span class="ui-toggle__track" aria-hidden="true">
+                        <span class="ui-toggle__thumb"></span>
+                      </span>
+                    </button>
+                    <button
+                      id="settings-haptics"
+                      class="ui-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked="true"
+                    >
+                      <span>Gamepad rumble</span>
                       <span class="ui-toggle__track" aria-hidden="true">
                         <span class="ui-toggle__thumb"></span>
                       </span>
@@ -1147,7 +1160,8 @@
                 <span class="match-help__label">Gamepad</span>
                 <p>
                   Stick move, A pass, B/RT shoot, X tackle, Y through,
-                  LB switch, RB lob, LT sprint, L3 finesse.
+                  LB switch, RB lob, LT sprint, L3 finesse. Rumble on supported
+                  gamepads can be switched off in Settings.
                 </p>
               </div>
               <p class="match-help__note">
