@@ -123,6 +123,8 @@ export class WireViewBuilder {
         vz: frame.ball.vz,
         spinZ: 0,
       },
+      selfSide: this.selfSide,
+      half: frame.match.half,
     };
   }
 

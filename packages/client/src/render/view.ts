@@ -54,6 +54,10 @@ export interface MatchView {
   readonly home: RenderTeam;
   readonly away: RenderTeam;
   readonly ball: RenderBall;
+  /** Team controlled by this client; null for spectators/practice. */
+  readonly selfSide: TeamSide | null;
+  /** 1-4, used to select the attacking end after a half-time swap. */
+  readonly half: number;
 }
 
 /** Adapter for the local practice page, which owns a full MatchState. */
@@ -109,5 +113,7 @@ export function matchStateToView(state: MatchState): MatchView {
       vz: state.ball.vz,
       spinZ: state.ball.spinZ,
     },
+    selfSide: null,
+    half: state.referee.half,
   };
 }
