@@ -21,6 +21,11 @@ export interface ReplayBufferOptions {
   readonly goalWindowMs?: number;
   /** Playback rate; 0.55 is a restrained television-style slow motion. */
   readonly speed?: number;
+  /**
+   * Sampling rate for retained views. The render loop can run at 144 Hz while
+   * replay only needs 60 Hz, which keeps the 15-second ring bounded.
+   */
+  readonly captureHz?: number;
   readonly maxFrames?: number;
 }
 
@@ -33,6 +38,7 @@ export class MatchReplayBuffer {
   private readonly captureMs: number;
   private readonly goalWindowMs: number;
   private readonly speed: number;
+  private readonly captureIntervalMs: number;
   private readonly maxFrames: number;
   private readonly frames: ReplayFrame[] = [];
   private goalClip: ReplayFrame[] = [];
@@ -48,6 +54,8 @@ export class MatchReplayBuffer {
     this.captureMs = Math.max(1_000, options.captureMs ?? 15_000);
     this.goalWindowMs = Math.max(500, options.goalWindowMs ?? 8_000);
     this.speed = Math.max(0.1, options.speed ?? 0.55);
+    const captureHz = Math.min(60, Math.max(15, options.captureHz ?? 60));
+    this.captureIntervalMs = 1_000 / captureHz;
     this.maxFrames = Math.max(10, options.maxFrames ?? 1_200);
   }
 
@@ -88,7 +96,14 @@ export class MatchReplayBuffer {
     const scored = this.previousScore !== null && this.previousScore !== score;
     this.previousScore = score;
 
-    this.frames.push({ view, recordedAtMs: nowMs });
+    const last = this.frames.at(-1);
+    if (
+      scored ||
+      last === undefined ||
+      nowMs - last.recordedAtMs >= this.captureIntervalMs - 0.5
+    ) {
+      this.frames.push({ view, recordedAtMs: nowMs });
+    }
     const cutoff = nowMs - this.captureMs;
     while (
       this.frames.length > this.maxFrames ||

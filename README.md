@@ -285,15 +285,15 @@ Implemented:
   fallback. WebGL failures are caught, reported as a toast and keep the match
   playable. Renderer mode survives reloads and can be overridden with
   `?renderer=2d` / `?renderer=3d`
-- The client keeps a bounded **15-second** ring of rendered match views. A
-  score freezes the preceding **8 seconds**; the **Replay goal** button (or
-  `R`) plays that clip locally in slow motion. **Last 15s** replays the whole
-  retained capture at any point in the match. While a replay is active the
-  banner exposes four cameras — **TV**, **Goal**, **Player** and **Drone** —
-  and the replay director suspends automatic context cuts. The live server
-  simulation keeps running; the full-time statistics board and HUD overlays
-  are hidden for the duration. The 2D renderer replays the same frames without
-  the camera picker
+- The client keeps a bounded **15-second** ring of rendered match views,
+  sampled at 60 Hz independently of the render rate. A score freezes the
+  preceding **8 seconds**; the **Replay goal** button (or `R`) plays that clip
+  locally in slow motion. **Last 15s** replays the whole retained capture at
+  any point in the match. While a replay is active the banner exposes four
+  cameras — **TV**, **Goal**, **Player** and **Drone** — and the replay director
+  suspends automatic context cuts. The live server simulation keeps running;
+  the full-time statistics board and HUD overlays are hidden for the duration.
+  The 2D renderer replays the same frames without the camera picker
 - Procedural Web Audio supplies kick/whistle/goal sounds and a quiet crowd bed
   with no bundled audio assets. The **Sound on/off** control persists its
   preference and the context unlocks on the first pointer/key gesture
