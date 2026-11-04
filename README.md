@@ -240,9 +240,19 @@ Implemented:
 
 - The match presentation is now behind the existing `MatchRenderer` interface.
   A Three.js renderer draws a lit, striped 105 x 68 m pitch with goal frames,
-  netting, a ball shadow, a surround plane and a fitted perspective camera. The
-  camera projects the pitch corners every time the stage aspect or pitch changes
-  and adjusts its distance until the whole playing area fits
+  netting, a ball shadow and a surround plane. The camera is a side-on
+  broadcast director: it tracks a weighted point (65% ball, 25% controlled
+  player, 10% nearby-player centroid), projects lookahead from ball velocity,
+  ignores short touches with a dead zone, pulls back as the action spreads and
+  responds faster to fast play. Separate critically damped springs drive the
+  along-pitch, across-pitch and zoom axes, so the behaviour is frame-rate
+  independent. Target clamping keeps the selected framing inside the stadium
+- Both seats see their own team attacking left-to-right: the away client sits
+  on the opposite touchline, and the half-time end swap moves the camera across
+  with an eased, lifted transition rather than a cut
+- Press `F2` during a match to open the live camera panel. It shows the active
+  shot, target, FOV, zoom and blend state, and exposes every camera tuning
+  value as a slider (`packages/client/src/camera/cameraTuning.ts`)
 - Players are low-poly capsule rigs with team kits, shorts, socks, skin/hair
   variation, shirt numbers and a card marker. Local-space animation poses drive
   sprint lean, kick/header/volley, tackle/slide/fall, dribble and celebration
@@ -258,16 +268,20 @@ Implemented:
 - Procedural Web Audio supplies kick/whistle/goal sounds and a quiet crowd bed
   with no bundled audio assets. The **Sound on/off** control persists its
   preference and the context unlocks on the first pointer/key gesture
-- Unit tests cover renderer pose mapping, the exact-fit camera projection,
-  pitch layout/asset-free mesh construction and replay-buffer goal detection,
-  trimming and playback sampling
+- Unit tests cover renderer pose mapping, critically damped camera springs,
+  broadcast weighting/dead-zone/framing, director stacking and blends, tuning
+  editor coverage, pitch layout/asset-free mesh construction and replay-buffer
+  goal detection, trimming and playback sampling
 
 Known M11 limitations (by design):
 
 - Players are procedural low-poly rigs; there are no GLTF/skeletal animation
   assets, facial animation or broadcast-quality cutscenes
-- The camera is a static full-pitch tactical view with a fixed angle; it does
-  not follow the ball or cut between broadcast cameras
+- Broadcast is currently the only selectable shot. Context cuts (goals,
+  corners, free kicks, penalties, cards) and the alternate tele/wide/co-op/
+  player/drone cameras are the next camera milestone
+- Camera-relative movement, off-screen indicators and the render-only player/
+  ball scale pass are not part of this camera step yet
 - Replays are local to the client, cover the last goal only, render through the
   3D scene even if the pitch is currently in 2D mode, and are not persisted or
   shared over the network
@@ -839,11 +853,15 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 49 test files and 493 tests passing.
-14. Verify the 3D presentation: the match opens in 3D, the whole pitch fits
-    after resizing the window, players animate and carry numbers, and the
-    **2D view** button switches renderers. Reload and confirm the mode persisted.
-    Append `?renderer=2d` to load the canvas renderer directly.
+13. `pnpm check`: expect 53 test files and 510 tests passing.
+14. Verify the 3D presentation: the match opens in 3D with the side-on
+    broadcast camera, not the old full-pitch fit. The controlled player and ball
+    stay in frame during a run, short touches do not shake the view, and
+    resizing keeps the same framing. Press `F2` and confirm the live camera
+    panel shows the shot, target, FOV and zoom. Edit a value and see it take
+    effect immediately. The **2D view** button switches renderers. Reload and
+    confirm the mode persisted. Append `?renderer=2d` to load the canvas
+    renderer directly.
 15. Score a goal and press **Replay goal** (or `R`): verify the slow-motion
     replay banner, progress and stop control. Toggle **Sound** and confirm the
     whistle/kick/goal effects and crowd bed respect the setting. Disable WebGL
