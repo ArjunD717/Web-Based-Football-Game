@@ -312,6 +312,11 @@ Implemented:
 - Procedural Web Audio supplies kick/whistle/goal sounds and a quiet crowd bed
   with no bundled audio assets. The **Sound on/off** control persists its
   preference and the context unlocks on the first pointer/key gesture
+- Supported Chromium gamepads receive **dual-rumble** feedback for goals,
+  cards and referee whistles, plus short cues when the controlled player
+  shoots, passes or tackles. The **Gamepad rumble** switch persists in
+  `localStorage` and previews a light pulse when enabled; browsers without an
+  actuator ignore the cues
 - Unit tests cover renderer pose mapping, critically damped camera springs,
   broadcast weighting/dead-zone/framing, all six gameplay camera framings,
   camera-to-pitch input mapping, director stacking/replacement and blends,
@@ -320,9 +325,9 @@ Implemented:
   projection, aerial landing prediction, articulated sprint/kick/header pose
   progression, goalkeeper dive poses and save-state triggers, joint
   cross-fading, dive-state wire round-trips, goal ripple/crowd envelopes, net
-  vertex displacement, pitch layout/asset-free mesh construction and
+  vertex displacement, pitch layout/asset-free mesh construction,
   replay-buffer goal detection, trimming, full-capture replay, goal-clip
-  preservation and playback sampling
+  preservation and playback sampling, and haptic state/cue transitions
 
 Known M11 limitations (by design):
 
@@ -339,6 +344,9 @@ Known M11 limitations (by design):
 - Goal-net motion is a decaying vertex ripple on four flat net planes. There
   is no cloth simulation, per-ball contact point, net collision or individual
   crowd animation; the crowd reaction is a shared material pulse
+- Gamepad rumble uses Chromium's dual-rumble actuator only. It is best-effort,
+  emits one cue at a time, and has no trigger resistance, adaptive triggers or
+  per-contact directional feedback
 - Edge arrows cover the ball and controlled player only. They are HUD primitives,
   not a live tactical mini-map, and may overlap when both points leave on the
   same edge
@@ -766,8 +774,7 @@ Not implemented yet (by milestone design):
   kick-off and apply to both seats
 - A pause command on the phone controller; only the host's match screen can
   pause or resume
-- Skill moves, charged/driven passes, first-time pass modifiers and controller
-  vibration
+- Skill moves, charged/driven passes and first-time pass modifiers
 - Gamepad rebinding; only the standard mapping is wired
 - Real CSV registry and further national-team competition modes; M9 ships the
   call-up pipeline and playable national teams, but the bundled dataset is
@@ -917,7 +924,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 62 test files and 553 tests passing.
+13. `pnpm check`: expect 63 test files and 558 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -938,8 +945,10 @@ The two-minute match check:
     player during a camera cut and confirm the orange controlled-player arrow
     appears. Open **Settings** before kick-off and try **3D quality** Low,
     Medium and High; confirm Low hides the crowd, shadows and vignette, High
-    restores them, and the choice survives a reload. Append `?renderer=2d` to
-    load the canvas renderer directly.
+    restores them, and the choice survives a reload. With a vibration-capable
+    gamepad connected, toggle **Gamepad rumble** off and on and feel the
+    preview pulse; confirm the choice survives a reload. Append `?renderer=2d`
+    to load the canvas renderer directly.
 15. Score a goal: watch the conceding net ripple and the crowd brighten before
     pressing **Replay goal** (or `R`). Verify the slow-motion replay banner,
     progress and stop control, and that the net ripple fires again as the clip
