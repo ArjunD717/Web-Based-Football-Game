@@ -42,6 +42,7 @@ import {
   type GameClientState,
   type GameLinkStatus,
 } from "./net/game-client";
+import { LocalPlayerPrediction } from "./net/local-prediction";
 import { TeamEditor } from "./lobby/team-editor";
 import {
   mountMatchRenderer,
@@ -88,6 +89,7 @@ import "./ui/squad.css";
 import "./ui/match.css";
 import { installConsoleMenu } from "./ui/menu";
 
+const LOCAL_PREDICTION_KEY = "fb.localPrediction.v1";
 const TOAST_DURATION_MS = 2_600;
 // Canvas fills cannot read CSS custom properties; keep these in sync with
 // --ui-ink and --ui-chalk so the QR keeps the console palette.
@@ -150,6 +152,8 @@ const closeHelpButton = byId<HTMLButtonElement>("close-help");
 const settingsSoundButton = byId<HTMLButtonElement>("settings-sound");
 const settingsHapticsButton =
   byId<HTMLButtonElement>("settings-haptics");
+const settingsPredictionButton =
+  byId<HTMLButtonElement>("settings-prediction");
 const settingsQualitySelect =
   byId<HTMLSelectElement>("settings-quality");
 const homeSwatch = byId<HTMLElement>("home-swatch");
@@ -329,6 +333,10 @@ let lastSelfTeam: "home" | "away" | null = null;
 let lastLoopAt = performance.now();
 let controlAccumulator = 0;
 let lastControlFrame: ControlFrame | null = null;
+let lastSentControlFrame: ControlFrame | null = null;
+let localPredictionEnabled = loadLocalPrediction();
+const localPrediction = new LocalPlayerPrediction();
+updatePredictionControl();
 let lastControlledPlayerId: string | null = null;
 let lastControlledMatchId: string | null = null;
 let bindings: KeyBindings = sanitizeBindings(loadKeyBindings());
@@ -456,6 +464,13 @@ settingsHapticsButton.addEventListener("click", () => {
   haptics.toggle();
   updateHapticsControl();
   haptics.preview();
+});
+
+settingsPredictionButton.addEventListener("click", () => {
+  localPredictionEnabled = !localPredictionEnabled;
+  saveLocalPrediction(localPredictionEnabled);
+  localPrediction.reset();
+  updatePredictionControl();
 });
 
 window.addEventListener("pointerdown", () => {
@@ -843,10 +858,12 @@ function applyState(state: GameClientState): void {
         ? null
         : new WireViewBuilder(state.setup, selfTeam);
     latestView = null;
+    localPrediction.reset();
     if (state.setup === null) {
       controls?.destroy();
       controls = null;
       lastControlFrame = null;
+      lastSentControlFrame = null;
       controlAccumulator = 0;
       hidePowerMeter();
       showLobby();
@@ -931,14 +948,24 @@ function renderLoop(now: number): void {
     if (frame !== null) {
       audio.handleSnapshot(frame);
       haptics.handleSnapshot(frame, lastSelfTeam);
-      const view = builder.build(frame);
-      if (view !== null) {
-        latestView = view;
-        renderer.render(view);
+      const authView = builder.build(frame);
+      if (authView !== null) {
+        latestView = authView;
+        const renderView =
+          localPredictionEnabled &&
+          currentState?.pausedReason === null
+            ? localPrediction.apply(
+                authView,
+                frame,
+                lastSentControlFrame,
+                loopDt,
+              )
+            : authView;
+        renderer.render(renderView);
         updateCameraIndicators();
         if (
           replay.record(
-            view,
+            authView,
             frame.match.scoreHome,
             frame.match.scoreAway,
             now,
@@ -984,7 +1011,9 @@ function updateControlLoop(now: number, loopDt: number): void {
   if (!active) {
     desktopControls?.reset();
     lastControlFrame = null;
+    lastSentControlFrame = null;
     controlAccumulator = 0;
+    localPrediction.reset();
     hidePowerMeter();
     return;
   }
@@ -998,7 +1027,9 @@ function updateControlLoop(now: number, loopDt: number): void {
   ) {
     const frame = desktopControls.read(now);
     lastControlFrame = frame;
-    client.sendInput(cameraRelativeFrame(frame));
+    const sentFrame = cameraRelativeFrame(frame);
+    lastSentControlFrame = sentFrame;
+    client.sendInput(sentFrame);
     controlAccumulator -= tickSeconds;
     steps += 1;
   }
@@ -1835,6 +1866,7 @@ function toggleReplay(source: ReplaySource = "goal"): void {
   if (!started) {
     return;
   }
+  localPrediction.reset();
   renderer.setReplayActive?.(true);
   renderer.setCameraMode?.(replayCamera);
   replayBanner.hidden = false;
@@ -1847,6 +1879,7 @@ function toggleReplay(source: ReplaySource = "goal"): void {
 
 function stopReplay(): void {
   replay.stop();
+  localPrediction.reset();
   renderer.setReplayActive?.(false);
   renderer.setCameraMode?.(cameraMode);
   replayBanner.hidden = true;
@@ -1914,6 +1947,35 @@ function switchRenderer(next: RendererMode): void {
   if (rendererFellBack) {
     showToast("3D view unavailable; using the 2D renderer");
   }
+}
+
+function loadLocalPrediction(): boolean {
+  try {
+    return window.localStorage.getItem(LOCAL_PREDICTION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveLocalPrediction(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(
+      LOCAL_PREDICTION_KEY,
+      enabled ? "1" : "0",
+    );
+  } catch {
+    // Storage can be unavailable; keep the session-only choice.
+  }
+}
+
+function updatePredictionControl(): void {
+  settingsPredictionButton.setAttribute(
+    "aria-checked",
+    String(localPredictionEnabled),
+  );
+  settingsPredictionButton.title = localPredictionEnabled
+    ? "Visual prediction is on; the server remains authoritative"
+    : "Enable local movement prediction for this browser";
 }
 
 function updateAudioControl(): void {

@@ -599,8 +599,7 @@ Known M7 limitations (by design):
   their AI/gameplay influence is implemented in the M8 tactical brain
 - Formation shapes are fixed by the chosen preset; free-form slot dragging and
   custom formations are not part of M7
-- Local prediction, match history and persistent career saves still wait for
-  later milestones
+- Match history and persistent career saves still wait for later milestones
 
 ## Milestone 6 scope
 
@@ -748,6 +747,10 @@ Implemented:
   button; goalkeepers participate in both paths when they are the right choice
 - Human movement with attribute-driven top speed, acceleration and turn rate,
   sprinting, and controlled-player AI suppression while a human owns the player
+- Opt-in **Local prediction** for the controlled player: the rendered body
+  advances from the last sent input and reconciles to the authoritative
+  interpolation with a 1.5 m snap guard. Default off; the server and replay
+  stream remain authoritative
 - Server-side close control: the controlled player takes automatic dribble
   touches, cushions the ball when stopping, and brakes sharply when asked to
   stop; pass/shoot attempts buffer briefly so a ball arriving this tick is not
@@ -816,7 +819,8 @@ Not implemented yet (by milestone design):
   still clearly marked fake sample data
 - Real animation assets (GLTF/skeletal), commentary audio, server-side replay
   clips/export and a career/competition mode
-- Local prediction/reconciliation; controls feel the RTT on a LAN
+- Full rollback prediction of ball contact, dribble touches or remote players;
+  the local predictor is visual-only and the ball still renders behind authority
 - Authentication. The server is intended for a trusted private LAN only.
 
 ## Protocol and reconnect notes
@@ -861,7 +865,10 @@ Not implemented yet (by milestone design):
 - If a client asks for `resync`, reconnects, or acks a sequence no longer in the
   history ring, the server sends the static setup plus a full snapshot.
 - The client renders 100 ms behind arrival to absorb 30 Hz spacing and LAN jitter.
-  The ball is always server-driven; there is no client-side prediction yet.
+  The ball and remote players are always server-driven. An opt-in **Local
+  prediction** setting advances only the locally controlled body from the last
+  sent input, then snaps or softly reconciles it against the interpolated
+  authoritative position; replays always record the authoritative view.
 - Disconnects pause the simulation; the seat is held for 60 s. Gameplay resumes
   only after both seats are connected again. There is no forfeit scoring yet.
 
@@ -975,7 +982,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 64 test files and 574 tests passing.
+13. `pnpm check`: expect 65 test files and 578 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -1002,8 +1009,12 @@ The two-minute match check:
     Medium and High; confirm Low hides the crowd, shadows and vignette, High
     restores them, and the choice survives a reload. With a vibration-capable
     gamepad connected, toggle **Gamepad rumble** off and on and feel the
-    preview pulse; confirm the choice survives a reload. Append `?renderer=2d`
-    to load the canvas renderer directly.
+    preview pulse; confirm the choice survives a reload. Toggle **Local
+    prediction**, reload and confirm the choice persists; with a high-latency
+    link the controlled player's body should start moving before the
+    interpolated snapshot catches up, and must snap back cleanly on switches,
+    restarts and large corrections. Append `?renderer=2d` to load the canvas
+    renderer directly.
 15. Score a goal: watch the conceding net ripple and the crowd brighten before
     pressing **Replay goal** (or `R`). Verify the slow-motion replay banner,
     progress and stop control, and that the net ripple fires again as the clip

@@ -34,6 +34,10 @@ export const TUNING = {
     snapshotInterpolationDelayMs: 100,
     /** Snapshots retained for delta baselines, count. */
     snapshotHistorySize: 180,
+    /** Soft pull of the visual predictor toward authoritative position, 1/s. */
+    predictionCorrectionPerSecond: 8,
+    /** Error beyond this snaps the predicted controlled player, metres. */
+    predictionSnapDistanceM: 1.5,
   },
   http: {
     /** Browser cache lifetime for non-HTML static assets, seconds. */
