@@ -231,6 +231,29 @@ export function computePlayerPose(
         headPitch: 0.2,
         headYaw: 0,
       };
+    case "diveLeft":
+    case "diveRight": {
+      const side = state === "diveLeft" ? 1 : -1;
+      const progress = clamp01(stateAgeSeconds / 0.4);
+      const extend = smoothstep(0, 0.2, progress);
+      const recover = smoothstep(0.78, 1, progress);
+      return {
+        leftLeg: 0.3,
+        rightLeg: -0.24,
+        leftKnee: -0.18,
+        rightKnee: -0.48,
+        leftArm: -2.45,
+        rightArm: 2.35,
+        leftElbow: 0.18,
+        rightElbow: 0.22,
+        bodyY: 0.08 + 0.4 * extend - 0.08 * recover,
+        bodyTilt: side * (0.12 + 1.22 * extend - 0.16 * recover),
+        bodyLean: 0.08,
+        bodyTwist: side * 0.08,
+        headPitch: 0.16,
+        headYaw: 0,
+      };
+    }
     case "fall":
     case "injured":
       return {

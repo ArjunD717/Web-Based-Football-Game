@@ -15,6 +15,8 @@ export const PLAYER_STATE_CODES = [
   "fall",
   "injured",
   "celebrate",
+  "diveLeft",
+  "diveRight",
 ] as const;
 
 export type PlayerStateName = (typeof PLAYER_STATE_CODES)[number];

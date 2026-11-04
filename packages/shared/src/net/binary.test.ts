@@ -66,6 +66,8 @@ describe("snapshot encoding", () => {
     const frame = makeFrame(1, 100);
     frame.players[0]!.state = "sprint";
     frame.players[1]!.state = "shoot";
+    frame.players[2]!.state = "diveLeft";
+    frame.players[3]!.state = "diveRight";
     const encoded = encodeSnapshot(frame);
     expect(encoded[0]).toBe(SNAPSHOT_MESSAGE_TYPE);
 
@@ -80,6 +82,8 @@ describe("snapshot encoding", () => {
     expect(decoded.players).toHaveLength(MATCH_TOTAL_PLAYERS);
     expect(decoded.players[0]!.state).toBe("sprint");
     expect(decoded.players[1]!.state).toBe("shoot");
+    expect(decoded.players[2]!.state).toBe("diveLeft");
+    expect(decoded.players[3]!.state).toBe("diveRight");
     expect(decoded.players[0]!.x).toBeCloseTo(frame.players[0]!.x, 2);
     expect(decoded.players[0]!.facing).toBeCloseTo(
       frame.players[0]!.facing,

@@ -78,6 +78,20 @@ export function resolveGoalkeeperSave(state: MatchState): boolean {
       continue;
     }
 
+    // The dive is a presentation state, not a physics change. Trigger it as
+    // soon as a shot is projected inside the keeper's reach so the body is
+    // already moving when the save is resolved; an unsuccessful dive should
+    // still be visible. Do not restart it on every tick of the same shot.
+    if (keeper.actionTimer <= 0) {
+      const targetDx = goal.lineX - keeper.x;
+      const targetDy = projectedY - keeper.y;
+      const cross =
+        Math.cos(keeper.facing) * targetDy -
+        Math.sin(keeper.facing) * targetDx;
+      keeper.state = cross >= 0 ? "diveLeft" : "diveRight";
+      keeper.actionTimer = TUNING.player.actionStateSeconds;
+    }
+
     const reactionTime = clamp(
       timeToLine / TUNING.ai.saveReactionSeconds,
       0,

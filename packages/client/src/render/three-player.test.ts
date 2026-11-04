@@ -40,6 +40,14 @@ describe("player animation pose", () => {
     expect(rise.headPitch).toBeLessThan(land.headPitch);
   });
 
+  it("tilts a goalkeeper dive toward the chosen side", () => {
+    const left = computePlayerPose("diveLeft", 1, 1, 0.16);
+    const right = computePlayerPose("diveRight", 1, 1, 0.16);
+    expect(left.bodyTilt).toBeGreaterThan(0.8);
+    expect(right.bodyTilt).toBeLessThan(-0.8);
+    expect(left.bodyY).toBeGreaterThan(0.2);
+  });
+
   it("raises the arms to celebrate and lowers stamina-dependent effort", () => {
     const celebrate = computePlayerPose("celebrate", Math.PI / 4, 1);
     expect(Math.abs(celebrate.leftArm)).toBeGreaterThan(2);
