@@ -78,6 +78,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private baseShot: CameraShot = createCameraShot(this.cameraMode);
   private lastCameraState: CameraRenderState | null = null;
   private lastCameraPose: CameraPose | null = null;
+  private replayActive = false;
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -255,7 +256,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
       // Establish the base pose before a context shot can blend away from it.
       this.cameraDirector.update(0, state);
     }
-    this.contextController.update(dt, state);
+    if (!this.replayActive) {
+      this.contextController.update(dt, state);
+    }
     const frame = this.cameraDirector.update(dt, state);
     if (frame !== null) {
       this.lastCameraPose = frame.pose;
@@ -279,6 +282,18 @@ export class ThreeMatchRenderer implements MatchRenderer {
         CAMERA_TUNING.director.modeSwitchBlendSeconds,
       );
     }
+  }
+
+  setReplayActive(active: boolean): void {
+    if (active === this.replayActive) {
+      return;
+    }
+    this.replayActive = active;
+    this.cameraDirector.reset();
+    this.contextController.reset();
+    this.lastCameraState = null;
+    this.lastCameraPose = null;
+    this.lastRenderAtMs = null;
   }
 
   inputBasis(): CameraInputBasis | null {

@@ -50,11 +50,49 @@ describe("match replay buffer", () => {
     replay.record(view(2), 0, 0, 100);
     expect(replay.start(200)).toBe(false);
     expect(replay.active).toBe(false);
-
     replay.record(view(3), 0, 1, 300);
     expect(replay.start(400)).toBe(true);
     replay.stop();
     expect(replay.active).toBe(false);
     expect(replay.sample(500)).toBeNull();
+  });
+
+  it("replays the full retained capture without requiring a goal", () => {
+    const replay = new MatchReplayBuffer({
+      captureMs: 10_000,
+      speed: 1,
+    });
+    replay.record(view(1), 0, 0, 0);
+    expect(replay.hasCapture).toBe(false);
+    expect(replay.captureDurationMs).toBe(0);
+
+    replay.record(view(2), 0, 0, 1_000);
+    expect(replay.hasCapture).toBe(true);
+    expect(replay.captureDurationMs).toBe(1_000);
+    replay.record(view(3), 0, 0, 2_000);
+    expect(replay.startCapture(3_000)).toBe(true);
+    expect(replay.active).toBe(true);
+
+    const sample = replay.sample(4_000);
+    expect(sample?.durationMs).toBe(2_000);
+    expect(sample?.view.tick).toBe(2);
+    expect(replay.sample(4_999)?.view.tick).toBe(3);
+  });
+
+  it("keeps the shorter goal clip available after a full replay", () => {
+    const replay = new MatchReplayBuffer({
+      captureMs: 10_000,
+      goalWindowMs: 1_000,
+      speed: 1,
+    });
+    replay.record(view(1), 0, 0, 0);
+    replay.record(view(2), 0, 0, 1_000);
+    replay.record(view(3), 1, 0, 2_000);
+
+    expect(replay.hasClip).toBe(true);
+    expect(replay.startCapture(3_000)).toBe(true);
+    replay.stop();
+    expect(replay.start(4_000)).toBe(true);
+    expect(replay.sample(4_500)?.durationMs).toBe(1_000);
   });
 });

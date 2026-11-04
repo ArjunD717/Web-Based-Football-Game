@@ -941,6 +941,9 @@
               <button id="replay-button" class="ui-button ui-button--small" type="button" disabled>
                 Replay goal
               </button>
+              <button id="replay-last-button" class="ui-button ui-button--small" type="button" disabled title="Replay the last 15 seconds">
+                Last 15s
+              </button>
               <label class="match-camera">
                 <span class="match-camera__label">Camera</span>
                 <select id="camera-mode" class="ui-select match-camera__select" aria-label="Gameplay camera"></select>
@@ -1066,6 +1069,12 @@
               <span class="replay-dot" aria-hidden="true"></span>
               <strong>Replay</strong>
               <span id="replay-progress" class="ui-mono">0.0s</span>
+              <div id="replay-angles" class="replay-angles" role="group" aria-label="Replay camera">
+                <button type="button" class="replay-angle" data-replay-camera="broadcast" aria-pressed="true" title="Television touchline view">TV</button>
+                <button type="button" class="replay-angle" data-replay-camera="endToEnd" aria-pressed="false" title="Behind the goal">Goal</button>
+                <button type="button" class="replay-angle" data-replay-camera="player" aria-pressed="false" title="Chase camera">Player</button>
+                <button type="button" class="replay-angle" data-replay-camera="drone" aria-pressed="false" title="High tactical view">Drone</button>
+              </div>
               <button id="replay-stop" class="ui-button ui-button--small" type="button">Skip</button>
             </div>
 

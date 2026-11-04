@@ -165,9 +165,15 @@ const rendererToggleButton =
 const cameraModeSelect =
   byId<HTMLSelectElement>("camera-mode");
 const replayButton = byId<HTMLButtonElement>("replay-button");
+const replayLastButton =
+  byId<HTMLButtonElement>("replay-last-button");
 const replayStopButton = byId<HTMLButtonElement>("replay-stop");
 const replayBanner = byId<HTMLElement>("replay-banner");
 const replayProgress = byId<HTMLElement>("replay-progress");
+const replayAngles = byId<HTMLElement>("replay-angles");
+const replayCameraButtons = [
+  ...document.querySelectorAll<HTMLButtonElement>("[data-replay-camera]"),
+];
 const audioToggleButton = byId<HTMLButtonElement>("audio-toggle");
 const bufferChip = byId<HTMLElement>("buffer-chip");
 const matchRulesChip = byId<HTMLElement>("match-rules");
@@ -207,6 +213,7 @@ let currentState: GameClientState | null = null;
 let toastTimer: number | null = null;
 let lastQrRoomCode: string | null = null;
 let cameraMode: CameraMode = loadCameraMode();
+let replayCamera: CameraMode = "broadcast";
 let visualQuality: VisualQuality = loadVisualQuality();
 
 const substitutionPanel = new SubstitutionPanel({
@@ -233,6 +240,10 @@ for (const option of CAMERA_MODES) {
   cameraModeSelect.append(element);
 }
 cameraModeSelect.addEventListener("change", () => {
+  if (replay.active) {
+    cameraModeSelect.value = cameraMode;
+    return;
+  }
   cameraMode = parseCameraMode(cameraModeSelect.value);
   saveCameraMode(cameraMode);
   renderer.setCameraMode?.(cameraMode);
@@ -385,8 +396,19 @@ rendererToggleButton.addEventListener("click", () => {
 });
 
 replayButton.addEventListener("click", () => {
-  toggleReplay();
+  toggleReplay("goal");
 });
+
+replayLastButton.addEventListener("click", () => {
+  toggleReplay("capture");
+});
+
+for (const button of replayCameraButtons) {
+  button.addEventListener("click", () => {
+    const mode = parseCameraMode(button.dataset.replayCamera);
+    setReplayCamera(mode);
+  });
+}
 
 replayStopButton.addEventListener("click", () => {
   stopReplay();
@@ -419,7 +441,7 @@ window.addEventListener("keydown", (event) => {
     !matchView.hidden &&
     !controlsDialog.open
   ) {
-    toggleReplay();
+    toggleReplay("goal");
   }
 });
 window.addEventListener("pagehide", () => {
@@ -577,7 +599,7 @@ function applyState(state: GameClientState): void {
     if (newMatch) {
       stopReplay();
       replay.clear();
-      setReplayAvailable(false);
+      updateReplayButtons();
       audio.reset();
       lastControlledPlayerId = null;
       lastControlledMatchId = null;
@@ -694,7 +716,7 @@ function renderLoop(now: number): void {
             now,
           )
         ) {
-          setReplayAvailable(true);
+          updateReplayButtons();
           showToast("Goal — replay available");
         }
       }
@@ -715,6 +737,7 @@ function renderLoop(now: number): void {
     lastHudAt = now;
     updateHud(currentState);
     updateOverlay(currentState);
+    updateReplayButtons();
   }
 
   requestAnimationFrame(renderLoop);
@@ -1269,6 +1292,7 @@ function updateStatsScreen(state: GameClientState): void {
     statsNote,
     { title: "Match statistics", score, note, rows },
   );
+  statsScreen.hidden = replay.active;
 }
 
 function latestScore(side: "home" | "away"): number {
@@ -1557,35 +1581,74 @@ function showOverlay(
   overlayDetail.textContent = detail;
 }
 
-function toggleReplay(): void {
+type ReplaySource = "goal" | "capture";
+
+function toggleReplay(source: ReplaySource = "goal"): void {
   if (replay.active) {
     stopReplay();
     return;
   }
-  if (!replay.start(performance.now())) {
+  const now = performance.now();
+  const started =
+    source === "capture" ? replay.startCapture(now) : replay.start(now);
+  if (!started) {
     return;
   }
+  renderer.setReplayActive?.(true);
+  renderer.setCameraMode?.(replayCamera);
   replayBanner.hidden = false;
-  replayButton.textContent = "Stop replay";
   matchOverlay.hidden = true;
+  statsScreen.hidden = true;
+  updateReplayButtons();
+  updateReplayCameraButtons();
+  updateCameraControl();
 }
 
 function stopReplay(): void {
   replay.stop();
+  renderer.setReplayActive?.(false);
+  renderer.setCameraMode?.(cameraMode);
   replayBanner.hidden = true;
-  replayButton.textContent = "Replay goal";
+  if (currentState !== null) {
+    updateStatsScreen(currentState);
+  }
+  updateReplayButtons();
+  updateReplayCameraButtons();
+  updateCameraControl();
 }
 
-function setReplayAvailable(available: boolean): void {
-  replayButton.disabled = !available;
-  if (!available && !replay.active) {
-    replayButton.textContent = "Replay goal";
+function updateReplayButtons(): void {
+  const active = replay.active;
+  replayButton.textContent = active ? "Stop replay" : "Replay goal";
+  replayButton.disabled = !active && !replay.hasClip;
+  replayLastButton.disabled =
+    active || !replay.hasCapture || replay.captureDurationMs < 2_000;
+}
+
+function setReplayCamera(mode: CameraMode): void {
+  if (!replay.active) {
+    return;
+  }
+  replayCamera = mode;
+  renderer.setCameraMode?.(mode);
+  updateReplayCameraButtons();
+}
+
+function updateReplayCameraButtons(): void {
+  replayAngles.hidden = rendererMode !== "3d";
+  for (const button of replayCameraButtons) {
+    const mode = parseCameraMode(button.dataset.replayCamera);
+    button.setAttribute("aria-pressed", String(mode === replayCamera));
+    button.disabled = !replay.active || rendererMode !== "3d";
   }
 }
 
 function switchRenderer(next: RendererMode): void {
   if (next === rendererMode) {
     return;
+  }
+  if (replay.active) {
+    stopReplay();
   }
   renderer.destroy();
   mounted = mountMatchRenderer(pitchStage, next);
@@ -1601,6 +1664,7 @@ function switchRenderer(next: RendererMode): void {
   updateRendererControl();
   updateCameraControl();
   updateQualityControl();
+  updateReplayCameraButtons();
   if (latestView !== null) {
     renderer.render(latestView);
     updateCameraIndicators();
@@ -1620,9 +1684,10 @@ function updateAudioControl(): void {
 function updateCameraControl(): void {
   const option = CAMERA_MODES.find((entry) => entry.id === cameraMode);
   cameraModeSelect.value = cameraMode;
-  cameraModeSelect.disabled = rendererMode !== "3d";
-  cameraModeSelect.title =
-    rendererMode === "3d"
+  cameraModeSelect.disabled = rendererMode !== "3d" || replay.active;
+  cameraModeSelect.title = replay.active
+    ? "Pick a replay angle in the replay bar"
+    : rendererMode === "3d"
       ? (option?.description ?? "Gameplay camera")
       : "Switch to the 3D view to change the camera";
 }

@@ -15,7 +15,7 @@ export interface ReplaySample {
 }
 
 export interface ReplayBufferOptions {
-  /** Live action retained before a goal, milliseconds. */
+  /** Live action retained before a goal or full replay, milliseconds. */
   readonly captureMs?: number;
   /** Portion of the retained action included in the goal clip. */
   readonly goalWindowMs?: number;
@@ -26,7 +26,7 @@ export interface ReplayBufferOptions {
 
 /**
  * A local presentation-only ring buffer. It never mutates a snapshot or asks
- * the server to pause; a goal clip is replayed over the live 3D scene while the
+ * the server to pause; a clip is replayed over the live 3D scene while the
  * authoritative match continues underneath.
  */
 export class MatchReplayBuffer {
@@ -35,21 +35,36 @@ export class MatchReplayBuffer {
   private readonly speed: number;
   private readonly maxFrames: number;
   private readonly frames: ReplayFrame[] = [];
-  private clip: ReplayFrame[] = [];
+  private goalClip: ReplayFrame[] = [];
+  private playbackFrames: ReplayFrame[] = [];
   private previousScore: string | null = null;
   private playbackStartedAtMs: number | null = null;
-  private clipStartMs = 0;
-  private clipDurationMs = 0;
+  private playbackStartMs = 0;
+  private playbackDurationMs = 0;
+  private goalStartMs = 0;
+  private goalDurationMs = 0;
 
   constructor(options: ReplayBufferOptions = {}) {
-    this.captureMs = Math.max(1_000, options.captureMs ?? 12_000);
-    this.goalWindowMs = Math.max(500, options.goalWindowMs ?? 5_500);
+    this.captureMs = Math.max(1_000, options.captureMs ?? 15_000);
+    this.goalWindowMs = Math.max(500, options.goalWindowMs ?? 8_000);
     this.speed = Math.max(0.1, options.speed ?? 0.55);
-    this.maxFrames = Math.max(10, options.maxFrames ?? 900);
+    this.maxFrames = Math.max(10, options.maxFrames ?? 1_200);
   }
 
   get hasClip(): boolean {
-    return this.clip.length >= 2;
+    return this.goalClip.length >= 2;
+  }
+
+  get hasCapture(): boolean {
+    return this.frames.length >= 2;
+  }
+
+  get captureDurationMs(): number {
+    const first = this.frames[0];
+    const last = this.frames.at(-1);
+    return first === undefined || last === undefined
+      ? 0
+      : Math.max(0, last.recordedAtMs - first.recordedAtMs);
   }
 
   get active(): boolean {
@@ -57,7 +72,9 @@ export class MatchReplayBuffer {
   }
 
   get durationMs(): number {
-    return this.clipDurationMs;
+    return this.playbackDurationMs > 0
+      ? this.playbackDurationMs
+      : this.goalDurationMs;
   }
 
   /** Returns true when the just-recorded frame completed a goal. */
@@ -84,30 +101,59 @@ export class MatchReplayBuffer {
       return false;
     }
     const clipCutoff = nowMs - this.goalWindowMs;
-    this.clip = this.frames.filter((frame) => frame.recordedAtMs >= clipCutoff);
-    if (this.clip.length < 2) {
-      this.clip = this.frames.slice(-2);
+    this.goalClip = this.frames.filter(
+      (frame) => frame.recordedAtMs >= clipCutoff,
+    );
+    if (this.goalClip.length < 2) {
+      this.goalClip = this.frames.slice(-2);
     }
-    this.clipStartMs = this.clip[0]?.recordedAtMs ?? nowMs;
-    this.clipDurationMs = Math.max(1, nowMs - this.clipStartMs);
+    this.goalStartMs = this.goalClip[0]?.recordedAtMs ?? nowMs;
+    this.goalDurationMs = Math.max(1, nowMs - this.goalStartMs);
     this.playbackStartedAtMs = null;
     return true;
   }
 
   clear(): void {
     this.frames.length = 0;
-    this.clip = [];
+    this.goalClip = [];
+    this.playbackFrames = [];
     this.previousScore = null;
     this.playbackStartedAtMs = null;
-    this.clipStartMs = 0;
-    this.clipDurationMs = 0;
+    this.playbackStartMs = 0;
+    this.playbackDurationMs = 0;
+    this.goalStartMs = 0;
+    this.goalDurationMs = 0;
   }
 
   start(nowMs: number): boolean {
     if (!this.hasClip) {
       return false;
     }
-    this.playbackStartedAtMs = nowMs;
+    this.beginPlayback(
+      this.goalClip,
+      this.goalStartMs,
+      this.goalDurationMs,
+      nowMs,
+    );
+    return true;
+  }
+
+  /** Replay the whole retained capture, regardless of whether a goal occurred. */
+  startCapture(nowMs: number): boolean {
+    if (!this.hasCapture) {
+      return false;
+    }
+    const first = this.frames[0];
+    const last = this.frames.at(-1);
+    if (first === undefined || last === undefined) {
+      return false;
+    }
+    this.beginPlayback(
+      this.frames,
+      first.recordedAtMs,
+      Math.max(1, last.recordedAtMs - first.recordedAtMs),
+      nowMs,
+    );
     return true;
   }
 
@@ -116,15 +162,15 @@ export class MatchReplayBuffer {
   }
 
   sample(nowMs: number): ReplaySample | null {
-    if (this.playbackStartedAtMs === null || !this.hasClip) {
+    if (this.playbackStartedAtMs === null || this.playbackFrames.length < 2) {
       return null;
     }
     const elapsedMs = (nowMs - this.playbackStartedAtMs) * this.speed;
-    if (elapsedMs >= this.clipDurationMs) {
+    if (elapsedMs >= this.playbackDurationMs) {
       this.stop();
       return null;
     }
-    const targetMs = this.clipStartMs + elapsedMs;
+    const targetMs = this.playbackStartMs + elapsedMs;
     const view = this.frameAt(targetMs);
     if (view === null) {
       this.stop();
@@ -132,16 +178,28 @@ export class MatchReplayBuffer {
     }
     return {
       view,
-      progress: Math.min(1, elapsedMs / this.clipDurationMs),
+      progress: Math.min(1, elapsedMs / this.playbackDurationMs),
       elapsedMs,
-      durationMs: this.clipDurationMs,
+      durationMs: this.playbackDurationMs,
     };
+  }
+
+  private beginPlayback(
+    frames: readonly ReplayFrame[],
+    startMs: number,
+    durationMs: number,
+    nowMs: number,
+  ): void {
+    this.playbackFrames = [...frames];
+    this.playbackStartMs = startMs;
+    this.playbackDurationMs = Math.max(1, durationMs);
+    this.playbackStartedAtMs = nowMs;
   }
 
   private frameAt(targetMs: number): MatchView | null {
     let best: MatchView | null = null;
     let bestDistance = Infinity;
-    for (const frame of this.clip) {
+    for (const frame of this.playbackFrames) {
       const distance = Math.abs(frame.recordedAtMs - targetMs);
       if (distance < bestDistance) {
         bestDistance = distance;

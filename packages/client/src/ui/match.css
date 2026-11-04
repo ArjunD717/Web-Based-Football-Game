@@ -789,7 +789,10 @@ body[data-view="match"] ::selection {
   z-index: 8;
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: var(--ui-space-2);
+  row-gap: 0.3rem;
   transform: translateX(-50%);
   max-width: calc(100% - 2rem);
   padding: 0.3rem 0.35rem 0.3rem 0.65rem;
@@ -818,6 +821,40 @@ body[data-view="match"] ::selection {
 .replay-banner .ui-button {
   min-height: 1.9rem;
   padding: 0.25rem 0.55rem;
+}
+
+.replay-angles {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding-left: var(--ui-space-2);
+  border-left: 1px solid var(--ui-line);
+}
+
+.replay-angle {
+  min-height: 1.9rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ui-muted);
+  font: inherit;
+  font-size: var(--ui-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.replay-angle:hover,
+.replay-angle:focus-visible {
+  border-color: var(--ui-line-strong);
+  color: var(--ui-chalk);
+}
+
+.replay-angle[aria-pressed="true"] {
+  border-color: var(--ui-orange);
+  background: color-mix(in srgb, var(--ui-orange) 16%, transparent);
+  color: var(--ui-chalk);
 }
 
 .replay-dot {
