@@ -278,6 +278,11 @@ Implemented:
   transitions do not snap the feet. Facing comes from the authoritative
   snapshot. A render-only 1.22x player scale and 1.45x ball scale improve
   readability without touching the physics capsule or ball radius
+- On-target shots inside the goalkeeper's reach trigger a directional
+  **diveLeft / diveRight** animation before the save roll. Catch, parry and
+  goal outcomes still come from the existing deterministic save probability;
+  the dive state is presentation-only. It is appended to the wire state
+  vocabulary, so protocol 10 is required
 - The pitch now has corner flags and a low-cost procedural crowd stand around
   all four sides. A fast-ball line trail, predicted landing ring for aerial
   balls, and edge arrows for an off-screen ball or controlled player keep the
@@ -308,14 +313,19 @@ Implemented:
   context trigger priority/deduplication, kick-off/restart/celebration/incident
   framing, tuning editor coverage, visual quality presets, off-screen edge
   projection, aerial landing prediction, articulated sprint/kick/header pose
-  progression, joint cross-fading, pitch layout/asset-free mesh construction and
-  replay-buffer goal detection, trimming, full-capture replay, goal-clip
-  preservation and playback sampling
+  progression, goalkeeper dive poses and save-state triggers, joint
+  cross-fading, dive-state wire round-trips, pitch layout/asset-free mesh
+  construction and replay-buffer goal detection, trimming, full-capture replay,
+  goal-clip preservation and playback sampling
 
 Known M11 limitations (by design):
 
 - Players are procedural low-poly rigs; there are no GLTF/skeletal animation
   assets, facial animation or broadcast-quality cutscenes
+- Goalkeeper dives use the existing probability-based save window; the dive
+  direction is chosen from the projected shot, but there is no manual keeper
+  control, ball-tracking IK, or physical dive reach beyond the current save
+  tuning
 - The Player camera is a damped chase view, not a collision-aware third-person
   rig; it can pass close to the stand geometry at the edges of the pitch
 - The crowd is a flat procedural texture band, not seated 3D geometry or a
@@ -760,9 +770,10 @@ Not implemented yet (by milestone design):
 
 ## Protocol and reconnect notes
 
-- `PROTOCOL_VERSION = 9`. Hello accepts an optional `sessionToken`; the welcome
+- `PROTOCOL_VERSION = 10`. Hello accepts an optional `sessionToken`; the welcome
   returns the stable token as `sessionId`. The browser keeps it in
-  `sessionStorage`.
+  `sessionStorage`. Protocol 10 appends the goalkeeper `diveLeft` and
+  `diveRight` state codes; older clients are rejected at the handshake.
 - Lobby JSON carries each seat's selected club and full `TeamSheet`;
   `setTeam` and `updateSheet` are client commands, and `lobbyState` is
   re-broadcast to both seats after every accepted edit. `updateSettings`
@@ -897,7 +908,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 59 test files and 547 tests passing.
+13. `pnpm check`: expect 60 test files and 550 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -911,7 +922,9 @@ The two-minute match check:
     Switch to **2D view** and confirm the Camera picker disables. Switch back and
     confirm the 3D camera returns. In Player camera, sprint and shoot: confirm
     knees bend through the stride, elbows counter-swing, and the shooting leg
-    swings from backswing through contact. In Player camera, pass the ball away and
+    swings from backswing through contact. Take an on-target shot: the opposing
+    goalkeeper must tilt into a left/right dive before the save or goal resolves.
+    In Player camera, pass the ball away and
     confirm the white ball arrow appears at the screen edge; switch away from a
     player during a camera cut and confirm the orange controlled-player arrow
     appears. Open **Settings** before kick-off and try **3D quality** Low,
