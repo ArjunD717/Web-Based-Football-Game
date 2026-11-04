@@ -3,7 +3,12 @@
 import * as THREE from "three";
 import type { Pitch } from "@fb/sim";
 import type { MatchRenderer } from "./renderer";
-import { computeCameraPose, pitchToWorld } from "./three-layout";
+import { CameraDebugOverlay } from "../camera/CameraDebugOverlay";
+import { CameraDirector } from "../camera/CameraDirector";
+import { CAMERA_TUNING } from "../camera/cameraTuning";
+import { BroadcastShot } from "../camera/shots/broadcast";
+import type { CameraPose, CameraRenderState } from "../camera/types";
+import { pitchToWorld } from "./three-layout";
 import { createPitchVisual } from "./three-pitch";
 import { PlayerRig } from "./three-player";
 import type { MatchView } from "./view";
@@ -35,7 +40,13 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private pitchKey = "";
   private width = 1;
   private height = 1;
-  private lastFitKey = "";
+  private lastRenderAtMs: number | null = null;
+  private lastFovDegrees = CAMERA_TUNING.broadcast.fovDegrees;
+  private lastNearClipM = CAMERA_TUNING.camera.nearClipM;
+  private lastFarClipM = CAMERA_TUNING.camera.farClipM;
+  private readonly cameraDirector = new CameraDirector();
+  private readonly broadcastShot = new BroadcastShot();
+  private readonly cameraDebug: CameraDebugOverlay;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -56,7 +67,12 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.backdrop = createBackdropTexture();
     this.scene.background = this.backdrop;
     this.scene.fog = new THREE.Fog(0x06110b, 135, 260);
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 500);
+    this.camera = new THREE.PerspectiveCamera(
+      CAMERA_TUNING.broadcast.fovDegrees,
+      1,
+      CAMERA_TUNING.camera.nearClipM,
+      CAMERA_TUNING.camera.farClipM,
+    );
 
     const hemisphere = new THREE.HemisphereLight(0xc9f7dd, 0x06130d, 1.7);
     this.scene.add(hemisphere);
@@ -97,6 +113,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
     window.addEventListener("resize", this.onWindowResize);
     this.resize();
+    this.cameraDebug = new CameraDebugOverlay();
   }
 
   resize(): void {
@@ -110,10 +127,6 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.renderer.setSize(this.width, this.height, false);
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
-    this.lastFitKey = "";
-    if (this.pitch !== null) {
-      this.fitCamera(this.pitch);
-    }
   }
 
   render(view: MatchView): void {
@@ -123,14 +136,31 @@ export class ThreeMatchRenderer implements MatchRenderer {
     if (this.pitch === null || this.pitchKey !== pitchKey(view.pitch)) {
       this.installPitch(view.pitch);
     }
-    const fitKey = `${this.pitchKey}:${this.camera.aspect.toFixed(3)}`;
-    if (fitKey !== this.lastFitKey) {
-      this.fitCamera(view.pitch);
-      this.lastFitKey = fitKey;
-    }
 
     this.syncPlayers(view);
     this.updateBall(view);
+
+    const now = performance.now();
+    const dt =
+      this.lastRenderAtMs === null
+        ? 0
+        : Math.max(0, (now - this.lastRenderAtMs) / 1_000);
+    this.lastRenderAtMs = now;
+    const state: CameraRenderState = {
+      view,
+      aspect: this.width / Math.max(1, this.height),
+      selfSide: view.selfSide,
+      half: view.half,
+      pitch: view.pitch,
+    };
+    if (this.cameraDirector.depth === 0) {
+      this.cameraDirector.setBase(this.broadcastShot, state);
+    }
+    const frame = this.cameraDirector.update(dt, state);
+    if (frame !== null) {
+      this.applyCameraPose(frame.pose);
+      this.cameraDebug.update(frame);
+    }
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -138,6 +168,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
   destroy(): void {
     this.resizeObserver.disconnect();
     window.removeEventListener("resize", this.onWindowResize);
+    this.cameraDebug.destroy();
     disposeObject(this.scene);
     this.players.clear();
     this.backdrop.dispose();
@@ -154,64 +185,32 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.pitchGroup.add(visual.group);
     this.pitch = pitch;
     this.pitchKey = pitchKey(pitch);
-    this.fitCamera(pitch);
+    this.cameraDirector.reset();
+    this.lastRenderAtMs = null;
   }
 
-  private fitCamera(pitch: Pitch): void {
-    const pose = computeCameraPose(
-      pitch,
-      this.width / Math.max(1, this.height),
-    );
-    this.camera.fov = pose.fovDegrees;
-    this.camera.updateProjectionMatrix();
-    const target = new THREE.Vector3(
-      pose.target.x,
-      pose.target.y,
-      pose.target.z,
-    );
-    const direction = new THREE.Vector3(
-      pose.position.x,
-      pose.position.y,
-      pose.position.z,
-    ).normalize();
-    let distance = Math.hypot(
+  private applyCameraPose(pose: CameraPose): void {
+    this.camera.position.set(
       pose.position.x,
       pose.position.y,
       pose.position.z,
     );
-    const bounds = {
-      x: pitch.lengthM / 2 + pitch.goalNetDepthM + 0.8,
-      z: pitch.widthM / 2 + 1.2,
-    };
-    const corners = [
-      [-bounds.x, 0, -bounds.z],
-      [bounds.x, 0, -bounds.z],
-      [-bounds.x, 0, bounds.z],
-      [bounds.x, 0, bounds.z],
-      [-bounds.x, pitch.goalHeightM, -bounds.z],
-      [bounds.x, pitch.goalHeightM, -bounds.z],
-      [-bounds.x, pitch.goalHeightM, bounds.z],
-      [bounds.x, pitch.goalHeightM, bounds.z],
-    ] as const;
-    const point = new THREE.Vector3();
-    for (let iteration = 0; iteration < 10; iteration += 1) {
-      this.camera.position.copy(target).addScaledVector(direction, distance);
-      this.camera.lookAt(target);
-      this.camera.updateMatrixWorld();
-      let extent = 0;
-      for (const [x, y, z] of corners) {
-        point.set(x, y, z).project(this.camera);
-        extent = Math.max(extent, Math.abs(point.x), Math.abs(point.y));
-      }
-      if (extent >= 0.9 && extent <= 0.94) {
-        break;
-      }
-      const adjustment = THREE.MathUtils.clamp(extent / 0.9, 0.82, 1.25);
-      distance *= adjustment;
+    this.camera.lookAt(pose.target.x, pose.target.y, pose.target.z);
+    const near = CAMERA_TUNING.camera.nearClipM;
+    const far = CAMERA_TUNING.camera.farClipM;
+    if (
+      pose.fovDegrees !== this.lastFovDegrees ||
+      near !== this.lastNearClipM ||
+      far !== this.lastFarClipM
+    ) {
+      this.camera.fov = pose.fovDegrees;
+      this.camera.near = near;
+      this.camera.far = far;
+      this.lastFovDegrees = pose.fovDegrees;
+      this.lastNearClipM = near;
+      this.lastFarClipM = far;
+      this.camera.updateProjectionMatrix();
     }
-    this.camera.position.copy(target).addScaledVector(direction, distance);
-    this.camera.lookAt(target);
-    this.camera.updateMatrixWorld();
   }
 
   private syncPlayers(view: MatchView): void {
