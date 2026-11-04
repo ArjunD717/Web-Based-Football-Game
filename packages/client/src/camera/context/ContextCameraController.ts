@@ -1,7 +1,7 @@
 // packages/client/src/camera/context/ContextCameraController.ts
 
 import type { MatchView } from "../../render/view";
-import { CameraDirector } from "../CameraDirector";
+import type { CameraDirector } from "../CameraDirector";
 import { CAMERA_TUNING, type CameraTuning } from "../cameraTuning";
 import type { CameraRenderState } from "../types";
 import {

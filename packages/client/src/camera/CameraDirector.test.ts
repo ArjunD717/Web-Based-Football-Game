@@ -81,6 +81,23 @@ describe("CameraDirector", () => {
     expect(director.update(0, state)?.pose.position.x).toBe(0);
   });
 
+  it("swaps the base without dropping an active context shot", () => {
+    const director = new CameraDirector();
+    const base = new StubShot("broadcast", "Broadcast", 0);
+    const context = new StubShot("kickoff", "Kick-off", 20);
+    const replacement = new StubShot("tele", "Tele", 10);
+    director.setBase(base, state);
+    director.update(0, state);
+    director.push(context, state);
+    director.replaceBase(replacement, state, 0.7);
+    expect(director.depth).toBe(2);
+    expect(director.activeShot?.id).toBe("kickoff");
+    expect(replacement.enterCount).toBe(0);
+    director.pop(state);
+    expect(director.activeShot?.id).toBe("tele");
+    expect(replacement.enterCount).toBe(1);
+  });
+
   it("reports the active shot, target, FOV and zoom", () => {
     const director = new CameraDirector();
     director.setBase(new StubShot("broadcast", "Broadcast", 4), state);

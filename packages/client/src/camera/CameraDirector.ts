@@ -46,6 +46,29 @@ export class CameraDirector {
     this.lastPose = null;
   }
 
+  /**
+   * Swap the gameplay base without discarding an active context shot. With no
+   * context on top, the new base blends from the last rendered pose.
+   */
+  replaceBase(
+    shot: CameraShot,
+    state: CameraRenderState,
+    blendSeconds: number,
+  ): void {
+    if (this.stack.length === 0) {
+      this.setBase(shot, state);
+      return;
+    }
+    const contextIsActive = this.stack.length > 1;
+    this.stack[0]?.exit();
+    this.stack[0] = shot;
+    if (contextIsActive) {
+      return;
+    }
+    shot.enter(state);
+    this.startBlend(blendSeconds);
+  }
+
   /** Push a contextual shot over the current view. */
   push(shot: CameraShot, state: CameraRenderState): void {
     if (this.stack.length === 0) {

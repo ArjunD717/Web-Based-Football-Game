@@ -7,12 +7,133 @@
  * angles are degrees. The simulation never reads this file: the director runs
  * after snapshot interpolation and only moves the Three.js camera.
  */
+/** Framing values shared by every touchline camera. */
+export interface SideCameraFrameTuning {
+  /** Blend from the previous shot into this view. */
+  readonly blendSeconds: number;
+  /** Vertical field of view in the compact framing. */
+  readonly fovDegrees: number;
+  /** Extra FOV added as the action spreads across the pitch. */
+  readonly wideFovDegrees: number;
+  /** Camera height above the pitch in the mid framing. */
+  readonly heightM: number;
+  /** Height added at maximum spread. */
+  readonly wideHeightM: number;
+  /** Height removed at minimum spread. */
+  readonly tightHeightM: number;
+  /** Camera distance beyond the near touchline in the mid framing. */
+  readonly sideSetbackM: number;
+  /** Setback added at maximum spread. */
+  readonly wideSetbackM: number;
+  /** Setback removed at minimum spread; negative values push closer. */
+  readonly tightSetbackM: number;
+  /** Fraction of the target's across-pitch movement followed by the rig. */
+  readonly sideFollowZ: number;
+  /** Look-at height above the ground plane. */
+  readonly targetHeightM: number;
+  /** Fraction of the ball's height used in the look-at point. */
+  readonly ballHeightFollow: number;
+  /** Duration of the half-time move to the opposite touchline. */
+  readonly sideFlipSeconds: number;
+  /** Extra height during the half-time sideline move. */
+  readonly sideFlipLiftM: number;
+}
+
+/** Tracking and smoothing shared by every touchline camera. */
+export interface SideTrackingTuning {
+  /** Weight of the ball in the tracked target. */
+  readonly ballWeight: number;
+  /** Weight of the human-controlled player in the tracked target. */
+  readonly controlledWeight: number;
+  /** Weight of the centroid of players nearest the ball. */
+  readonly nearestWeight: number;
+  /** Number of nearest players included in target and spread. */
+  readonly nearestPlayerCount: number;
+  /** Seconds of ball velocity projected ahead of the ball. */
+  readonly lookAheadSeconds: number;
+  /** Maximum lookahead distance regardless of ball speed. */
+  readonly lookAheadMaxM: number;
+  /** Ball movements shorter than this do not move the tracking anchor. */
+  readonly deadZoneM: number;
+  /** Time constant for along-pitch target damping. */
+  readonly panXResponseSeconds: number;
+  /** Time constant for across-pitch target damping; intentionally slower. */
+  readonly panZResponseSeconds: number;
+  /** Time constant for the zoom spring; the slowest response. */
+  readonly zoomResponseSeconds: number;
+  /** Time constant for the fast-play response envelope. */
+  readonly fastResponseSeconds: number;
+  /** Extra tracking speed multiplier while the ball is travelling fast. */
+  readonly fastTrackingBoost: number;
+  /** Fraction of extra zoom applied during fast play. */
+  readonly fastZoomBonus: number;
+  /** Ball speed at which fast-play response starts. */
+  readonly fastBallStartMps: number;
+  /** Ball speed at which fast-play response is fully engaged. */
+  readonly fastBallFullMps: number;
+  /** Action spread at which the rig is fully pushed in. */
+  readonly spreadMinM: number;
+  /** Action spread at which the rig is fully pulled back. */
+  readonly spreadMaxM: number;
+  /** Tracking target margin inside the goal lines. */
+  readonly edgeMarginXM: number;
+  /** Tracking target margin inside the touchlines. */
+  readonly edgeMarginZM: number;
+  /** Softness of the target clamp near the stadium edge. */
+  readonly edgeSoftnessM: number;
+}
+
+export interface EndToEndCameraTuning {
+  readonly blendSeconds: number;
+  readonly fovDegrees: number;
+  /** Extra FOV when the ball reaches the far goal. */
+  readonly wideFovDegrees: number;
+  readonly heightM: number;
+  /** Camera distance behind the goal line. */
+  readonly setbackM: number;
+  readonly targetHeightM: number;
+  readonly ballHeightFollow: number;
+  /** Fraction of the target's width followed by the camera along the goal line. */
+  readonly goalLineFollow: number;
+  readonly lookAheadSeconds: number;
+  readonly lookAheadMaxM: number;
+  readonly deadZoneM: number;
+  readonly panXResponseSeconds: number;
+  readonly panZResponseSeconds: number;
+  readonly zoomResponseSeconds: number;
+  readonly edgeMarginZM: number;
+  readonly edgeSoftnessM: number;
+  readonly flipSeconds: number;
+  readonly flipLiftM: number;
+}
+
+export interface PlayerCameraTuning {
+  readonly blendSeconds: number;
+  readonly fovDegrees: number;
+  /** Follow distance behind the controlled player. */
+  readonly distanceM: number;
+  readonly heightM: number;
+  readonly targetHeightM: number;
+  /** Look-ahead beyond the player along their facing direction. */
+  readonly lookAheadM: number;
+  /** Time constant for following the player's position. */
+  readonly positionResponseSeconds: number;
+  /** Time constant for turning the chase direction. */
+  readonly lookResponseSeconds: number;
+  /** Time constant for the look-at point. */
+  readonly targetResponseSeconds: number;
+  /** Margin outside the pitch allowed for the chase camera. */
+  readonly boundsMarginM: number;
+}
+
 export interface CameraTuning {
   readonly director: {
     /** Longest frame delta fed to the springs; prevents tab-switch launches. */
     readonly maxFrameDeltaSeconds: number;
     /** Fallback blend when a shot does not declare its own duration. */
     readonly defaultBlendSeconds: number;
+    /** Blend when the player changes the selectable gameplay camera. */
+    readonly modeSwitchBlendSeconds: number;
   };
   readonly camera: {
     /** Near clipping plane in metres. */
@@ -20,76 +141,15 @@ export interface CameraTuning {
     /** Far clipping plane in metres. */
     readonly farClipM: number;
   };
-  readonly broadcast: {
-    /** Blend from the previous shot into the broadcast view. */
-    readonly blendSeconds: number;
-    /** Vertical field of view in the compact framing. */
-    readonly fovDegrees: number;
-    /** Extra FOV added as the action spreads across the pitch. */
-    readonly wideFovDegrees: number;
-    /** Camera height above the pitch in the mid framing. */
-    readonly heightM: number;
-    /** Height added at maximum spread. */
-    readonly wideHeightM: number;
-    /** Height removed at minimum spread. */
-    readonly tightHeightM: number;
-    /** Camera distance beyond the near touchline in the mid framing. */
-    readonly sideSetbackM: number;
-    /** Setback added at maximum spread. */
-    readonly wideSetbackM: number;
-    /** Setback removed at minimum spread; negative values push closer. */
-    readonly tightSetbackM: number;
-    /** Fraction of the target's across-pitch movement followed by the rig. */
-    readonly sideFollowZ: number;
-    /** Look-at height above the ground plane. */
-    readonly targetHeightM: number;
-    /** Fraction of the ball's height used in the look-at point. */
-    readonly ballHeightFollow: number;
-    /** Weight of the ball in the tracked target. */
-    readonly ballWeight: number;
-    /** Weight of the human-controlled player in the tracked target. */
-    readonly controlledWeight: number;
-    /** Weight of the centroid of players nearest the ball. */
-    readonly nearestWeight: number;
-    /** Number of nearest players included in target and spread. */
-    readonly nearestPlayerCount: number;
-    /** Seconds of ball velocity projected ahead of the ball. */
-    readonly lookAheadSeconds: number;
-    /** Maximum lookahead distance regardless of ball speed. */
-    readonly lookAheadMaxM: number;
-    /** Ball movements shorter than this do not move the tracking anchor. */
-    readonly deadZoneM: number;
-    /** Time constant for along-pitch target damping. */
-    readonly panXResponseSeconds: number;
-    /** Time constant for across-pitch target damping; intentionally slower. */
-    readonly panZResponseSeconds: number;
-    /** Time constant for the zoom spring; the slowest response. */
-    readonly zoomResponseSeconds: number;
-    /** Time constant for the fast-play response envelope. */
-    readonly fastResponseSeconds: number;
-    /** Extra tracking speed multiplier while the ball is travelling fast. */
-    readonly fastTrackingBoost: number;
-    /** Fraction of extra zoom applied during fast play. */
-    readonly fastZoomBonus: number;
-    /** Ball speed at which fast-play response starts. */
-    readonly fastBallStartMps: number;
-    /** Ball speed at which fast-play response is fully engaged. */
-    readonly fastBallFullMps: number;
-    /** Action spread at which the rig is fully pushed in. */
-    readonly spreadMinM: number;
-    /** Action spread at which the rig is fully pulled back. */
-    readonly spreadMaxM: number;
-    /** Tracking target margin inside the goal lines. */
-    readonly edgeMarginXM: number;
-    /** Tracking target margin inside the touchlines. */
-    readonly edgeMarginZM: number;
-    /** Softness of the target clamp near the stadium edge. */
-    readonly edgeSoftnessM: number;
-    /** Duration of the half-time move to the opposite touchline. */
-    readonly sideFlipSeconds: number;
-    /** Extra height during the half-time sideline move. */
-    readonly sideFlipLiftM: number;
-  };
+  readonly broadcast: SideCameraFrameTuning & SideTrackingTuning;
+  /** Lower, tighter touchline camera. */
+  readonly tele: SideCameraFrameTuning;
+  /** Higher, further touchline camera that shows more of the pitch. */
+  readonly wide: SideCameraFrameTuning;
+  /** High tactical touchline camera. */
+  readonly drone: SideCameraFrameTuning;
+  readonly endToEnd: EndToEndCameraTuning;
+  readonly player: PlayerCameraTuning;
   readonly context: {
     readonly kickoffDurationSeconds: number;
     readonly kickoffBlendSeconds: number;
@@ -145,6 +205,7 @@ export const CAMERA_TUNING: CameraTuning = {
   director: {
     maxFrameDeltaSeconds: 0.1,
     defaultBlendSeconds: 0.8,
+    modeSwitchBlendSeconds: 0.7,
   },
   camera: {
     nearClipM: 0.25,
@@ -185,6 +246,86 @@ export const CAMERA_TUNING: CameraTuning = {
     edgeSoftnessM: 4,
     sideFlipSeconds: 1.1,
     sideFlipLiftM: 6,
+  },
+  tele: {
+    blendSeconds: 0.65,
+    fovDegrees: 34,
+    wideFovDegrees: 1,
+    heightM: 18,
+    wideHeightM: 3,
+    tightHeightM: -2,
+    sideSetbackM: 24,
+    wideSetbackM: 6,
+    tightSetbackM: -6,
+    sideFollowZ: 0.22,
+    targetHeightM: 0.9,
+    ballHeightFollow: 0.7,
+    sideFlipSeconds: 1,
+    sideFlipLiftM: 4,
+  },
+  wide: {
+    blendSeconds: 0.9,
+    fovDegrees: 45,
+    wideFovDegrees: 1.5,
+    heightM: 36,
+    wideHeightM: 7,
+    tightHeightM: -2,
+    sideSetbackM: 52,
+    wideSetbackM: 12,
+    tightSetbackM: -12,
+    sideFollowZ: 0.1,
+    targetHeightM: 0.7,
+    ballHeightFollow: 0.5,
+    sideFlipSeconds: 1.2,
+    sideFlipLiftM: 7,
+  },
+  drone: {
+    blendSeconds: 0.9,
+    fovDegrees: 52,
+    wideFovDegrees: 2,
+    heightM: 56,
+    wideHeightM: 8,
+    tightHeightM: -6,
+    sideSetbackM: 20,
+    wideSetbackM: 8,
+    tightSetbackM: -4,
+    sideFollowZ: 0.08,
+    targetHeightM: 0.5,
+    ballHeightFollow: 0.35,
+    sideFlipSeconds: 1.2,
+    sideFlipLiftM: 10,
+  },
+  endToEnd: {
+    blendSeconds: 0.9,
+    fovDegrees: 44,
+    wideFovDegrees: 12,
+    heightM: 24,
+    setbackM: 24,
+    targetHeightM: 1,
+    ballHeightFollow: 0.4,
+    goalLineFollow: 0.35,
+    lookAheadSeconds: 0.3,
+    lookAheadMaxM: 10,
+    deadZoneM: 1.2,
+    panXResponseSeconds: 0.4,
+    panZResponseSeconds: 0.6,
+    zoomResponseSeconds: 1.1,
+    edgeMarginZM: 4,
+    edgeSoftnessM: 4,
+    flipSeconds: 1.2,
+    flipLiftM: 8,
+  },
+  player: {
+    blendSeconds: 0.7,
+    fovDegrees: 58,
+    distanceM: 9,
+    heightM: 4.2,
+    targetHeightM: 1.2,
+    lookAheadM: 6,
+    positionResponseSeconds: 0.18,
+    lookResponseSeconds: 0.35,
+    targetResponseSeconds: 0.2,
+    boundsMarginM: 10,
   },
   context: {
     kickoffDurationSeconds: 2.2,
@@ -249,6 +390,7 @@ export const CAMERA_TUNING_RANGES: Readonly<
 > = {
   "director.maxFrameDeltaSeconds": { min: 0.016, max: 0.25, step: 0.001 },
   "director.defaultBlendSeconds": { min: 0.1, max: 1.2, step: 0.01 },
+  "director.modeSwitchBlendSeconds": { min: 0.1, max: 2, step: 0.01 },
   "camera.nearClipM": { min: 0.05, max: 2, step: 0.01 },
   "camera.farClipM": { min: 300, max: 1200, step: 10 },
   "broadcast.blendSeconds": { min: 0.2, max: 1.2, step: 0.01 },
@@ -285,6 +427,76 @@ export const CAMERA_TUNING_RANGES: Readonly<
   "broadcast.edgeSoftnessM": { min: 0.5, max: 10, step: 0.1 },
   "broadcast.sideFlipSeconds": { min: 0.2, max: 2.5, step: 0.01 },
   "broadcast.sideFlipLiftM": { min: 0, max: 15, step: 0.1 },
+  "tele.blendSeconds": { min: 0.2, max: 1.2, step: 0.01 },
+  "tele.fovDegrees": { min: 25, max: 55, step: 0.1 },
+  "tele.wideFovDegrees": { min: 0, max: 10, step: 0.1 },
+  "tele.heightM": { min: 8, max: 45, step: 0.1 },
+  "tele.wideHeightM": { min: 0, max: 15, step: 0.1 },
+  "tele.tightHeightM": { min: -10, max: 10, step: 0.1 },
+  "tele.sideSetbackM": { min: 10, max: 60, step: 0.1 },
+  "tele.wideSetbackM": { min: 0, max: 25, step: 0.1 },
+  "tele.tightSetbackM": { min: -20, max: 10, step: 0.1 },
+  "tele.sideFollowZ": { min: 0, max: 0.6, step: 0.01 },
+  "tele.targetHeightM": { min: 0, max: 3, step: 0.05 },
+  "tele.ballHeightFollow": { min: 0, max: 1.5, step: 0.01 },
+  "tele.sideFlipSeconds": { min: 0.2, max: 2.5, step: 0.01 },
+  "tele.sideFlipLiftM": { min: 0, max: 15, step: 0.1 },
+  "wide.blendSeconds": { min: 0.2, max: 1.2, step: 0.01 },
+  "wide.fovDegrees": { min: 30, max: 65, step: 0.1 },
+  "wide.wideFovDegrees": { min: 0, max: 10, step: 0.1 },
+  "wide.heightM": { min: 12, max: 60, step: 0.1 },
+  "wide.wideHeightM": { min: 0, max: 20, step: 0.1 },
+  "wide.tightHeightM": { min: -10, max: 10, step: 0.1 },
+  "wide.sideSetbackM": { min: 20, max: 80, step: 0.1 },
+  "wide.wideSetbackM": { min: 0, max: 30, step: 0.1 },
+  "wide.tightSetbackM": { min: -20, max: 10, step: 0.1 },
+  "wide.sideFollowZ": { min: 0, max: 0.6, step: 0.01 },
+  "wide.targetHeightM": { min: 0, max: 3, step: 0.05 },
+  "wide.ballHeightFollow": { min: 0, max: 1.5, step: 0.01 },
+  "wide.sideFlipSeconds": { min: 0.2, max: 2.5, step: 0.01 },
+  "wide.sideFlipLiftM": { min: 0, max: 20, step: 0.1 },
+  "drone.blendSeconds": { min: 0.2, max: 1.5, step: 0.01 },
+  "drone.fovDegrees": { min: 30, max: 75, step: 0.1 },
+  "drone.wideFovDegrees": { min: 0, max: 15, step: 0.1 },
+  "drone.heightM": { min: 25, max: 90, step: 0.5 },
+  "drone.wideHeightM": { min: 0, max: 25, step: 0.1 },
+  "drone.tightHeightM": { min: -15, max: 10, step: 0.1 },
+  "drone.sideSetbackM": { min: 5, max: 60, step: 0.1 },
+  "drone.wideSetbackM": { min: 0, max: 25, step: 0.1 },
+  "drone.tightSetbackM": { min: -20, max: 10, step: 0.1 },
+  "drone.sideFollowZ": { min: 0, max: 0.6, step: 0.01 },
+  "drone.targetHeightM": { min: 0, max: 3, step: 0.05 },
+  "drone.ballHeightFollow": { min: 0, max: 1.5, step: 0.01 },
+  "drone.sideFlipSeconds": { min: 0.2, max: 2.5, step: 0.01 },
+  "drone.sideFlipLiftM": { min: 0, max: 25, step: 0.1 },
+  "endToEnd.blendSeconds": { min: 0.2, max: 1.5, step: 0.01 },
+  "endToEnd.fovDegrees": { min: 25, max: 65, step: 0.1 },
+  "endToEnd.wideFovDegrees": { min: 0, max: 25, step: 0.1 },
+  "endToEnd.heightM": { min: 8, max: 45, step: 0.1 },
+  "endToEnd.setbackM": { min: 5, max: 50, step: 0.1 },
+  "endToEnd.targetHeightM": { min: 0, max: 3, step: 0.05 },
+  "endToEnd.ballHeightFollow": { min: 0, max: 1.5, step: 0.01 },
+  "endToEnd.goalLineFollow": { min: 0, max: 1, step: 0.01 },
+  "endToEnd.lookAheadSeconds": { min: 0, max: 1.5, step: 0.01 },
+  "endToEnd.lookAheadMaxM": { min: 0, max: 30, step: 0.1 },
+  "endToEnd.deadZoneM": { min: 0, max: 6, step: 0.1 },
+  "endToEnd.panXResponseSeconds": { min: 0.05, max: 2, step: 0.01 },
+  "endToEnd.panZResponseSeconds": { min: 0.1, max: 3, step: 0.01 },
+  "endToEnd.zoomResponseSeconds": { min: 0.2, max: 4, step: 0.01 },
+  "endToEnd.edgeMarginZM": { min: 0, max: 15, step: 0.1 },
+  "endToEnd.edgeSoftnessM": { min: 0.5, max: 10, step: 0.1 },
+  "endToEnd.flipSeconds": { min: 0.2, max: 2.5, step: 0.01 },
+  "endToEnd.flipLiftM": { min: 0, max: 20, step: 0.1 },
+  "player.blendSeconds": { min: 0.2, max: 1.2, step: 0.01 },
+  "player.fovDegrees": { min: 35, max: 80, step: 0.1 },
+  "player.distanceM": { min: 3, max: 20, step: 0.1 },
+  "player.heightM": { min: 1, max: 12, step: 0.1 },
+  "player.targetHeightM": { min: 0.5, max: 3, step: 0.05 },
+  "player.lookAheadM": { min: 0, max: 20, step: 0.1 },
+  "player.positionResponseSeconds": { min: 0.05, max: 1, step: 0.01 },
+  "player.lookResponseSeconds": { min: 0.05, max: 2, step: 0.01 },
+  "player.targetResponseSeconds": { min: 0.05, max: 1, step: 0.01 },
+  "player.boundsMarginM": { min: 0, max: 30, step: 0.1 },
   "context.kickoffDurationSeconds": { min: 0.5, max: 6, step: 0.1 },
   "context.kickoffBlendSeconds": { min: 0.2, max: 1.2, step: 0.01 },
   "context.kickoffHeightM": { min: 8, max: 60, step: 0.5 },

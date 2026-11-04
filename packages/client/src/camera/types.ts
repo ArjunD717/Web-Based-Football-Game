@@ -21,6 +21,17 @@ export interface CameraShotDebug {
   readonly zoom: number;
 }
 
+/**
+ * Screen-relative movement basis on the pitch plane. `forward` is screen-up
+ * and `right` is screen-right, both in simulation x/y coordinates.
+ */
+export interface CameraInputBasis {
+  readonly rightX: number;
+  readonly rightY: number;
+  readonly forwardX: number;
+  readonly forwardY: number;
+}
+
 export interface CameraRenderState {
   readonly view: MatchView;
   /** Viewport aspect ratio; used for framing and debug output. */
@@ -48,6 +59,11 @@ export interface CameraShot {
   /** Called when the shot leaves the active stack. */
   exit(): void;
   debug(): CameraShotDebug;
+  /**
+   * Current screen orientation for camera-relative input. Context shots omit
+   * it so the base gameplay camera keeps controlling movement during a cut.
+   */
+  inputBasis?(): CameraInputBasis | null;
 }
 
 export interface CameraDirectorFrame {

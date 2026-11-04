@@ -1,7 +1,11 @@
 // packages/client/src/camera/cameraMath.ts
 
 import type { TeamSide } from "@fb/sim";
-import type { CameraPose, CameraVec3 } from "./types";
+import type {
+  CameraInputBasis,
+  CameraPose,
+  CameraVec3,
+} from "./types";
 
 export interface SpringState {
   readonly value: number;
@@ -101,6 +105,43 @@ export function cameraSideSign(selfSide: TeamSide | null, half: number): 1 | -1 
   const selfAttacksPositive =
     selfSide === "away" ? !homeAttacksPositive : homeAttacksPositive;
   return selfAttacksPositive ? 1 : -1;
+}
+
+/**
+ * Derive the screen-relative ground basis from the rendered camera pose.
+ * Using the actual pose keeps movement aligned during half-time and shot
+ * transitions, when the camera is between two orientations.
+ */
+export function cameraGroundBasis(
+  pose: CameraPose,
+): CameraInputBasis | null {
+  const dx = pose.target.x - pose.position.x;
+  const dz = pose.target.z - pose.position.z;
+  const length = Math.hypot(dx, dz);
+  if (length < 0.001) {
+    return null;
+  }
+  const forwardX = dx / length;
+  const forwardY = dz / length;
+  // Screen-right is forward rotated -90 degrees around world up.
+  return {
+    rightX: -forwardY,
+    rightY: forwardX,
+    forwardX,
+    forwardY,
+  };
+}
+
+/** Rotate a stick vector from screen space into simulation pitch space. */
+export function movementToWorld(
+  moveX: number,
+  moveY: number,
+  basis: CameraInputBasis,
+): { readonly x: number; readonly y: number } {
+  return {
+    x: basis.rightX * moveX + basis.forwardX * -moveY,
+    y: basis.rightY * moveX + basis.forwardY * -moveY,
+  };
 }
 
 export function easeInOutCubic(t: number): number {
