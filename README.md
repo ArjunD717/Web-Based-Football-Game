@@ -267,12 +267,15 @@ Implemented:
   camera basis before they reach the server, so screen-up is always away from
   the current view, including during half-time transitions. The picker is
   disabled while the 2D renderer is active; the 2D input path is unchanged
-- Players are low-poly capsule rigs with team kits, shorts, socks, skin/hair
-  variation, shirt numbers and a card marker. Local-space animation poses drive
-  sprint lean, kick/header/volley, tackle/slide/fall, dribble and celebration
-  states; facing comes from the authoritative snapshot. A render-only 1.22x
-  player scale and 1.45x ball scale improve readability without touching the
-  physics capsule or ball radius
+- Players are low-poly articulated rigs with team kits, shorts, socks,
+  skin/hair variation, shirt numbers and a card marker. Hips, knees, shoulders,
+  elbows, torso and head are separate joints: stride cadence, knee lift, arm
+  counter-swing, elbow flex, torso counter-rotation and head look are
+  stamina-scaled. Timed one-shot cycles drive pass/shot/volley backswing
+  through contact, header jump, tackle lunge and the existing slide/fall/
+  celebration states. Facing comes from the authoritative snapshot. A
+  render-only 1.22x player scale and 1.45x ball scale improve readability
+  without touching the physics capsule or ball radius
 - The pitch now has corner flags and a low-cost procedural crowd stand around
   all four sides. A fast-ball line trail, predicted landing ring for aerial
   balls, and edge arrows for an off-screen ball or controlled player keep the
@@ -302,9 +305,10 @@ Implemented:
   camera-to-pitch input mapping, director stacking/replacement and blends,
   context trigger priority/deduplication, kick-off/restart/celebration/incident
   framing, tuning editor coverage, visual quality presets, off-screen edge
-  projection, aerial landing prediction, pitch layout/asset-free mesh
-  construction and replay-buffer goal detection, trimming, full-capture
-  replay, goal-clip preservation and playback sampling
+  projection, aerial landing prediction, articulated sprint/kick/header pose
+  progression, pitch layout/asset-free mesh construction and replay-buffer goal
+  detection, trimming, full-capture replay, goal-clip preservation and playback
+  sampling
 
 Known M11 limitations (by design):
 
@@ -891,7 +895,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 59 test files and 544 tests passing.
+13. `pnpm check`: expect 59 test files and 546 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -903,7 +907,9 @@ The two-minute match check:
     survives a reload. In End to end and Player, push the stick toward the top
     of the screen and confirm the player moves toward the far end, not sideways.
     Switch to **2D view** and confirm the Camera picker disables. Switch back and
-    confirm the 3D camera returns. In Player camera, pass the ball away and
+    confirm the 3D camera returns. In Player camera, sprint and shoot: confirm
+    knees bend through the stride, elbows counter-swing, and the shooting leg
+    swings from backswing through contact. In Player camera, pass the ball away and
     confirm the white ball arrow appears at the screen edge; switch away from a
     player during a camera cut and confirm the orange controlled-player arrow
     appears. Open **Settings** before kick-off and try **3D quality** Low,
