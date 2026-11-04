@@ -26,6 +26,18 @@ import {
   sanitizeBindings,
 } from "./input/bindings";
 import {
+  DEFAULT_GAMEPAD_BINDINGS,
+  GAMEPAD_ACTIONS,
+  applyGamepadBinding,
+  cloneGamepadBindings,
+  formatGamepadButton,
+  loadGamepadBindings,
+  sanitizeGamepadBindings,
+  saveGamepadBindings,
+  type GamepadAction,
+  type GamepadBindings,
+} from "./input/gamepad-bindings";
+import {
   GameClient,
   type GameClientState,
   type GameLinkStatus,
@@ -211,6 +223,11 @@ const controlsDialog = byId<HTMLDialogElement>("controls-dialog");
 const closeBindingsButton = byId<HTMLButtonElement>("close-bindings");
 const resetBindingsButton = byId<HTMLButtonElement>("reset-bindings");
 const bindingsGrid = byId<HTMLElement>("bindings-grid");
+const bindingsCopy = byId<HTMLElement>("bindings-copy");
+const bindingsKeyboardTab =
+  byId<HTMLButtonElement>("bindings-tab-keyboard");
+const bindingsGamepadTab =
+  byId<HTMLButtonElement>("bindings-tab-gamepad");
 const toast = byId<HTMLElement>("toast");
 
 let currentState: GameClientState | null = null;
@@ -314,7 +331,14 @@ let lastControlFrame: ControlFrame | null = null;
 let lastControlledPlayerId: string | null = null;
 let lastControlledMatchId: string | null = null;
 let bindings: KeyBindings = sanitizeBindings(loadKeyBindings());
+let gamepadBindings: GamepadBindings = sanitizeGamepadBindings(
+  loadGamepadBindings(),
+);
+let bindingMode: "keyboard" | "gamepad" = "keyboard";
 let capturingAction: ControlAction | null = null;
+let capturingGamepadAction: GamepadAction | null = null;
+let gamepadCaptureFrame: number | null = null;
+let gamepadCaptureBaseline = new Set<number>();
 
 client.subscribe((state) => {
   currentState = state;
@@ -477,20 +501,35 @@ closeBindingsButton.addEventListener("click", () => {
 });
 
 resetBindingsButton.addEventListener("click", () => {
-  bindings = cloneBindings(DEFAULT_KEY_BINDINGS);
-  saveKeyBindings(bindings);
   capturingAction = null;
+  cancelGamepadCapture();
+  if (bindingMode === "gamepad") {
+    gamepadBindings = cloneGamepadBindings(DEFAULT_GAMEPAD_BINDINGS);
+    saveGamepadBindings(gamepadBindings);
+  } else {
+    bindings = cloneBindings(DEFAULT_KEY_BINDINGS);
+    saveKeyBindings(bindings);
+  }
   renderBindings();
+});
+
+bindingsKeyboardTab.addEventListener("click", () => {
+  selectBindingMode("keyboard");
+});
+
+bindingsGamepadTab.addEventListener("click", () => {
+  selectBindingMode("gamepad");
 });
 
 controlsDialog.addEventListener("close", () => {
   capturingAction = null;
+  cancelGamepadCapture();
   if (
     currentState?.setup != null &&
     controls === null &&
     !controlsDialog.open
   ) {
-    controls = new DesktopControls(bindings);
+    controls = new DesktopControls(bindings, gamepadBindings);
     lastLoopAt = performance.now();
     controlAccumulator = 0;
   }
@@ -499,6 +538,15 @@ controlsDialog.addEventListener("close", () => {
 window.addEventListener(
   "keydown",
   (event) => {
+    if (capturingGamepadAction !== null) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.code === "Escape") {
+        cancelGamepadCapture();
+        renderBindings();
+      }
+      return;
+    }
     if (capturingAction === null) {
       return;
     }
@@ -518,8 +566,89 @@ window.addEventListener(
   true,
 );
 
+function selectBindingMode(mode: "keyboard" | "gamepad"): void {
+  if (bindingMode === mode) {
+    return;
+  }
+  bindingMode = mode;
+  capturingAction = null;
+  cancelGamepadCapture();
+  renderBindings();
+}
+
+function beginGamepadCapture(action: GamepadAction): void {
+  cancelGamepadCapture();
+  capturingAction = null;
+  capturingGamepadAction = action;
+  gamepadCaptureBaseline = new Set(pressedButtons(connectedGamepad()));
+  renderBindings();
+  const poll = (): void => {
+    if (capturingGamepadAction === null) {
+      return;
+    }
+    const pad = connectedGamepad();
+    if (pad !== null) {
+      for (let index = 0; index < pad.buttons.length; index += 1) {
+        if (
+          pad.buttons[index]?.pressed === true &&
+          !gamepadCaptureBaseline.has(index)
+        ) {
+          gamepadBindings = applyGamepadBinding(
+            gamepadBindings,
+            capturingGamepadAction,
+            index,
+          );
+          saveGamepadBindings(gamepadBindings);
+          cancelGamepadCapture();
+          renderBindings();
+          return;
+        }
+      }
+    }
+    gamepadCaptureFrame = requestAnimationFrame(poll);
+  };
+  gamepadCaptureFrame = requestAnimationFrame(poll);
+}
+
+function cancelGamepadCapture(): void {
+  if (gamepadCaptureFrame !== null) {
+    cancelAnimationFrame(gamepadCaptureFrame);
+    gamepadCaptureFrame = null;
+  }
+  capturingGamepadAction = null;
+  gamepadCaptureBaseline.clear();
+}
+
+function connectedGamepad(): Gamepad | null {
+  if (typeof navigator.getGamepads !== "function") {
+    return null;
+  }
+  try {
+    return (
+      navigator
+        .getGamepads()
+        .find((entry) => entry !== null && entry.connected) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
+function pressedButtons(pad: Gamepad | null): number[] {
+  if (pad === null) {
+    return [];
+  }
+  const pressed: number[] = [];
+  for (let index = 0; index < pad.buttons.length; index += 1) {
+    if (pad.buttons[index]?.pressed === true) {
+      pressed.push(index);
+    }
+  }
+  return pressed;
+}
+
 function renderBindings(): void {
-  const labels: Record<ControlAction, string> = {
+  const keyboardLabels: Record<ControlAction, string> = {
     up: "Move up",
     down: "Move down",
     left: "Move left",
@@ -533,25 +662,101 @@ function renderBindings(): void {
     switch: "Switch player",
     finesse: "Finesse modifier",
   };
+  const gamepadLabels: Record<GamepadAction, string> = {
+    sprint: "Sprint",
+    pass: "Pass",
+    through: "Through pass",
+    lob: "Lob / cross",
+    shoot: "Shoot",
+    tackle: "Tackle",
+    switch: "Switch player",
+    finesse: "Finesse modifier",
+  };
+
+  bindingsKeyboardTab.classList.toggle(
+    "is-active",
+    bindingMode === "keyboard",
+  );
+  bindingsGamepadTab.classList.toggle(
+    "is-active",
+    bindingMode === "gamepad",
+  );
+  bindingsKeyboardTab.setAttribute(
+    "aria-selected",
+    String(bindingMode === "keyboard"),
+  );
+  bindingsGamepadTab.setAttribute(
+    "aria-selected",
+    String(bindingMode === "gamepad"),
+  );
+  bindingsKeyboardTab.tabIndex = bindingMode === "keyboard" ? 0 : -1;
+  bindingsGamepadTab.tabIndex = bindingMode === "gamepad" ? 0 : -1;
+  bindingsGrid.setAttribute(
+    "aria-labelledby",
+    bindingMode === "keyboard"
+      ? "bindings-tab-keyboard"
+      : "bindings-tab-gamepad",
+  );
+
+  const keyboardMode = bindingMode === "keyboard";
+  bindingsCopy.textContent = keyboardMode
+    ? "Click a binding, then press a key. Keyboard bindings save to this browser."
+    : "Connect a gamepad, click a binding and press a button. Stick movement stays fixed; gamepad bindings save to this browser.";
+  resetBindingsButton.textContent = keyboardMode
+    ? "Reset keyboard defaults"
+    : "Reset gamepad defaults";
+
   bindingsGrid.replaceChildren();
-  for (const action of Object.keys(labels) as ControlAction[]) {
+  if (keyboardMode) {
+    for (const action of Object.keys(keyboardLabels) as ControlAction[]) {
+      const row = document.createElement("div");
+      row.className = "binding-row";
+      const label = document.createElement("span");
+      label.className = "binding-label";
+      label.textContent = keyboardLabels[action];
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "binding-key";
+      if (capturingAction === action) {
+        button.classList.add("capturing");
+        button.textContent = "Press a key…";
+      } else {
+        button.textContent = bindings[action].map(formatKey).join(" / ");
+      }
+      button.addEventListener("click", () => {
+        capturingAction = action;
+        cancelGamepadCapture();
+        renderBindings();
+      });
+      row.append(label, button);
+      bindingsGrid.append(row);
+    }
+    return;
+  }
+
+  for (const action of GAMEPAD_ACTIONS) {
     const row = document.createElement("div");
     row.className = "binding-row";
     const label = document.createElement("span");
     label.className = "binding-label";
-    label.textContent = labels[action];
+    label.textContent = gamepadLabels[action];
     const button = document.createElement("button");
     button.type = "button";
     button.className = "binding-key";
-    if (capturingAction === action) {
+    if (capturingGamepadAction === action) {
       button.classList.add("capturing");
-      button.textContent = "Press a key…";
+      button.textContent =
+        connectedGamepad() === null
+          ? "Connect a gamepad…"
+          : "Press a button…";
     } else {
-      button.textContent = bindings[action].map(formatKey).join(" / ");
+      button.textContent =
+        gamepadBindings[action]
+          .map(formatGamepadButton)
+          .join(" / ") || "Unbound";
     }
     button.addEventListener("click", () => {
-      capturingAction = action;
-      renderBindings();
+      beginGamepadCapture(action);
     });
     row.append(label, button);
     bindingsGrid.append(row);
@@ -637,7 +842,7 @@ function applyState(state: GameClientState): void {
       showLobby();
     } else {
       if (newMatch && controls === null && !controlsDialog.open) {
-        controls = new DesktopControls(bindings);
+        controls = new DesktopControls(bindings, gamepadBindings);
         lastLoopAt = performance.now();
         controlAccumulator = 0;
       }

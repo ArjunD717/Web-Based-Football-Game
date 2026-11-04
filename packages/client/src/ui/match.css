@@ -1302,7 +1302,7 @@ body[data-view="match"] ::selection {
   letter-spacing: 0.04em;
 }
 
-/* Keyboard bindings dialog (opened from the lobby or the match controls) */
+/* Keyboard/gamepad bindings dialog (opened from the lobby or the match controls) */
 .controls-dialog {
   width: min(42rem, calc(100vw - 2rem));
   max-height: min(46rem, calc(100dvh - 2rem));
@@ -1358,6 +1358,36 @@ body[data-view="match"] ::selection {
   color: var(--ui-muted);
   font-size: var(--ui-text-sm);
   line-height: 1.5;
+}
+
+.controls-dialog .binding-tabs {
+  display: flex;
+  gap: var(--ui-space-2);
+  padding: var(--ui-space-4) var(--ui-space-5) 0;
+}
+
+.controls-dialog .binding-tab {
+  min-height: 2rem;
+  padding: 0.28rem 0.7rem;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ui-muted);
+  font: inherit;
+  font-size: var(--ui-text-xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.controls-dialog .binding-tab:hover,
+.controls-dialog .binding-tab.is-active {
+  border-color: var(--ui-orange);
+  color: var(--ui-chalk);
+}
+
+.controls-dialog .binding-tab:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 2px;
 }
 
 .controls-dialog .bindings-grid {

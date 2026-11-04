@@ -383,14 +383,15 @@
                   <p class="ui-kicker">Input</p>
                   <h2 class="ui-context-panel__title">Controls</h2>
                   <p class="ui-context-panel__lede">
-                    Keyboard bindings save to this browser. Gamepad mapping is
-                    fixed in this build.
+                    Keyboard and gamepad buttons are rebindable. Stick
+                    movement is fixed.
                   </p>
                 </header>
                 <div class="ui-panel ui-panel--padded">
-                  <h3 class="ui-card-title">Keyboard bindings</h3>
+                  <h3 class="ui-card-title">Input bindings</h3>
                   <p class="ui-card-copy">
-                    Click a binding, then press the replacement key.
+                    Click a keyboard key or gamepad button, then press the
+                    replacement.
                   </p>
                   <div class="ui-inline ui-inline--spaced">
                     <button id="open-bindings" class="ui-button" type="button">
@@ -455,7 +456,7 @@
                     type="button"
                     data-open-controls
                   >
-                    Keyboard bindings
+                    Input bindings
                   </button>
                 </div>
               </article>
@@ -1160,8 +1161,8 @@
                 <span class="match-help__label">Gamepad</span>
                 <p>
                   Stick move, A pass, B/RT shoot, X tackle, Y through,
-                  LB switch, RB lob, LT sprint, L3 finesse. Rumble on supported
-                  gamepads can be switched off in Settings.
+                  LB switch, RB lob, LT sprint, L3 finesse. Buttons can be
+                  rebound; rumble is in Settings.
                 </p>
               </div>
               <p class="match-help__note">
@@ -1265,18 +1266,39 @@
         <div class="dialog-head">
           <div>
             <p class="eyebrow">Settings</p>
-            <h2>Keyboard bindings</h2>
+            <h2 id="bindings-title">Controls</h2>
           </div>
           <button id="close-bindings" class="button" type="button">Close</button>
         </div>
-        <p class="dialog-copy">
+        <p id="bindings-copy" class="dialog-copy">
           Click a binding, then press a key. Bindings save to this browser.
-          Gamepad mapping is fixed.
         </p>
-        <div id="bindings-grid" class="bindings-grid"></div>
+        <div class="binding-tabs" role="tablist" aria-label="Input device">
+          <button
+            id="bindings-tab-keyboard"
+            class="binding-tab is-active"
+            type="button"
+            role="tab"
+            aria-controls="bindings-grid"
+            aria-selected="true"
+          >
+            Keyboard
+          </button>
+          <button
+            id="bindings-tab-gamepad"
+            class="binding-tab"
+            type="button"
+            role="tab"
+            aria-controls="bindings-grid"
+            aria-selected="false"
+          >
+            Gamepad
+          </button>
+        </div>
+        <div id="bindings-grid" class="bindings-grid" role="tabpanel"></div>
         <div class="dialog-actions">
           <button id="reset-bindings" class="button" type="button">
-            Reset defaults
+            Reset keyboard defaults
           </button>
         </div>
       </dialog>

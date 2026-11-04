@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { CONTROL_BUTTONS } from "@fb/shared";
 import { gamepadSnapshot } from "./desktop-controls";
+import { DEFAULT_GAMEPAD_BINDINGS, type GamepadBindings } from "./gamepad-bindings";
 
 function pad(options: {
   readonly axes?: readonly [number, number];
@@ -62,6 +63,20 @@ describe("gamepadSnapshot", () => {
     expect(gamepadSnapshot(pad({ pressed: [10] }))?.buttons).toBe(
       CONTROL_BUTTONS.FINESSE,
     );
+  });
+
+  it("uses custom button bindings", () => {
+    const bindings: GamepadBindings = {
+      ...DEFAULT_GAMEPAD_BINDINGS,
+      pass: [2],
+      shoot: [10],
+      tackle: [12],
+      finesse: [14],
+    };
+    expect(gamepadSnapshot(pad({ pressed: [2, 10] }), bindings)?.buttons).toBe(
+      CONTROL_BUTTONS.PASS | CONTROL_BUTTONS.SHOOT,
+    );
+    expect(gamepadSnapshot(pad({ pressed: [0, 1] }), bindings)?.buttons).toBe(0);
   });
 
   it("combines independent inputs", () => {

@@ -4,6 +4,13 @@ import {
   TUNING,
   clamp,
 } from "@fb/shared";
+import {
+  DEFAULT_GAMEPAD_BINDINGS,
+  GAMEPAD_ACTION_BUTTONS,
+  GAMEPAD_ACTIONS,
+  loadGamepadBindings,
+  type GamepadBindings,
+} from "./gamepad-bindings";
 
 export interface ControlFrame {
   readonly moveX: number;
@@ -51,21 +58,8 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
 
 const BINDINGS_KEY = "fb.keybindings.v1";
 
-const GAMEPAD_BUTTONS = {
-  PASS: 0,
-  SHOOT: 1,
-  TACKLE: 2,
-  THROUGH: 3,
-  SWITCH: 4,
-  LOB: 5,
-  SPRINT: 6,
-  SHOOT_TRIGGER: 7,
-  FINESSE: 10,
-} as const;
-
-/** Keyboard + standard-mapping gamepad controls. Gamepad buttons:
- * A pass, B or RT shoot (hold RT to charge), X tackle, Y through,
- * LB switch, RB lob, LT sprint, L3 finesse.
+/** Keyboard and gamepad controls. Stick movement is fixed; buttons can be
+ * rebound in the same dialog as the keyboard.
  */
 export class DesktopControls {
   private readonly keys = new Set<string>();
@@ -97,7 +91,10 @@ export class DesktopControls {
   private charge = 0;
   private pendingButtons = 0;
 
-  constructor(bindings: KeyBindings = loadKeyBindings()) {
+  constructor(
+    bindings: KeyBindings = loadKeyBindings(),
+    private readonly gamepadBindings: GamepadBindings = loadGamepadBindings(),
+  ) {
     this.bindings = bindings;
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
@@ -141,7 +138,7 @@ export class DesktopControls {
     if (this.isPressed("switch")) buttons |= CONTROL_BUTTONS.SWITCH;
     if (this.isPressed("finesse")) buttons |= CONTROL_BUTTONS.FINESSE;
 
-    const pad = readGamepad();
+    const pad = readGamepad(this.gamepadBindings);
     if (pad !== null) {
       const padMagnitude = Math.hypot(pad.moveX, pad.moveY);
       if (
@@ -248,7 +245,7 @@ export function saveKeyBindings(bindings: KeyBindings): void {
   }
 }
 
-function readGamepad(): GamepadSnapshot | null {
+function readGamepad(bindings: GamepadBindings): GamepadSnapshot | null {
   if (typeof navigator.getGamepads !== "function") {
     return null;
   }
@@ -261,41 +258,26 @@ function readGamepad(): GamepadSnapshot | null {
   } catch {
     return null;
   }
-  return gamepadSnapshot(pad);
+  return gamepadSnapshot(pad, bindings);
 }
 
-/** Pure standard-mapping gamepad translation; kept separate for tests. */
-export function gamepadSnapshot(pad: Gamepad | null): GamepadSnapshot | null {
+/** Pure gamepad translation; kept separate from the DOM for tests. */
+export function gamepadSnapshot(
+  pad: Gamepad | null,
+  bindings: GamepadBindings = DEFAULT_GAMEPAD_BINDINGS,
+): GamepadSnapshot | null {
   if (pad === null) {
     return null;
   }
   let buttons = 0;
-  if (pad.buttons[GAMEPAD_BUTTONS.PASS]?.pressed) {
-    buttons |= CONTROL_BUTTONS.PASS;
-  }
-  if (pad.buttons[GAMEPAD_BUTTONS.SHOOT]?.pressed) {
-    buttons |= CONTROL_BUTTONS.SHOOT;
-  }
-  if (pad.buttons[GAMEPAD_BUTTONS.SHOOT_TRIGGER]?.pressed) {
-    buttons |= CONTROL_BUTTONS.SHOOT;
-  }
-  if (pad.buttons[GAMEPAD_BUTTONS.TACKLE]?.pressed) {
-    buttons |= CONTROL_BUTTONS.TACKLE;
-  }
-  if (pad.buttons[GAMEPAD_BUTTONS.THROUGH]?.pressed) {
-    buttons |= CONTROL_BUTTONS.THROUGH;
-  }
-  if (pad.buttons[GAMEPAD_BUTTONS.SWITCH]?.pressed) {
-    buttons |= CONTROL_BUTTONS.SWITCH;
-  }
-  if (pad.buttons[GAMEPAD_BUTTONS.LOB]?.pressed) {
-    buttons |= CONTROL_BUTTONS.LOB;
-  }
-  if (pad.buttons[GAMEPAD_BUTTONS.FINESSE]?.pressed) {
-    buttons |= CONTROL_BUTTONS.FINESSE;
-  }
-  if (pad.buttons[GAMEPAD_BUTTONS.SPRINT]?.pressed) {
-    buttons |= CONTROL_BUTTONS.SPRINT;
+  for (const action of GAMEPAD_ACTIONS) {
+    if (
+      bindings[action].some(
+        (index) => pad.buttons[index]?.pressed === true,
+      )
+    ) {
+      buttons |= GAMEPAD_ACTION_BUTTONS[action];
+    }
   }
   return {
     moveX: pad.axes[0] ?? 0,
