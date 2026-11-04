@@ -317,6 +317,10 @@ Implemented:
   shoots, passes or tackles. The **Gamepad rumble** switch persists in
   `localStorage` and previews a light pulse when enabled; browsers without an
   actuator ignore the cues
+- Keyboard and gamepad bindings share the Controls dialog. Gamepad capture
+  polls the connected pad for the next new button press, removes that button
+  from any other action, and persists the mapping. Stick movement and phone
+  controls remain unchanged
 - Unit tests cover renderer pose mapping, critically damped camera springs,
   broadcast weighting/dead-zone/framing, all six gameplay camera framings,
   camera-to-pitch input mapping, director stacking/replacement and blends,
@@ -327,7 +331,8 @@ Implemented:
   cross-fading, dive-state wire round-trips, goal ripple/crowd envelopes, net
   vertex displacement, pitch layout/asset-free mesh construction,
   replay-buffer goal detection, trimming, full-capture replay, goal-clip
-  preservation and playback sampling, and haptic state/cue transitions
+  preservation and playback sampling, haptic state/cue transitions, and
+  gamepad binding sanitisation/stealing
 
 Known M11 limitations (by design):
 
@@ -346,7 +351,9 @@ Known M11 limitations (by design):
   crowd animation; the crowd reaction is a shared material pulse
 - Gamepad rumble uses Chromium's dual-rumble actuator only. It is best-effort,
   emits one cue at a time, and has no trigger resistance, adaptive triggers or
-  per-contact directional feedback
+  per-contact directional feedback. Gamepad rebinding covers button indices
+  from the first connected pad; stick axes are fixed and a captured button can
+  leave another action visibly unbound
 - Edge arrows cover the ball and controlled player only. They are HUD primitives,
   not a live tactical mini-map, and may overlap when both points leave on the
   same edge
@@ -752,9 +759,12 @@ Implemented:
   red cards from leg one suspend that player, replacing only the suspended
   starter while preserving the rest of the XI, and a level aggregate is a draw;
   extra time and penalties are skipped in this format
-- Standard-mapping gamepad: stick move, A pass, B/RT shoot, X tackle, Y through,
-  LB switch, RB lob, LT sprint, L3 finesse (mapping is fixed; keyboard is
-  rebindable)
+- Standard-mapping gamepad defaults: stick move, A pass, B/RT shoot, X tackle,
+  Y through, LB switch, RB lob, LT sprint, L3 finesse. The **Controls** dialog
+  switches between keyboard and gamepad tabs; gamepad buttons are captured by
+  pressing them, persisted in `localStorage`, and duplicate assignments steal
+  the button from the old action. Stick movement is fixed. An action that loses
+  its last button is shown as **Unbound** rather than silently disappearing
 - Phone controller at `/controller.html?room=CODE`: virtual stick, touch action
   buttons, live connection state, score/clock/phase/card counts, rule-event
   banner and its own power meter
@@ -775,7 +785,6 @@ Not implemented yet (by milestone design):
 - A pause command on the phone controller; only the host's match screen can
   pause or resume
 - Skill moves, charged/driven passes and first-time pass modifiers
-- Gamepad rebinding; only the standard mapping is wired
 - Real CSV registry and further national-team competition modes; M9 ships the
   call-up pipeline and playable national teams, but the bundled dataset is
   still clearly marked fake sample data
@@ -911,7 +920,10 @@ The two-minute match check:
    contact; hold Z and verify the shot power bar rises and clears on release.
    Open **Controls & shortcuts** → **Edit bindings**, rebind a key, assign a key
    already used by another action and confirm it disappears from the old action
-   and survives a reload.
+   and survives a reload. Switch to the **Gamepad** tab, connect a pad, click a
+   binding, press a new button and confirm the label updates and the assignment
+   survives a reload. Reassign a button used by another action and confirm that
+   action shows **Unbound** instead of failing silently.
 9. On the phone, move with the stick, fire a charged shot (power shows) and tap
    **Switch**; verify the white active-player ring moves. Tap Pass/Through/Lob/
    Tackle/Sprint/Finesse to exercise the same input path.
@@ -924,7 +936,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 63 test files and 558 tests passing.
+13. `pnpm check`: expect 64 test files and 562 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
