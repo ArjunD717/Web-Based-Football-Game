@@ -14,6 +14,7 @@
     "@fb/sim": "workspace:*",
     "@fontsource/barlow": "5.1.1",
     "@fontsource/barlow-condensed": "5.1.1",
+    "lil-gui": "0.21.0",
     "qrcode": "1.5.4",
     "three": "0.186.0"
   },
