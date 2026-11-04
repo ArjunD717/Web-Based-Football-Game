@@ -289,6 +289,35 @@ export function computePlayerPose(
 
 const SKIN_TONES = [0xd7a16f, 0xb8794f, 0x8d5b3c, 0x6f452f, 0xe2b78a] as const;
 
+/** Joint blend responsiveness; roughly a 40 ms time constant. */
+const POSE_BLEND_RATE = 26;
+
+/** Linear joint-space blend used to cross-fade locomotion and action states. */
+export function blendPlayerPoses(
+  from: PlayerPose,
+  to: PlayerPose,
+  alpha: number,
+): PlayerPose {
+  const t = clamp01(alpha);
+  const mix = (a: number, b: number): number => a + (b - a) * t;
+  return {
+    leftLeg: mix(from.leftLeg, to.leftLeg),
+    rightLeg: mix(from.rightLeg, to.rightLeg),
+    leftKnee: mix(from.leftKnee, to.leftKnee),
+    rightKnee: mix(from.rightKnee, to.rightKnee),
+    leftArm: mix(from.leftArm, to.leftArm),
+    rightArm: mix(from.rightArm, to.rightArm),
+    leftElbow: mix(from.leftElbow, to.leftElbow),
+    rightElbow: mix(from.rightElbow, to.rightElbow),
+    bodyY: mix(from.bodyY, to.bodyY),
+    bodyTilt: mix(from.bodyTilt, to.bodyTilt),
+    bodyLean: mix(from.bodyLean, to.bodyLean),
+    bodyTwist: mix(from.bodyTwist, to.bodyTwist),
+    headPitch: mix(from.headPitch, to.headPitch),
+    headYaw: mix(from.headYaw, to.headYaw),
+  };
+}
+
 export class PlayerRig {
   readonly root = new THREE.Group();
   private readonly body = new THREE.Group();
@@ -310,6 +339,8 @@ export class PlayerRig {
   private lastState: PlayerStateName | null = null;
   private stateStartedElapsed = 0;
   private lastElapsed: number | null = null;
+  private stridePhase = 0;
+  private currentPose: PlayerPose | null = null;
 
   constructor(player: RenderPlayer, colors: RenderTeamColors) {
     const skin = new THREE.MeshStandardMaterial({
@@ -518,9 +549,12 @@ export class PlayerRig {
     this.card.visible = player.yellowCards > 0;
 
     // Replays and match restarts can move the presentation clock backwards.
-    // Re-arm one-shot actions instead of producing a negative state age.
-    if (this.lastElapsed !== null && elapsed < this.lastElapsed) {
+    // Snap the new frame rather than blending across an unrelated timeline.
+    const previousElapsed = this.lastElapsed;
+    const rewound = previousElapsed !== null && elapsed < previousElapsed;
+    if (rewound) {
       this.lastState = null;
+      this.currentPose = null;
     }
     if (player.state !== this.lastState) {
       this.lastState = player.state;
@@ -528,6 +562,10 @@ export class PlayerRig {
     }
     this.lastElapsed = elapsed;
     const stateAge = Math.max(0, elapsed - this.stateStartedElapsed);
+    const deltaSeconds =
+      previousElapsed === null || rewound
+        ? 0
+        : Math.max(0, elapsed - previousElapsed);
 
     const cadence =
       player.state === "sprint"
@@ -539,8 +577,28 @@ export class PlayerRig {
             : player.state === "celebrate"
               ? 4
               : 3;
-    const phase = elapsed * cadence + player.number * 0.63;
-    const pose = computePlayerPose(player.state, phase, player.stamina, stateAge);
+    // Advance the stride instead of recomputing it from the clock: a jog-to-
+    // sprint transition changes cadence but must not teleport the feet.
+    if (previousElapsed === null || rewound) {
+      this.stridePhase = elapsed * cadence + player.number * 0.63;
+    } else {
+      this.stridePhase += deltaSeconds * cadence;
+    }
+    const target = computePlayerPose(
+      player.state,
+      this.stridePhase,
+      player.stamina,
+      stateAge,
+    );
+    const blend =
+      this.currentPose === null || rewound
+        ? 1
+        : 1 - Math.exp(-deltaSeconds * POSE_BLEND_RATE);
+    const pose =
+      this.currentPose === null
+        ? target
+        : blendPlayerPoses(this.currentPose, target, blend);
+    this.currentPose = pose;
     this.leftLeg.rotation.z = pose.leftLeg;
     this.rightLeg.rotation.z = pose.rightLeg;
     this.leftKnee.rotation.z = pose.leftKnee;

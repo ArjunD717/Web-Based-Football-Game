@@ -1,7 +1,7 @@
 // packages/client/src/render/three-player.test.ts
 
 import { describe, expect, it } from "vitest";
-import { computePlayerPose } from "./three-player";
+import { blendPlayerPoses, computePlayerPose } from "./three-player";
 
 describe("player animation pose", () => {
   it("moves the legs and arms faster in a sprint than a jog", () => {
@@ -46,5 +46,29 @@ describe("player animation pose", () => {
     const tired = computePlayerPose("sprint", Math.PI / 2, 0);
     const fresh = computePlayerPose("sprint", Math.PI / 2, 1);
     expect(Math.abs(fresh.leftLeg)).toBeGreaterThan(Math.abs(tired.leftLeg));
+  });
+
+  it("blends every joint between two poses", () => {
+    const idle = computePlayerPose("idle", 0, 1);
+    const sprint = computePlayerPose("sprint", Math.PI / 2, 1);
+    const middle = blendPlayerPoses(idle, sprint, 0.5);
+    expect(middle.leftLeg).toBeCloseTo(
+      (idle.leftLeg + sprint.leftLeg) / 2,
+      6,
+    );
+    expect(middle.leftKnee).toBeCloseTo(
+      (idle.leftKnee + sprint.leftKnee) / 2,
+      6,
+    );
+    expect(middle.leftElbow).toBeCloseTo(
+      (idle.leftElbow + sprint.leftElbow) / 2,
+      6,
+    );
+    expect(middle.bodyTwist).toBeCloseTo(
+      (idle.bodyTwist + sprint.bodyTwist) / 2,
+      6,
+    );
+    expect(blendPlayerPoses(idle, sprint, -1).bodyLean).toBe(idle.bodyLean);
+    expect(blendPlayerPoses(idle, sprint, 2).bodyLean).toBe(sprint.bodyLean);
   });
 });
