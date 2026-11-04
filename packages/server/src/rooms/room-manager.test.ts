@@ -746,6 +746,8 @@ describe("match management", () => {
       winner: null,
     });
 
+    fixture.manager.onMessage(fixture.guest, { t: "prepareNextLeg" });
+    expect(fixture.guest.lastMessageType("error")?.code).toBe("not_host");
     fixture.manager.onMessage(fixture.host, { t: "prepareNextLeg" });
     const ended = fixture.host.lastMessageType("matchEnded");
     expect(ended?.suspendedHome).toBe(1);
