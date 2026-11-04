@@ -1,5 +1,5 @@
 // packages/server/src/rooms/control.test.ts
-import { CONTROL_BUTTONS } from "@fb/shared";
+import { CONTROL_BUTTONS, TUNING } from "@fb/shared";
 import { createMatch, startFreeKick } from "@fb/sim";
 import { describe, expect, it } from "vitest";
 import {
@@ -187,11 +187,9 @@ describe("control selection", () => {
       Date.now(),
     );
     prepareTeamControl(state, "home", home, DT);
-    expect(home.bufferedPass).not.toBeNull();
+    expect(home.passChargeKind).toBe("pass");
+    expect(home.bufferedPass).toBeNull();
 
-    state.ball.x = active.x + 0.3;
-    state.ball.y = active.y;
-    state.ball.z = 0.11;
     updateControlInput(
       home,
       {
@@ -204,10 +202,82 @@ describe("control selection", () => {
       Date.now(),
     );
     prepareTeamControl(state, "home", home, DT);
+    expect(home.bufferedPass).not.toBeNull();
+
+    state.ball.x = active.x + 0.3;
+    state.ball.y = active.y;
+    state.ball.z = 0.11;
+    updateControlInput(
+      home,
+      {
+        seq: 3,
+        moveX: 0,
+        moveY: 0,
+        buttons: 0,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
 
     expect(state.lastTouch?.playerId).toBe(active.id);
     expect(active.state).toBe("pass");
     expect(home.bufferedPass).toBeNull();
+  });
+
+  it("charges a pass while the button is held and commits on release", () => {
+    const state = createMatch({ seed: 118 });
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.setPiece = null;
+    state.referee.timerSeconds = 0;
+    const home = createTeamControlRuntime();
+    prepareTeamControl(state, "home", home, DT);
+    const active = state.home.players.find(
+      (player) => player.isUserControlled,
+    )!;
+    state.ball.x = active.x + 0.3;
+    state.ball.y = active.y;
+    state.ball.z = 0.11;
+    state.ball.vx = 0;
+    state.ball.vy = 0;
+    active.kickCooldown = 0;
+
+    updateControlInput(
+      home,
+      {
+        seq: 1,
+        moveX: 1,
+        moveY: 0,
+        buttons: CONTROL_BUTTONS.PASS,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    for (let tick = 0; tick < 45; tick += 1) {
+      prepareTeamControl(state, "home", home, DT);
+    }
+    expect(home.passChargeKind).toBe("pass");
+    expect(home.passCharge).toBeGreaterThan(0.9);
+
+    updateControlInput(
+      home,
+      {
+        seq: 2,
+        moveX: 1,
+        moveY: 0,
+        buttons: 0,
+        chargePower: 1,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+
+    expect(home.passChargeKind).toBeNull();
+    expect(state.lastTouch?.playerId).toBe(active.id);
+    expect(Math.hypot(state.ball.vx, state.ball.vy)).toBeGreaterThan(
+      TUNING.control.passSpeedMps,
+    );
   });
 
   it("ignores stale input and older sequences", () => {

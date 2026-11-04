@@ -217,6 +217,7 @@ const overlayDetail = byId<HTMLElement>("overlay-detail");
 const powerMeter = byId<HTMLElement>("power-meter");
 const powerFill = byId<HTMLElement>("power-fill");
 const powerValue = byId<HTMLElement>("power-value");
+const powerLabel = byId<HTMLElement>("power-label");
 const openBindingsButton = byId<HTMLButtonElement>("open-bindings");
 const matchBindingsButton = byId<HTMLButtonElement>("match-bindings");
 const controlsDialog = byId<HTMLDialogElement>("controls-dialog");
@@ -996,7 +997,10 @@ function updateControlLoop(now: number, loopDt: number): void {
     controlAccumulator = 0;
   }
 
-  updatePowerMeter(lastControlFrame?.chargePower ?? 0);
+  updatePowerMeter(
+    lastControlFrame?.chargePower ?? 0,
+    lastControlFrame?.chargeKind ?? "none",
+  );
 }
 
 /**
@@ -1039,15 +1043,20 @@ function hideCameraIndicators(): void {
   }
 }
 
-function updatePowerMeter(charge: number): void {
-  if (charge <= 0.005) {
+function updatePowerMeter(
+  charge: number,
+  kind: "shot" | "pass" | "none",
+): void {
+  if (charge <= 0.005 || kind === "none") {
     hidePowerMeter();
     return;
   }
   const percent = Math.round(charge * 100);
   powerMeter.hidden = false;
+  powerMeter.dataset.kind = kind;
   powerMeter.dataset.level =
     percent >= 85 ? "max" : percent >= 55 ? "high" : "normal";
+  powerLabel.textContent = kind === "pass" ? "Pass power" : "Shot power";
   powerFill.style.width = `${percent}%`;
   powerValue.textContent = `${percent}%`;
 }

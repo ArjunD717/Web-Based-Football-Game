@@ -32,6 +32,9 @@ export interface TeamControlRuntime {
   pendingReleases: number;
   receivedButtons: number;
   shootCharge: number;
+  /** Pass button currently held through the release-to-kick charge, if any. */
+  passChargeKind: PassKind | null;
+  passCharge: number;
   switchCooldown: number;
   autoSwitchCooldown: number;
   idleSeconds: number;
@@ -46,6 +49,7 @@ interface BufferedPass {
   readonly kind: PassKind;
   readonly aimX: number;
   readonly aimY: number;
+  readonly power: number;
   remainingSeconds: number;
 }
 
@@ -68,6 +72,8 @@ export function createTeamControlRuntime(): TeamControlRuntime {
     pendingReleases: 0,
     receivedButtons: 0,
     shootCharge: 0,
+    passChargeKind: null,
+    passCharge: 0,
     switchCooldown: 0,
     autoSwitchCooldown: 0,
     idleSeconds: 0,
@@ -107,6 +113,8 @@ export function markControlReconnected(runtime: TeamControlRuntime): void {
   runtime.pendingReleases = 0;
   runtime.receivedButtons = 0;
   runtime.shootCharge = 0;
+  runtime.passChargeKind = null;
+  runtime.passCharge = 0;
   runtime.dribbleCooldown = 0;
   runtime.idleSeconds = 0;
   runtime.bufferedPass = null;
@@ -155,6 +163,7 @@ export function prepareTeamControl(
   if (active !== null && heldBySetPiece(state, active)) {
     active = null;
     runtime.autoSwitchCooldown = 0;
+    clearPassCharge(runtime);
   }
   if (active === null) {
     active = nearestCandidate(state, side, ballInOwnBox, null);
@@ -174,12 +183,14 @@ export function prepareTeamControl(
       TUNING.control.manualSwitchAutoLockSeconds;
     runtime.idleSeconds = 0;
     runtime.shootCharge = 0;
+    clearPassCharge(runtime);
     clearActionBuffers(runtime);
     switched = true;
   } else if (
     !switched &&
     runtime.autoSwitchCooldown <= 0 &&
     runtime.shootCharge <= 0 &&
+    runtime.passChargeKind === null &&
     (runtime.idleSeconds >= TUNING.control.autoSwitchIdleSeconds ||
       (active?.role === "GK" && !ballInOwnBox))
   ) {
@@ -195,11 +206,18 @@ export function prepareTeamControl(
         TUNING.control.autoSwitchCooldownSeconds;
       runtime.idleSeconds = 0;
       runtime.shootCharge = 0;
+      clearPassCharge(runtime);
       clearActionBuffers(runtime);
       switched = true;
     }
   }
 
+  if (
+    runtime.activePlayerId !== null &&
+    active?.id !== runtime.activePlayerId
+  ) {
+    clearPassCharge(runtime);
+  }
   runtime.activePlayerId = active?.id ?? null;
   for (const player of team.players) {
     player.isUserControlled = player === active;
@@ -217,7 +235,18 @@ export function prepareTeamControl(
             CONTROL_BUTTONS.PASS)) !==
         0;
       const shootReleased = (released & CONTROL_BUTTONS.SHOOT) !== 0;
-      if (!actionPressed && !shootReleased) {
+      const passReleased =
+        (released &
+          (CONTROL_BUTTONS.PASS |
+            CONTROL_BUTTONS.LOB |
+            CONTROL_BUTTONS.THROUGH)) !==
+        0;
+      if (
+        !actionPressed &&
+        !shootReleased &&
+        !passReleased &&
+        runtime.passChargeKind === null
+      ) {
         applyBufferedAction(state, active, runtime);
       }
       applyDribbleControl(active, state, runtime, input, buttons, dt);
@@ -229,6 +258,8 @@ export function prepareTeamControl(
   runtime.previousButtons = buttons;
   if (!fresh) {
     runtime.shootCharge = 0;
+    runtime.passChargeKind = null;
+    runtime.passCharge = 0;
     runtime.pendingPresses = 0;
     runtime.pendingReleases = 0;
     runtime.receivedButtons = 0;
@@ -306,39 +337,66 @@ function applyActions(
     : { x: 0, y: 0 };
 
   let actionAttempted = false;
-  let passKind: PassKind | null = null;
+  const passPressKind =
+    (pressed & CONTROL_BUTTONS.LOB) !== 0
+      ? "lob"
+      : (pressed & CONTROL_BUTTONS.THROUGH) !== 0
+        ? "through"
+        : (pressed & CONTROL_BUTTONS.PASS) !== 0
+          ? "pass"
+          : null;
 
   if ((pressed & CONTROL_BUTTONS.TACKLE) !== 0) {
     actionAttempted = true;
     clearActionBuffers(runtime);
+    clearPassCharge(runtime);
     runtime.shootCharge = 0;
     if (playTackle(state, player)) {
       runtime.dribbleCooldown = TUNING.control.dribbleTouchIntervalSeconds;
     }
-  } else if ((pressed & CONTROL_BUTTONS.LOB) !== 0) {
+  } else if (
+    passPressKind !== null &&
+    (input.buttons & CONTROL_BUTTONS.SHOOT) === 0
+  ) {
     actionAttempted = true;
-    passKind = "lob";
-  } else if ((pressed & CONTROL_BUTTONS.THROUGH) !== 0) {
-    actionAttempted = true;
-    passKind = "through";
-  } else if ((pressed & CONTROL_BUTTONS.PASS) !== 0) {
-    actionAttempted = true;
-    passKind = "pass";
+    clearActionBuffers(runtime);
+    runtime.passChargeKind = passPressKind;
+    runtime.passCharge = 0;
+    runtime.shootCharge = 0;
   }
 
-  if (passKind !== null) {
-    if (playPass(state, player, passKind, passAim.x, passAim.y)) {
-      clearActionBuffers(runtime);
-      runtime.shootCharge = 0;
-      runtime.dribbleCooldown = TUNING.control.dribbleTouchIntervalSeconds;
-      runtime.lastKickAtMs = runtime.lastInputAtMs;
-    } else {
-      runtime.bufferedPass = {
-        kind: passKind,
-        aimX: passAim.x,
-        aimY: passAim.y,
-        remainingSeconds: TUNING.control.actionBufferSeconds,
-      };
+  if (runtime.passChargeKind !== null) {
+    const passKind = runtime.passChargeKind;
+    const passBit = passButtonBit(passKind);
+    const passHeld = (input.buttons & passBit) !== 0;
+    if (passHeld) {
+      runtime.passCharge = Math.min(
+        1,
+        runtime.passCharge + dt / TUNING.control.passChargeSeconds,
+      );
+    }
+    if (!passHeld || (released & passBit) !== 0) {
+      const power = Math.max(
+        TUNING.control.minPassPower,
+        runtime.passCharge,
+      );
+      clearPassCharge(runtime);
+      actionAttempted = true;
+      if (playPass(state, player, passKind, passAim.x, passAim.y, power)) {
+        clearActionBuffers(runtime);
+        runtime.shootCharge = 0;
+        runtime.dribbleCooldown =
+          TUNING.control.dribbleTouchIntervalSeconds;
+        runtime.lastKickAtMs = runtime.lastInputAtMs;
+      } else {
+        runtime.bufferedPass = {
+          kind: passKind,
+          aimX: passAim.x,
+          aimY: passAim.y,
+          power,
+          remainingSeconds: TUNING.control.actionBufferSeconds,
+        };
+      }
     }
   }
 
@@ -347,6 +405,7 @@ function applyActions(
 
   if ((pressed & CONTROL_BUTTONS.SHOOT) !== 0) {
     runtime.bufferedShot = null;
+    clearPassCharge(runtime);
   }
 
   if (shootHeld) {
@@ -366,7 +425,14 @@ function applyActions(
     if (!actionAttempted) {
       const committed =
         player.role === "GK"
-          ? playPass(state, player, "lob", passAim.x, passAim.y)
+          ? playPass(
+              state,
+              player,
+              "lob",
+              passAim.x,
+              passAim.y,
+              power,
+            )
           : playShot(state, player, passAim.x, passAim.y, power, finesse);
       if (committed) {
         clearActionBuffers(runtime);
@@ -409,6 +475,21 @@ function clearActionBuffers(runtime: TeamControlRuntime): void {
   runtime.bufferedShot = null;
 }
 
+function clearPassCharge(runtime: TeamControlRuntime): void {
+  runtime.passChargeKind = null;
+  runtime.passCharge = 0;
+}
+
+function passButtonBit(kind: PassKind): number {
+  if (kind === "lob") {
+    return CONTROL_BUTTONS.LOB;
+  }
+  if (kind === "through") {
+    return CONTROL_BUTTONS.THROUGH;
+  }
+  return CONTROL_BUTTONS.PASS;
+}
+
 function applyBufferedAction(
   state: MatchState,
   player: PlayerState,
@@ -419,7 +500,16 @@ function applyBufferedAction(
   }
   const pass = runtime.bufferedPass;
   if (pass !== null) {
-    if (playPass(state, player, pass.kind, pass.aimX, pass.aimY)) {
+    if (
+      playPass(
+        state,
+        player,
+        pass.kind,
+        pass.aimX,
+        pass.aimY,
+        pass.power,
+      )
+    ) {
       clearActionBuffers(runtime);
       runtime.dribbleCooldown = TUNING.control.dribbleTouchIntervalSeconds;
       runtime.lastKickAtMs = runtime.lastInputAtMs;
@@ -433,7 +523,14 @@ function applyBufferedAction(
   }
   const committed =
     player.role === "GK"
-      ? playPass(state, player, "lob", shot.aimX, shot.aimY)
+      ? playPass(
+          state,
+          player,
+          "lob",
+          shot.aimX,
+          shot.aimY,
+          shot.power,
+        )
       : playShot(
           state,
           player,

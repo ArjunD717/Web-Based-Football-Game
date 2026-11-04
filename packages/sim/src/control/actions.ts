@@ -26,10 +26,23 @@ export function playPass(
   kind: PassKind,
   aimX: number,
   aimY: number,
+  power01: number = TUNING.control.minPassPower,
 ): boolean {
   if (!canPlayBall(state, player)) {
     return false;
   }
+
+  const power = clamp(
+    power01,
+    TUNING.control.minPassPower,
+    1,
+  );
+  const charge = clamp(
+    (power - TUNING.control.minPassPower) /
+      Math.max(1e-6, 1 - TUNING.control.minPassPower),
+    0,
+    1,
+  );
 
   const team = player.team === "home" ? state.home : state.away;
   const attackDirection = team.attackDirection;
@@ -45,7 +58,11 @@ export function playPass(
   let lift: number;
 
   if (kind === "through") {
-    speed = TUNING.control.throughSpeedMps;
+    speed = lerp(
+      TUNING.control.throughSpeedMps,
+      TUNING.control.maxThroughSpeedMps,
+      charge,
+    );
     lift = TUNING.control.throughLiftMps;
     if (target !== null) {
       targetX =
@@ -59,7 +76,11 @@ export function playPass(
       targetY = state.ball.y + aim.y * 20;
     }
   } else if (kind === "lob") {
-    speed = TUNING.control.lobSpeedMps;
+    speed = lerp(
+      TUNING.control.lobSpeedMps,
+      TUNING.control.maxLobSpeedMps,
+      charge,
+    );
     lift = TUNING.control.lobLiftMps;
     if (target !== null) {
       targetX =
@@ -71,7 +92,11 @@ export function playPass(
       targetY = state.ball.y + aim.y * 25;
     }
   } else {
-    speed = TUNING.control.passSpeedMps;
+    speed = lerp(
+      TUNING.control.passSpeedMps,
+      TUNING.control.maxPassSpeedMps,
+      charge,
+    );
     lift = TUNING.control.passLiftMps;
     if (target !== null) {
       targetX =

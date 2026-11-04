@@ -55,6 +55,7 @@ const leavePlayButton = byId<HTMLButtonElement>("leave-play");
 const powerMeter = byId<HTMLElement>("controller-power");
 const powerFill = byId<HTMLElement>("power-fill");
 const powerValue = byId<HTMLElement>("power-value");
+const powerLabel = byId<HTMLElement>("power-label");
 const overlay = byId<HTMLElement>("controller-overlay");
 const overlayTitle = byId<HTMLElement>("overlay-title");
 const overlayDetail = byId<HTMLElement>("overlay-detail");
@@ -260,16 +261,20 @@ function updateInput(now: number, loopDt: number): void {
   if (steps === TUNING.sim.maxCatchUpTicks) {
     controlAccumulator = 0;
   }
-  updatePower(controls.chargePower);
+  updatePower(controls.chargePower, controls.currentChargeKind);
 }
 
-function updatePower(charge: number): void {
-  if (charge <= 0.005) {
+function updatePower(
+  charge: number,
+  kind: "shot" | "pass" | "none",
+): void {
+  if (charge <= 0.005 || kind === "none") {
     hidePower();
     return;
   }
   const percent = Math.round(charge * 100);
   powerMeter.hidden = false;
+  powerLabel.textContent = kind === "pass" ? "Pass" : "Shot";
   powerFill.style.width = `${percent}%`;
   powerValue.textContent = `${percent}%`;
 }

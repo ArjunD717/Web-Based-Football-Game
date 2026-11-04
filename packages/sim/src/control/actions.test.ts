@@ -40,6 +40,28 @@ describe("human actions", () => {
     expect(player.kickCooldown).toBeGreaterThan(0);
   });
 
+  it("charges a ground pass from a tap to a driven ball", () => {
+    const state = createMatch({ seed: 111 });
+    const player = state.home.players.find((entry) => entry.role === "ST")!;
+    const teammate = state.home.players.find((entry) => entry.role === "CM")!;
+    teammate.x = player.x + 8;
+    teammate.y = player.y;
+    placeBallAtFeet(state, player);
+
+    expect(playPass(state, player, "pass", 1, 0)).toBe(true);
+    const tapSpeed = Math.hypot(state.ball.vx, state.ball.vy);
+
+    player.kickCooldown = 0;
+    placeBallAtFeet(state, player);
+    expect(playPass(state, player, "pass", 1, 0, 1)).toBe(true);
+    const drivenSpeed = Math.hypot(state.ball.vx, state.ball.vy);
+
+    expect(drivenSpeed).toBeGreaterThan(tapSpeed);
+    expect(drivenSpeed).toBeLessThanOrEqual(
+      TUNING.control.maxPassSpeedMps * 1.1,
+    );
+  });
+
   it("lifts a lob and drives a through ball", () => {
     const state = createMatch({ seed: 12 });
     const player = state.home.players.find((entry) => entry.role === "ST")!;

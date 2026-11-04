@@ -484,6 +484,13 @@ export const TUNING = {
     shotBackspinRadPerS: 22,
     passSpeedMps: 17,
     passLiftMps: 0.4,
+    /** Hold time from a tap to a fully charged pass, seconds. */
+    passChargeSeconds: 0.65,
+    /** A quick tap still produces this share of the charge range. */
+    minPassPower: 0.35,
+    maxPassSpeedMps: 25,
+    maxThroughSpeedMps: 24,
+    maxLobSpeedMps: 26,
     passCooldownSeconds: 0.28,
     passLeadSeconds: 0.2,
     throughSpeedMps: 19,

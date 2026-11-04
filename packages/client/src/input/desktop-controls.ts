@@ -12,11 +12,14 @@ import {
   type GamepadBindings,
 } from "./gamepad-bindings";
 
+export type ChargeKind = "shot" | "pass" | "none";
+
 export interface ControlFrame {
   readonly moveX: number;
   readonly moveY: number;
   readonly buttons: number;
   readonly chargePower: number;
+  readonly chargeKind: ChargeKind;
 }
 
 export interface GamepadSnapshot {
@@ -83,11 +86,13 @@ export class DesktopControls {
   };
   private readonly handleBlur = (): void => {
     this.keys.clear();
-    this.shootStartedAtMs = null;
+    this.chargeStartedAtMs = null;
+    this.chargeKind = "none";
     this.charge = 0;
     this.pendingButtons = 0;
   };
-  private shootStartedAtMs: number | null = null;
+  private chargeStartedAtMs: number | null = null;
+  private chargeKind: ChargeKind = "none";
   private charge = 0;
   private pendingButtons = 0;
 
@@ -109,7 +114,8 @@ export class DesktopControls {
 
   reset(): void {
     this.keys.clear();
-    this.shootStartedAtMs = null;
+    this.chargeStartedAtMs = null;
+    this.chargeKind = "none";
     this.charge = 0;
     this.pendingButtons = 0;
   }
@@ -155,19 +161,36 @@ export class DesktopControls {
     this.pendingButtons = 0;
 
     const shooting = (buttons & CONTROL_BUTTONS.SHOOT) !== 0;
-    if (shooting) {
-      if (this.shootStartedAtMs === null) {
-        this.shootStartedAtMs = nowMs;
+    const passing =
+      (buttons &
+        (CONTROL_BUTTONS.PASS |
+          CONTROL_BUTTONS.THROUGH |
+          CONTROL_BUTTONS.LOB)) !==
+      0;
+    const nextKind: ChargeKind = shooting
+      ? "shot"
+      : passing
+        ? "pass"
+        : "none";
+    if (nextKind === "none") {
+      this.chargeStartedAtMs = null;
+      this.chargeKind = "none";
+      this.charge = 0;
+    } else {
+      if (this.chargeKind !== nextKind) {
+        this.chargeStartedAtMs = nowMs;
+        this.chargeKind = nextKind;
       }
+      const chargeSeconds =
+        nextKind === "shot"
+          ? TUNING.control.shotChargeSeconds
+          : TUNING.control.passChargeSeconds;
       this.charge = clamp(
-        (nowMs - this.shootStartedAtMs) /
-          (TUNING.control.shotChargeSeconds * 1_000),
+        (nowMs - (this.chargeStartedAtMs ?? nowMs)) /
+          (chargeSeconds * 1_000),
         0,
         1,
       );
-    } else {
-      this.shootStartedAtMs = null;
-      this.charge = 0;
     }
 
     return {
@@ -175,6 +198,7 @@ export class DesktopControls {
       moveY,
       buttons,
       chargePower: this.charge,
+      chargeKind: this.chargeKind,
     };
   }
 

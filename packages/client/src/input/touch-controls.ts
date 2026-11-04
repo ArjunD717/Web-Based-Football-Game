@@ -1,6 +1,6 @@
 // packages/client/src/input/touch-controls.ts
 import { CONTROL_BUTTONS, TUNING, clamp } from "@fb/shared";
-import type { ControlFrame } from "./desktop-controls";
+import type { ChargeKind, ControlFrame } from "./desktop-controls";
 
 const CONTROL_BITS: Readonly<Record<string, number>> = {
   pass: CONTROL_BUTTONS.PASS,
@@ -22,7 +22,8 @@ export class TouchControls {
   private stickPointerId: number | null = null;
   private moveX = 0;
   private moveY = 0;
-  private shootStartedAtMs: number | null = null;
+  private chargeStartedAtMs: number | null = null;
+  private chargeKind: ChargeKind = "none";
   private charge = 0;
   private pendingButtons = 0;
 
@@ -95,19 +96,36 @@ export class TouchControls {
     this.pendingButtons = 0;
 
     const shooting = (buttons & CONTROL_BUTTONS.SHOOT) !== 0;
-    if (shooting) {
-      if (this.shootStartedAtMs === null) {
-        this.shootStartedAtMs = nowMs;
+    const passing =
+      (buttons &
+        (CONTROL_BUTTONS.PASS |
+          CONTROL_BUTTONS.THROUGH |
+          CONTROL_BUTTONS.LOB)) !==
+      0;
+    const nextKind: ChargeKind = shooting
+      ? "shot"
+      : passing
+        ? "pass"
+        : "none";
+    if (nextKind === "none") {
+      this.chargeStartedAtMs = null;
+      this.chargeKind = "none";
+      this.charge = 0;
+    } else {
+      if (this.chargeKind !== nextKind) {
+        this.chargeStartedAtMs = nowMs;
+        this.chargeKind = nextKind;
       }
+      const chargeSeconds =
+        nextKind === "shot"
+          ? TUNING.control.shotChargeSeconds
+          : TUNING.control.passChargeSeconds;
       this.charge = clamp(
-        (nowMs - this.shootStartedAtMs) /
-          (TUNING.control.shotChargeSeconds * 1_000),
+        (nowMs - (this.chargeStartedAtMs ?? nowMs)) /
+          (chargeSeconds * 1_000),
         0,
         1,
       );
-    } else {
-      this.shootStartedAtMs = null;
-      this.charge = 0;
     }
 
     return {
@@ -115,11 +133,16 @@ export class TouchControls {
       moveY: this.moveY,
       buttons,
       chargePower: this.charge,
+      chargeKind: this.chargeKind,
     };
   }
 
   get chargePower(): number {
     return this.charge;
+  }
+
+  get currentChargeKind(): ChargeKind {
+    return this.chargeKind;
   }
 
   reset(): void {
@@ -130,7 +153,8 @@ export class TouchControls {
     this.stickPointerId = null;
     this.moveX = 0;
     this.moveY = 0;
-    this.shootStartedAtMs = null;
+    this.chargeStartedAtMs = null;
+    this.chargeKind = "none";
     this.charge = 0;
     this.pendingButtons = 0;
     this.knob.style.transform = "translate(-50%, -50%)";
