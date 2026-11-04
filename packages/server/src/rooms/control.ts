@@ -11,6 +11,7 @@ import {
   playDribbleTouch,
   playPass,
   playShot,
+  playSkillMove,
   playTackle,
   topSpeedFor,
   type MatchState,
@@ -19,6 +20,12 @@ import {
   type TeamSide,
 } from "@fb/sim";
 import type { SnapshotControlState } from "./match-stream";
+
+const SKILL_BUTTON_BITS =
+  CONTROL_BUTTONS.SKILL_UP |
+  CONTROL_BUTTONS.SKILL_DOWN |
+  CONTROL_BUTTONS.SKILL_LEFT |
+  CONTROL_BUTTONS.SKILL_RIGHT;
 
 export interface TeamControlRuntime {
   activePlayerId: string | null;
@@ -232,7 +239,8 @@ export function prepareTeamControl(
           (CONTROL_BUTTONS.TACKLE |
             CONTROL_BUTTONS.LOB |
             CONTROL_BUTTONS.THROUGH |
-            CONTROL_BUTTONS.PASS)) !==
+            CONTROL_BUTTONS.PASS |
+            SKILL_BUTTON_BITS)) !==
         0;
       const shootReleased = (released & CONTROL_BUTTONS.SHOOT) !== 0;
       const passReleased =
@@ -337,6 +345,7 @@ function applyActions(
     : { x: 0, y: 0 };
 
   let actionAttempted = false;
+  const skillDirection = skillDirectionFromPress(pressed, player);
   const passPressKind =
     (pressed & CONTROL_BUTTONS.LOB) !== 0
       ? "lob"
@@ -363,6 +372,19 @@ function applyActions(
     runtime.passChargeKind = passPressKind;
     runtime.passCharge = 0;
     runtime.shootCharge = 0;
+  } else if (
+    skillDirection !== null &&
+    runtime.passChargeKind === null &&
+    (input.buttons & CONTROL_BUTTONS.SHOOT) === 0
+  ) {
+    actionAttempted = true;
+    clearActionBuffers(runtime);
+    runtime.shootCharge = 0;
+    if (playSkillMove(state, player, skillDirection.x, skillDirection.y)) {
+      runtime.dribbleCooldown =
+        TUNING.control.dribbleTouchIntervalSeconds;
+      runtime.lastKickAtMs = runtime.lastInputAtMs;
+    }
   }
 
   if (runtime.passChargeKind !== null) {
@@ -488,6 +510,43 @@ function passButtonBit(kind: PassKind): number {
     return CONTROL_BUTTONS.THROUGH;
   }
   return CONTROL_BUTTONS.PASS;
+}
+
+function skillDirectionFromPress(
+  pressed: number,
+  player: PlayerState,
+): { readonly x: number; readonly y: number } | null {
+  const forward =
+    (pressed & CONTROL_BUTTONS.SKILL_UP) !== 0
+      ? 1
+      : 0;
+  const back =
+    (pressed & CONTROL_BUTTONS.SKILL_DOWN) !== 0
+      ? 1
+      : 0;
+  const right =
+    (pressed & CONTROL_BUTTONS.SKILL_RIGHT) !== 0
+      ? 1
+      : 0;
+  const left =
+    (pressed & CONTROL_BUTTONS.SKILL_LEFT) !== 0
+      ? 1
+      : 0;
+  const forwardAmount = forward - back;
+  const rightAmount = right - left;
+  if (forwardAmount === 0 && rightAmount === 0) {
+    return null;
+  }
+  const forwardX = Math.cos(player.facing);
+  const forwardY = Math.sin(player.facing);
+  const rightX = -forwardY;
+  const rightY = forwardX;
+  const x = forwardAmount * forwardX + rightAmount * rightX;
+  const y = forwardAmount * forwardY + rightAmount * rightY;
+  const length = Math.hypot(x, y);
+  return length < 1e-6
+    ? null
+    : { x: x / length, y: y / length };
 }
 
 function applyBufferedAction(

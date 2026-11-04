@@ -662,6 +662,10 @@ function renderBindings(): void {
     tackle: "Tackle",
     switch: "Switch player",
     finesse: "Finesse modifier",
+    skillUp: "Skill forward",
+    skillDown: "Skill back",
+    skillLeft: "Skill left",
+    skillRight: "Skill right",
   };
   const gamepadLabels: Record<GamepadAction, string> = {
     sprint: "Sprint",
@@ -770,6 +774,9 @@ function formatKey(code: string): string {
   }
   if (code.startsWith("Digit")) {
     return code.slice(5);
+  }
+  if (code.startsWith("Numpad")) {
+    return `Num ${code.slice(6)}`;
   }
   const names: Record<string, string> = {
     ArrowUp: "↑",

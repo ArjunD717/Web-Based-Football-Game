@@ -535,6 +535,22 @@ export const TUNING = {
     dribbleTouchIntervalSeconds: 0.22,
     /** Extra ball speed above the player's current speed, m/s. */
     dribbleTouchSpeedMps: 1.2,
+    /** Right-stick magnitude that starts a skill move. */
+    skillStickDeadzone: 0.55,
+    /** Cooldown after a directional skill touch, seconds. */
+    skillMoveCooldownSeconds: 0.48,
+    /** Ball displacement of a skill touch, metres. */
+    skillTouchDistanceM: 1.15,
+    /** Base ball speed above the player's speed, m/s. */
+    skillTouchSpeedMps: 2.6,
+    /** Keep the skill touch on the ground. */
+    skillTouchLiftMps: 0.08,
+    /** Aim error for a low-rated player under no pressure, radians. */
+    skillMaxErrorRad: 0.5,
+    /** Aim error for an elite skill-move player, radians. */
+    skillMinErrorRad: 0.1,
+    /** Stamina cost of one skill touch, 0..1 scale. */
+    skillStaminaCost: 0.002,
     /** Distance ahead used to aim a close-control touch, metres. */
     dribbleTouchDistanceM: 0.9,
     /** Extra touch speed when sprinting, m/s. */

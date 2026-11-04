@@ -220,6 +220,94 @@ export function playDribbleTouch(
   return true;
 }
 
+/**
+ * A short, deliberate touch in a player-relative direction. Skill stars and
+ * close-control reduce the aim error; the touch is intentionally not a pass or
+ * shot, so it uses its own cooldown and stamina cost.
+ */
+export function playSkillMove(
+  state: MatchState,
+  player: PlayerState,
+  dirX: number,
+  dirY: number,
+): boolean {
+  if (player.kickCooldown > 0 || player.sentOff) {
+    return false;
+  }
+  const distanceToBall = Math.hypot(
+    state.ball.x - player.x,
+    state.ball.y - player.y,
+  );
+  if (
+    distanceToBall > TUNING.control.dribbleAcquireRadiusM ||
+    state.ball.z > TUNING.ai.controlMaxBallHeightM
+  ) {
+    return false;
+  }
+  const length = Math.hypot(dirX, dirY);
+  if (!Number.isFinite(length) || length < 1e-6) {
+    return false;
+  }
+
+  const technique = clamp(
+    (player.attributes.dribbling +
+      player.attributes.ballControl +
+      player.attributes.agility) /
+      297,
+    0,
+    1,
+  );
+  const stars = clamp(
+    (player.attributes.skillMoves - 1) / 4,
+    0,
+    1,
+  );
+  const quality = technique * 0.6 + stars * 0.4;
+  const error = lerp(
+    TUNING.control.skillMaxErrorRad,
+    TUNING.control.skillMinErrorRad,
+    quality,
+  );
+  const rng = eventRng(state.seed, state.tick, player.number);
+  const angle =
+    Math.atan2(dirY, dirX) + rng.range(-error, error);
+  const targetDistance =
+    TUNING.control.skillTouchDistanceM + technique * 0.25;
+  const speed =
+    Math.hypot(player.vx, player.vy) +
+    TUNING.control.skillTouchSpeedMps +
+    quality * 0.5;
+  const targetX = clamp(
+    player.x + Math.cos(angle) * targetDistance,
+    TUNING.player.pitchMarginM,
+    state.pitch.lengthM - TUNING.player.pitchMarginM,
+  );
+  const targetY = clamp(
+    player.y + Math.sin(angle) * targetDistance,
+    TUNING.player.pitchMarginM,
+    state.pitch.widthM - TUNING.player.pitchMarginM,
+  );
+
+  if (!beginKick(state, player, "dribble")) {
+    return false;
+  }
+  kickBall(state.ball, player, {
+    targetX,
+    targetY,
+    speed,
+    lift: TUNING.control.skillTouchLiftMps,
+    velocityTransfer: TUNING.control.dribbleVelocityTransfer,
+  });
+  player.state = "dribble";
+  player.actionTimer = TUNING.player.actionStateSeconds;
+  player.kickCooldown = TUNING.control.skillMoveCooldownSeconds;
+  player.stamina = Math.max(
+    0,
+    player.stamina - TUNING.control.skillStaminaCost,
+  );
+  return true;
+}
+
 function nearestOpponentDistance(
   state: MatchState,
   player: PlayerState,

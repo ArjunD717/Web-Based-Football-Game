@@ -435,6 +435,31 @@ input {
   text-transform: uppercase;
 }
 
+.touch-action-cluster {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.touch-skills {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.touch-skills .touch-label {
+  grid-column: 1 / -1;
+  font-size: 0.55rem;
+}
+
+.touch-skill {
+  min-height: 2.2rem;
+  padding: 0.1rem;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
 .touch-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

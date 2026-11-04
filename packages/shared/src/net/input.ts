@@ -12,6 +12,10 @@ export const CONTROL_BUTTONS = {
   TACKLE: 1 << 5,
   SWITCH: 1 << 6,
   FINESSE: 1 << 7,
+  SKILL_UP: 1 << 8,
+  SKILL_DOWN: 1 << 9,
+  SKILL_LEFT: 1 << 10,
+  SKILL_RIGHT: 1 << 11,
 } as const;
 
 export interface InputFrame {

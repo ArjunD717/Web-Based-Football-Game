@@ -25,6 +25,9 @@ export interface ControlFrame {
 export interface GamepadSnapshot {
   readonly moveX: number;
   readonly moveY: number;
+  /** Right-stick axes are used only for directional skill moves. */
+  readonly skillX: number;
+  readonly skillY: number;
   readonly buttons: number;
 }
 
@@ -40,7 +43,11 @@ export type ControlAction =
   | "shoot"
   | "tackle"
   | "switch"
-  | "finesse";
+  | "finesse"
+  | "skillUp"
+  | "skillDown"
+  | "skillLeft"
+  | "skillRight";
 
 export type KeyBindings = Readonly<Record<ControlAction, readonly string[]>>;
 
@@ -57,6 +64,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   tackle: ["KeyF", "KeyO"],
   switch: ["Space", "KeyQ"],
   finesse: ["KeyE", "KeyU"],
+  skillUp: ["Numpad8"],
+  skillDown: ["Numpad2"],
+  skillLeft: ["Numpad4"],
+  skillRight: ["Numpad6"],
 };
 
 const BINDINGS_KEY = "fb.keybindings.v1";
@@ -143,6 +154,10 @@ export class DesktopControls {
     if (this.isPressed("tackle")) buttons |= CONTROL_BUTTONS.TACKLE;
     if (this.isPressed("switch")) buttons |= CONTROL_BUTTONS.SWITCH;
     if (this.isPressed("finesse")) buttons |= CONTROL_BUTTONS.FINESSE;
+    if (this.isPressed("skillUp")) buttons |= CONTROL_BUTTONS.SKILL_UP;
+    if (this.isPressed("skillDown")) buttons |= CONTROL_BUTTONS.SKILL_DOWN;
+    if (this.isPressed("skillLeft")) buttons |= CONTROL_BUTTONS.SKILL_LEFT;
+    if (this.isPressed("skillRight")) buttons |= CONTROL_BUTTONS.SKILL_RIGHT;
 
     const pad = readGamepad(this.gamepadBindings);
     if (pad !== null) {
@@ -155,6 +170,11 @@ export class DesktopControls {
         moveY = pad.moveY / padMagnitude;
       }
       buttons |= pad.buttons;
+      buttons |= skillButtonsFromStick(
+        pad.skillX,
+        pad.skillY,
+        TUNING.control.skillStickDeadzone,
+      );
     }
 
     buttons |= this.pendingButtons;
@@ -228,6 +248,10 @@ export class DesktopControls {
     if (this.bindings.tackle.includes(code)) return CONTROL_BUTTONS.TACKLE;
     if (this.bindings.switch.includes(code)) return CONTROL_BUTTONS.SWITCH;
     if (this.bindings.finesse.includes(code)) return CONTROL_BUTTONS.FINESSE;
+    if (this.bindings.skillUp.includes(code)) return CONTROL_BUTTONS.SKILL_UP;
+    if (this.bindings.skillDown.includes(code)) return CONTROL_BUTTONS.SKILL_DOWN;
+    if (this.bindings.skillLeft.includes(code)) return CONTROL_BUTTONS.SKILL_LEFT;
+    if (this.bindings.skillRight.includes(code)) return CONTROL_BUTTONS.SKILL_RIGHT;
     return 0;
   }
 }
@@ -306,8 +330,26 @@ export function gamepadSnapshot(
   return {
     moveX: pad.axes[0] ?? 0,
     moveY: pad.axes[1] ?? 0,
+    skillX: pad.axes[2] ?? 0,
+    skillY: pad.axes[3] ?? 0,
     buttons,
   };
+}
+
+/** Right-stick flick -> one of the four player-relative skill directions. */
+export function skillButtonsFromStick(
+  x: number,
+  y: number,
+  deadzone: number,
+): number {
+  const magnitude = Math.hypot(x, y);
+  if (!Number.isFinite(magnitude) || magnitude < deadzone) {
+    return 0;
+  }
+  if (Math.abs(x) >= Math.abs(y)) {
+    return x >= 0 ? CONTROL_BUTTONS.SKILL_RIGHT : CONTROL_BUTTONS.SKILL_LEFT;
+  }
+  return y >= 0 ? CONTROL_BUTTONS.SKILL_DOWN : CONTROL_BUTTONS.SKILL_UP;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

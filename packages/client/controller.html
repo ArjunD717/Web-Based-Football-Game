@@ -108,7 +108,15 @@
               <span class="touch-label">Move</span>
             </div>
 
-            <div class="touch-actions" aria-label="Match actions">
+            <div class="touch-action-cluster">
+              <div class="touch-skills" aria-label="Skill moves">
+                <span class="touch-label">Skill</span>
+                <button class="touch-button touch-skill" type="button" data-control="skillUp" aria-label="Skill forward">↑</button>
+                <button class="touch-button touch-skill" type="button" data-control="skillLeft" aria-label="Skill left">←</button>
+                <button class="touch-button touch-skill" type="button" data-control="skillRight" aria-label="Skill right">→</button>
+                <button class="touch-button touch-skill" type="button" data-control="skillDown" aria-label="Skill back">↓</button>
+              </div>
+              <div class="touch-actions" aria-label="Match actions">
               <button class="touch-button" type="button" data-control="pass">
                 Pass
               </button>
@@ -133,12 +141,14 @@
               <button class="touch-button hold" type="button" data-control="finesse">
                 Finesse
               </button>
+              </div>
             </div>
           </div>
 
           <p class="controller-note">
-            Drag the stick to move. Hold Shoot or Pass for power. Hold
-            Sprint/Finesse while acting. The white-ringed player is yours.
+            Drag the stick to move. Hold Shoot or Pass for power. Use the
+            arrow pad for directional skill touches. Hold Sprint/Finesse while
+            acting. The white-ringed player is yours.
           </p>
         </section>
 

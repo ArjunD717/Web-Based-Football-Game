@@ -1,11 +1,12 @@
 // packages/client/src/input/desktop-controls.test.ts
 import { describe, expect, it } from "vitest";
 import { CONTROL_BUTTONS } from "@fb/shared";
-import { gamepadSnapshot } from "./desktop-controls";
+import { gamepadSnapshot, skillButtonsFromStick } from "./desktop-controls";
 import { DEFAULT_GAMEPAD_BINDINGS, type GamepadBindings } from "./gamepad-bindings";
 
 function pad(options: {
   readonly axes?: readonly [number, number];
+  readonly skillAxes?: readonly [number, number];
   readonly pressed?: readonly number[];
 }): Gamepad {
   const pressed = new Set(options.pressed ?? []);
@@ -15,7 +16,10 @@ function pad(options: {
     value: pressed.has(index) ? 1 : 0,
   }));
   return {
-    axes: options.axes ?? [0, 0],
+    axes: [
+      ...(options.axes ?? [0, 0]),
+      ...(options.skillAxes ?? [0, 0]),
+    ],
     buttons,
     connected: true,
     id: "test-pad",
@@ -31,9 +35,15 @@ describe("gamepadSnapshot", () => {
   });
 
   it("passes through stick axes", () => {
-    expect(gamepadSnapshot(pad({ axes: [0.7, -0.2] }))).toEqual({
+    expect(
+      gamepadSnapshot(
+        pad({ axes: [0.7, -0.2], skillAxes: [0.4, -0.6] }),
+      ),
+    ).toEqual({
       moveX: 0.7,
       moveY: -0.2,
+      skillX: 0.4,
+      skillY: -0.6,
       buttons: 0,
     });
   });
@@ -79,6 +89,22 @@ describe("gamepadSnapshot", () => {
     expect(gamepadSnapshot(pad({ pressed: [0, 1] }), bindings)?.buttons).toBe(0);
   });
 
+  it("maps a right-stick flick to one skill direction", () => {
+    expect(skillButtonsFromStick(0.8, -0.2, 0.55)).toBe(
+      CONTROL_BUTTONS.SKILL_RIGHT,
+    );
+    expect(skillButtonsFromStick(-0.7, 0.1, 0.55)).toBe(
+      CONTROL_BUTTONS.SKILL_LEFT,
+    );
+    expect(skillButtonsFromStick(0.2, 0.8, 0.55)).toBe(
+      CONTROL_BUTTONS.SKILL_DOWN,
+    );
+    expect(skillButtonsFromStick(0.1, -0.9, 0.55)).toBe(
+      CONTROL_BUTTONS.SKILL_UP,
+    );
+    expect(skillButtonsFromStick(0.3, 0.2, 0.55)).toBe(0);
+  });
+
   it("combines independent inputs", () => {
     const snapshot = gamepadSnapshot(
       pad({ axes: [0.2, 0.4], pressed: [0, 7, 6, 10] }),
@@ -86,6 +112,8 @@ describe("gamepadSnapshot", () => {
     expect(snapshot).toEqual({
       moveX: 0.2,
       moveY: 0.4,
+      skillX: 0,
+      skillY: 0,
       buttons:
         CONTROL_BUTTONS.PASS |
         CONTROL_BUTTONS.SHOOT |

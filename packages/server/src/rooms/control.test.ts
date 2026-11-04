@@ -280,6 +280,46 @@ describe("control selection", () => {
     );
   });
 
+  it("applies a directional skill move from the input edge", () => {
+    const state = createMatch({ seed: 119 });
+    state.referee.phase = "live";
+    state.referee.restart = null;
+    state.referee.setPiece = null;
+    state.referee.timerSeconds = 0;
+    const home = createTeamControlRuntime();
+    prepareTeamControl(state, "home", home, DT);
+    const active = state.home.players.find(
+      (player) => player.isUserControlled,
+    )!;
+    state.ball.x = active.x + 0.3;
+    state.ball.y = active.y;
+    state.ball.z = 0.11;
+    state.ball.vx = 0;
+    state.ball.vy = 0;
+    active.kickCooldown = 0;
+
+    updateControlInput(
+      home,
+      {
+        seq: 1,
+        moveX: 0,
+        moveY: 0,
+        buttons: CONTROL_BUTTONS.SKILL_RIGHT,
+        chargePower: 0,
+      },
+      Date.now(),
+    );
+    prepareTeamControl(state, "home", home, DT);
+
+    expect(active.state).toBe("dribble");
+    expect(active.kickCooldown).toBe(
+      TUNING.control.skillMoveCooldownSeconds,
+    );
+    expect(Math.abs(state.ball.vy)).toBeGreaterThan(
+      Math.abs(state.ball.vx),
+    );
+  });
+
   it("ignores stale input and older sequences", () => {
     const state = createMatch({ seed: 103 });
     const home = createTeamControlRuntime();

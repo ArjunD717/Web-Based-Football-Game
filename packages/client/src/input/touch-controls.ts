@@ -11,6 +11,10 @@ const CONTROL_BITS: Readonly<Record<string, number>> = {
   switch: CONTROL_BUTTONS.SWITCH,
   sprint: CONTROL_BUTTONS.SPRINT,
   finesse: CONTROL_BUTTONS.FINESSE,
+  skillUp: CONTROL_BUTTONS.SKILL_UP,
+  skillDown: CONTROL_BUTTONS.SKILL_DOWN,
+  skillLeft: CONTROL_BUTTONS.SKILL_LEFT,
+  skillRight: CONTROL_BUTTONS.SKILL_RIGHT,
 };
 
 /** Virtual joystick + holdable action buttons for the phone controller page. */

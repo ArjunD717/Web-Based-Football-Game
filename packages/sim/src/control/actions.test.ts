@@ -7,6 +7,7 @@ import {
   playDribbleTouch,
   playPass,
   playShot,
+  playSkillMove,
   playTackle,
 } from "./actions";
 
@@ -92,6 +93,24 @@ describe("human actions", () => {
     );
     expect(state.ball.spinZ).not.toBe(0);
     expect(state.ball.vx).toBeGreaterThan(0);
+  });
+
+  it("performs a directional skill touch with its own cooldown", () => {
+    const state = createMatch({ seed: 171 });
+    const player = state.home.players.find((entry) => entry.role === "ST")!;
+    placeBallAtFeet(state, player);
+
+    expect(playSkillMove(state, player, 0, 1)).toBe(true);
+    expect(player.state).toBe("dribble");
+    expect(player.kickCooldown).toBe(
+      TUNING.control.skillMoveCooldownSeconds,
+    );
+    expect(state.ball.vy).toBeGreaterThan(Math.abs(state.ball.vx));
+    expect(player.stamina).toBeLessThan(1);
+
+    state.ball.x = player.x + 8;
+    player.kickCooldown = 0;
+    expect(playSkillMove(state, player, 1, 0)).toBe(false);
   });
 
   it("wins the ball with a tackle and does nothing when too far away", () => {
