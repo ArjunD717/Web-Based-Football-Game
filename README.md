@@ -354,6 +354,10 @@ Known M11 limitations (by design):
   per-contact directional feedback. Gamepad rebinding covers button indices
   from the first connected pad; stick axes are fixed and a captured button can
   leave another action visibly unbound
+- Pass charge is a single hold-to-power curve over the existing pass kinds;
+  there is no separate driven-pass button or new animation. First-time passes
+  use the existing 0.3 s action buffer and release timing, not a distinct
+  first-time modifier
 - Edge arrows cover the ball and controlled player only. They are HUD primitives,
   not a live tactical mini-map, and may overlap when both points leave on the
   same edge
@@ -743,8 +747,11 @@ Implemented:
   touches, cushions the ball when stopping, and brakes sharply when asked to
   stop; pass/shoot attempts buffer briefly so a ball arriving this tick is not
   missed
-- Ground pass, through pass and lob/cross with lead targeting; charged shot with
-  server-authoritative hold timing and the finesse modifier; standing tackle
+- Ground pass, through pass and lob/cross with lead targeting. Pass, through
+  and cross power charges from a tap to a driven ball while the button is held
+  and commits on release; release timing also supplies first-time passes. A
+  charged shot keeps its server-authoritative hold timing and finesse modifier;
+  standing tackle completes the action set
 - Keyboard defaults: WASD/arrows move, Shift sprint, X pass, C through, V lob,
   Z shoot, F tackle, Space switch, E finesse; bindings are rebindable from the
   **Controls** dialog and persist in `localStorage`; reassigning a key steals it
@@ -769,7 +776,7 @@ Implemented:
   buttons, live connection state, score/clock/phase/card counts, rule-event
   banner and its own power meter
 - Match console: team-colour scoreboard, referee event strip, controlled-player
-  label, white active-player ring, shot power bar, replay banner, compact
+  label, white active-player ring, shot/pass power bar, replay banner, compact
   telemetry, semantic restart/VAR/pause overlays and a responsive full-time
   statistics board; input pauses automatically when the match pauses or
   disconnects
@@ -784,7 +791,7 @@ Not implemented yet (by milestone design):
   kick-off and apply to both seats
 - A pause command on the phone controller; only the host's match screen can
   pause or resume
-- Skill moves, charged/driven passes and first-time pass modifiers
+- Skill moves and a dedicated driven-pass modifier (charged pass power and first-time release are in)
 - Real CSV registry and further national-team competition modes; M9 ships the
   call-up pipeline and playable national teams, but the bundled dataset is
   still clearly marked fake sample data
@@ -824,8 +831,9 @@ Not implemented yet (by milestone design):
   buttons, two int16 stick axes and a uint8 local charge. The server accepts at
   most eight queued frames per seat per tick and drains them before the match
   step; actions only affect the seat's currently selected player.
-- Shot power is measured by how long SHOOT is held on the server. The client's
-  `chargePower` is display data, not authority; finesse is a separate bit.
+- Shot and pass power are measured by how long the relevant button is held on
+  the server; passes commit on release. The client's `chargePower` and
+  `chargeKind` are display data, not authority; finesse is a separate bit.
 - Player fields are quantised to centimetres and centimetres per second. Ball,
   facing, state, stamina, yellow-card count, sent-off flag and the
   controlled-player indices are included in each changed-player record.
@@ -857,7 +865,8 @@ placement/encroachment, 108 scripted offside positions, 16 scripted handball
 decisions, tackle severity/strictness/DOGSO, advantage expiry, offside
 involvement/exemptions, handball penalties, card/send-off consequences,
 referee clock/half-time/full-time transitions, deterministic headless match
-soak, human pass/shot/tackle, room lifecycle, snapshot streaming and acks,
+soak, human pass/shot/tackle, charged-pass speed and release buffering,
+room lifecycle, snapshot streaming and acks,
 transport token resume/replacement, binary handler forwarding, client
 interpolation, HTTP/TLS/static serving, and server/client reconnect
 pause/resume. M6 adds CSV quoting/header errors, deterministic mutation
@@ -918,15 +927,19 @@ The two-minute match check:
    the stick and verify the ball is cushioned at your feet instead of running
    away. Tap Z before the ball reaches you and verify the buffered shot fires on
    contact; hold Z and verify the shot power bar rises and clears on release.
-   Open **Controls & shortcuts** → **Edit bindings**, rebind a key, assign a key
+   Hold X on the ball and verify the meter switches to **Pass power**, then
+   release for a driven pass; hold X while a pass arrives and release on
+   contact for a first-time pass. Open **Controls & shortcuts** → **Edit
+   bindings**, rebind a key, assign a key
    already used by another action and confirm it disappears from the old action
    and survives a reload. Switch to the **Gamepad** tab, connect a pad, click a
    binding, press a new button and confirm the label updates and the assignment
    survives a reload. Reassign a button used by another action and confirm that
    action shows **Unbound** instead of failing silently.
 9. On the phone, move with the stick, fire a charged shot (power shows) and tap
-   **Switch**; verify the white active-player ring moves. Tap Pass/Through/Lob/
-   Tackle/Sprint/Finesse to exercise the same input path.
+   **Switch**; verify the white active-player ring moves. Hold Pass and confirm
+   the meter labels **Pass**, then release for a driven pass. Tap Pass/Through/
+   Lob/Tackle/Sprint/Finesse to exercise the same input path.
 10. Verify the feed bar reads `Ref strict · AI Legendary`. The host sees
     **Pause**; the guest does not. Pause on the host: both overlays say the match
     is paused, the clock freezes and the host button becomes **Resume**. Reload
@@ -936,7 +949,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 64 test files and 562 tests passing.
+13. `pnpm check`: expect 64 test files and 564 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
