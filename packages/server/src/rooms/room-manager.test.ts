@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CONTROL_BUTTONS,
   PLAYER_STATE_CODES,
-  TUNING,
+  applySuspensionsToSheet,
   buildDefaultSheet,
   encodeInputFrame,
   encodeSnapshotAck,
@@ -746,14 +746,17 @@ describe("match management", () => {
       winner: null,
     });
 
+    fixture.manager.onMessage(fixture.host, { t: "prepareNextLeg" });
+    const ended = fixture.host.lastMessageType("matchEnded");
+    expect(ended?.suspendedHome).toBe(1);
+    expect(ended?.suspendedAway).toBe(0);
+    expect(room?.match).toBeNull();
+    expect(fixture.host.lastLobby().room?.phase).toBe("waiting");
+
     const startsBefore = fixture.host.json.filter(
       (message) => message.t === "matchStart",
     ).length;
-    const breakTicks =
-      Math.ceil(TUNING.competition.tieBreakSeconds * TUNING.sim.tickHz) + 2;
-    for (let tick = 0; tick < breakTicks; tick += 1) {
-      fixture.manager.tick(1 / TUNING.sim.tickHz);
-    }
+    startReadyMatch(fixture);
     expect(
       fixture.host.json.filter((message) => message.t === "matchStart"),
     ).toHaveLength(startsBefore + 1);
@@ -782,6 +785,39 @@ describe("match management", () => {
       awayAggregate: 2,
       winner: "home",
     });
+  });
+});
+
+describe("suspension lineups", () => {
+  it("replaces only suspended starters and keeps the rest of the XI", () => {
+    const team = registry.getTeam("kingsport-united");
+    if (team === null) {
+      throw new Error("Sample team missing");
+    }
+    const players = registry.getPlayers(team.id);
+    const sheet = buildDefaultSheet(players).sheet;
+    const suspendedSlot = sheet.startingXI[7];
+    if (suspendedSlot === undefined) {
+      throw new Error("Sheet has no seventh starter");
+    }
+    const suspended = new Set([suspendedSlot.playerId]);
+    const next = applySuspensionsToSheet(sheet, players, suspended);
+
+    expect(next.startingXI).toHaveLength(11);
+    expect(
+      next.startingXI.some((slot) => slot.playerId === suspendedSlot.playerId),
+    ).toBe(false);
+    for (const slot of sheet.startingXI) {
+      if (!suspended.has(slot.playerId)) {
+        expect(next.startingXI[slot.slot]?.playerId).toBe(slot.playerId);
+      }
+    }
+    expect(next.bench).toHaveLength(sheet.bench.length);
+    expect(
+      [...next.startingXI.map((slot) => slot.playerId), ...next.bench].some(
+        (id) => suspended.has(id),
+      ),
+    ).toBe(false);
   });
 });
 

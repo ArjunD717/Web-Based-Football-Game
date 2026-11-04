@@ -707,10 +707,6 @@ export const TUNING = {
     /** Real seconds between the final miss and the full-time board. */
     finishDelaySeconds: 1.5,
   },
-  competition: {
-    /** Wall-clock break between the two legs of an aggregate tie, seconds. */
-    tieBreakSeconds: 8,
-  },
   var: {
     /** Real seconds of the review check. */
     reviewSeconds: 3,

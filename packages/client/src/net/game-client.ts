@@ -159,6 +159,10 @@ export class GameClient {
     this.send({ t: "resumeMatch" });
   }
 
+  prepareNextLeg(): void {
+    this.send({ t: "prepareNextLeg" });
+  }
+
   leaveRoom(): void {
     this.send({ t: "leaveRoom" });
   }
@@ -318,6 +322,10 @@ export class GameClient {
           pausedManual: false,
           detail: "Match resumed",
         });
+        break;
+      case "matchEnded":
+        this.clearMatch();
+        this.update({ notice: message.message });
         break;
       case "roster": {
         const setup = this.state.setup;

@@ -376,6 +376,9 @@ describe("M10 match management messages", () => {
       t: "resumeMatch",
     });
     expect(
+      parseClientMessage(JSON.stringify({ t: "prepareNextLeg" })),
+    ).toEqual({ t: "prepareNextLeg" });
+    expect(
       parseClientMessage(
         JSON.stringify({
           t: "substitute",
@@ -461,6 +464,14 @@ describe("M10 match management messages", () => {
     expect(parseServerMessage(encodeServerMessage(statsMessage))).toEqual(
       statsMessage,
     );
+
+    const ended = {
+      t: "matchEnded" as const,
+      message: "Adjust your lineups, then ready up.",
+      suspendedHome: 1,
+      suspendedAway: 0,
+    };
+    expect(parseServerMessage(encodeServerMessage(ended))).toEqual(ended);
 
     const varMessage = {
       t: "varReview" as const,

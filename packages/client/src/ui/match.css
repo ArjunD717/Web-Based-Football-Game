@@ -1027,6 +1027,21 @@ body[data-view="match"] ::selection {
   border-top: 1px solid var(--ui-line);
 }
 
+.stats-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-3);
+  width: min(62rem, 100%);
+  margin: 0 auto;
+  padding-top: var(--ui-space-3);
+}
+
+.stats-actions__wait {
+  color: var(--ui-muted);
+  font-size: var(--ui-text-sm);
+}
+
 .stats-row {
   display: grid;
   grid-template-columns: 3.75rem minmax(0, 1fr) 3.75rem;

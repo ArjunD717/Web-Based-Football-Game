@@ -233,7 +233,140 @@ export function buildDefaultSheet(
 }
 
 /**
- * Parse an untrusted sheet from the wire or a file. This validates shape and
+ * Replace only suspended starters, then top the bench and reserves back up.
+ * This keeps a manager's tactical choices and non-suspended starters intact
+ * instead of regenerating the whole XI.
+ */
+export function applySuspensionsToSheet(
+  sheet: TeamSheet,
+  players: readonly PlayerData[],
+  suspended: ReadonlySet<string>,
+): TeamSheet {
+  const available = new Map(
+    players
+      .filter((player) => !suspended.has(player.id))
+      .map((player) => [player.id, player]),
+  );
+  const used = new Set<string>();
+  const startingXI: StartingSlot[] = [];
+
+  for (const slot of sheet.startingXI) {
+    const existing = available.get(slot.playerId);
+    if (existing !== undefined) {
+      startingXI.push({ ...slot });
+      used.add(existing.id);
+      continue;
+    }
+    const candidates = [...available.values()]
+      .filter(
+        (player) =>
+          !used.has(player.id) &&
+          (slot.role === "GK"
+            ? player.positions.includes("GK")
+            : !player.positions.includes("GK")),
+      )
+      .sort(
+        (a, b) =>
+          positionFamiliarity(b, slot.role) -
+            positionFamiliarity(a, slot.role) ||
+          b.overall - a.overall ||
+          a.id.localeCompare(b.id),
+      );
+    const replacement = candidates[0];
+    if (replacement === undefined) {
+      throw new Error(`no available player for the ${slot.role} slot`);
+    }
+    used.add(replacement.id);
+    startingXI.push({
+      slot: slot.slot,
+      role: slot.role,
+      playerId: replacement.id,
+    });
+  }
+
+  const bench: string[] = [];
+  for (const id of sheet.bench) {
+    const player = available.get(id);
+    if (player !== undefined && !used.has(id)) {
+      bench.push(id);
+      used.add(id);
+    }
+  }
+  const hasBenchKeeper = bench.some((id) =>
+    available.get(id)?.positions.includes("GK"),
+  );
+  if (!hasBenchKeeper) {
+    const keeper = [...available.values()]
+      .filter(
+        (player) =>
+          !used.has(player.id) && player.positions.includes("GK"),
+      )
+      .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id))[0];
+    if (keeper !== undefined) {
+      bench.push(keeper.id);
+      used.add(keeper.id);
+    }
+  }
+
+  const rest = [...available.values()]
+    .filter((player) => !used.has(player.id))
+    .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id));
+  for (const player of rest) {
+    if (bench.length >= sheet.bench.length) {
+      break;
+    }
+    bench.push(player.id);
+    used.add(player.id);
+  }
+
+  const starters = startingXI
+    .map((slot) => available.get(slot.playerId))
+    .filter((player): player is PlayerData => player !== undefined);
+  const best = (
+    currentId: string,
+    rating: (player: PlayerData) => number,
+  ): string => {
+    if (starters.some((player) => player.id === currentId)) {
+      return currentId;
+    }
+    const ranked = [...starters].sort(
+      (a, b) =>
+        rating(b) - rating(a) || a.id.localeCompare(b.id),
+    );
+    return ranked[0]?.id ?? currentId;
+  };
+
+  return {
+    formation: sheet.formation,
+    kit: sheet.kit,
+    startingXI,
+    bench,
+    reserves: rest
+      .filter((player) => !used.has(player.id))
+      .map((player) => player.id)
+      .sort(),
+    captain: best(sheet.captain, (player) => player.overall),
+    penaltyTaker: best(
+      sheet.penaltyTaker,
+      (player) => player.attributes.penalties,
+    ),
+    freeKickTaker: best(
+      sheet.freeKickTaker,
+      (player) => player.attributes.fkAccuracy,
+    ),
+    cornerLeft: best(
+      sheet.cornerLeft,
+      (player) => player.attributes.crossing,
+    ),
+    cornerRight: best(
+      sheet.cornerRight,
+      (player) => player.attributes.crossing + player.attributes.curve * 0.25,
+    ),
+    tactics: { ...sheet.tactics },
+  };
+}
+
+/** Parse an untrusted sheet from the wire or a file. This validates shape and
  * formation/role consistency; squad ownership is checked separately against
  * the selected team because the parser is also used by the client catalog.
  */

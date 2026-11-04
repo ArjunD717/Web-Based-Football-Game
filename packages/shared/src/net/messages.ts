@@ -160,6 +160,11 @@ export interface ClientResumeMatchMessage {
   readonly t: "resumeMatch";
 }
 
+/** Host-only: leave the full-time board and prepare the second leg in the room. */
+export interface ClientPrepareNextLegMessage {
+  readonly t: "prepareNextLeg";
+}
+
 export type ClientMessage =
   | ClientHelloMessage
   | ClientPingMessage
@@ -172,6 +177,7 @@ export type ClientMessage =
   | ClientSubstituteMessage
   | ClientPauseMatchMessage
   | ClientResumeMatchMessage
+  | ClientPrepareNextLegMessage
   | ClientLeaveRoomMessage
   | ClientResyncMessage;
 
@@ -380,6 +386,14 @@ export interface ServerMatchStatsMessage {
   readonly stats: WireMatchStats;
 }
 
+/** Sent when the host leaves a completed leg to prepare the next one. */
+export interface ServerMatchEndedMessage {
+  readonly t: "matchEnded";
+  readonly message: string;
+  readonly suspendedHome: number;
+  readonly suspendedAway: number;
+}
+
 export interface WireVarReview {
   readonly kind: "goal" | "penalty" | "redCard";
   readonly side: WireTeamSide;
@@ -409,6 +423,7 @@ export type ServerMessage =
   | ServerRosterMessage
   | ServerSubstitutionMessage
   | ServerMatchStatsMessage
+  | ServerMatchEndedMessage
   | ServerVarReviewMessage
   | ServerShootoutMessage;
 
@@ -484,6 +499,8 @@ export function parseClientMessage(text: string): ClientMessage | null {
       return { t: "pauseMatch" };
     case "resumeMatch":
       return { t: "resumeMatch" };
+    case "prepareNextLeg":
+      return { t: "prepareNextLeg" };
     case "leaveRoom":
       return { t: "leaveRoom" };
     case "resync":
@@ -596,6 +613,19 @@ export function parseServerMessage(text: string): ServerMessage | null {
       const stats = parseMatchStats(value.stats);
       return stats === null ? null : { t: "matchStats", stats };
     }
+    case "matchEnded":
+      return typeof value.message === "string" &&
+        Number.isInteger(value.suspendedHome) &&
+        Number.isInteger(value.suspendedAway) &&
+        (value.suspendedHome as number) >= 0 &&
+        (value.suspendedAway as number) >= 0
+        ? {
+            t: "matchEnded",
+            message: value.message,
+            suspendedHome: value.suspendedHome as number,
+            suspendedAway: value.suspendedAway as number,
+          }
+        : null;
     case "varReview": {
       if (value.review === null) {
         return { t: "varReview", review: null };

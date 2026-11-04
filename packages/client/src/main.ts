@@ -128,6 +128,9 @@ const statsTitle = byId<HTMLElement>("stats-title");
 const statsScore = byId<HTMLElement>("stats-score");
 const statsNote = byId<HTMLElement>("stats-note");
 const statsRows = byId<HTMLElement>("stats-rows");
+const statsNextLegButton =
+  byId<HTMLButtonElement>("stats-next-leg");
+const statsNextLegWait = byId<HTMLElement>("stats-next-leg-wait");
 const matchEvent = byId<HTMLElement>("match-event");
 const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
 const pauseMatchButton = byId<HTMLButtonElement>("pause-match");
@@ -312,6 +315,12 @@ pauseMatchButton.addEventListener("click", () => {
   } else {
     client.pauseMatch();
   }
+});
+
+statsNextLegButton.addEventListener("click", () => {
+  statsNextLegButton.disabled = true;
+  statsNextLegButton.textContent = "Preparing room…";
+  client.prepareNextLeg();
 });
 
 rendererToggleButton.addEventListener("click", () => {
@@ -1062,6 +1071,10 @@ function updateStatsScreen(state: GameClientState): void {
   if (stats === null) {
     statsScreen.hidden = true;
     statsRows.replaceChildren();
+    statsNextLegButton.hidden = true;
+    statsNextLegButton.disabled = false;
+    statsNextLegButton.textContent = "Prepare second leg";
+    statsNextLegWait.hidden = true;
     return;
   }
   const setup = state.setup;
@@ -1139,6 +1152,16 @@ function updateStatsScreen(state: GameClientState): void {
       away: String(stats.away.redCards),
     },
   ];
+  const betweenLegs =
+    stats.series !== null &&
+    stats.series.leg === 1 &&
+    !stats.series.complete;
+  const host = state.lobby?.you?.host === true;
+  statsNextLegButton.hidden = !betweenLegs || !host;
+  statsNextLegButton.disabled = false;
+  statsNextLegButton.textContent = "Prepare second leg";
+  statsNextLegWait.hidden = !betweenLegs || host;
+
   renderMatchStatsScreen(
     statsScreen,
     statsRows,

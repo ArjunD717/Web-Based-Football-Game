@@ -4,7 +4,7 @@ import {
   CLOSE_CODES,
   DEFAULT_MATCH_SETTINGS,
   TUNING,
-  buildDefaultSheet,
+  applySuspensionsToSheet,
   decodeClientBinaryMessage,
   encodeSnapshot,
   isRoomCode,
@@ -116,8 +116,6 @@ interface Room {
   settings: MatchSettingsWire;
   /** Two-legged tie state; null for one-off matches. */
   series: RoomSeries | null;
-  /** Seconds before the second leg starts automatically. */
-  seriesBreakSeconds: number;
 }
 
 export interface RoomManagerOptions {
@@ -245,6 +243,9 @@ export class RoomManager {
       case "resumeMatch":
         this.resumeMatch(client);
         return;
+      case "prepareNextLeg":
+        this.prepareNextLeg(client);
+        return;
       case "leaveRoom":
         this.leaveRoom(client);
         return;
@@ -327,9 +328,6 @@ export class RoomManager {
     );
 
     for (const room of this.rooms.values()) {
-      if (this.startSecondLegIfDue(room, dt)) {
-        continue;
-      }
       const match = room.match;
       if (match === null || room.phase !== "live") {
         continue;
@@ -402,7 +400,6 @@ export class RoomManager {
       pauseDeadlineMs: null,
       settings: { ...DEFAULT_MATCH_SETTINGS },
       series: null,
-      seriesBreakSeconds: 0,
     };
     this.rooms.set(code, room);
     this.membership.set(client.token, room);
@@ -649,6 +646,51 @@ export class RoomManager {
     this.logger.info(`Room ${room.code}: host resumed the match`);
   }
 
+  private prepareNextLeg(client: ClientConnection): void {
+    const room = this.membership.get(client.token);
+    const seat = room === undefined ? null : this.findSeat(room, client.token);
+    if (room === undefined || seat === null) {
+      this.sendError(client, "not_in_room", "Join a room before preparing");
+      return;
+    }
+    if (!seat.host) {
+      this.sendError(client, "not_host", "Only the host can prepare the next leg");
+      return;
+    }
+    const series = room.series;
+    if (
+      room.match === null ||
+      !room.match.finished ||
+      series === null ||
+      series.scores.length !== 1
+    ) {
+      this.sendError(
+        client,
+        "match_not_live",
+        "There is no completed first leg to prepare",
+      );
+      return;
+    }
+    const suspendedHome = series.suspended.home.size;
+    const suspendedAway = series.suspended.away.size;
+    this.broadcast(room, {
+      t: "matchEnded",
+      message:
+        suspendedHome + suspendedAway === 0
+          ? "Adjust your lineups, then both players ready up for the second leg."
+          : `Suspensions carried: ${suspendedHome} home, ${suspendedAway} away. Adjust lineups, then ready up.`,
+      suspendedHome,
+      suspendedAway,
+    });
+    this.stopMatch(room, true);
+    for (const player of this.seats(room)) {
+      player.ready = false;
+    }
+    this.refreshLobbyPhase(room);
+    this.broadcastLobby(room);
+    this.logger.info(`Room ${room.code}: preparing the second leg`);
+  }
+
   private queueSubstitution(
     client: ClientConnection,
     outId: string,
@@ -837,7 +879,6 @@ export class RoomManager {
         "away",
         series.suspended.away,
       );
-      room.seriesBreakSeconds = TUNING.competition.tieBreakSeconds;
     }
   }
 
@@ -1022,54 +1063,19 @@ export class RoomManager {
     if (suspended.size === 0) {
       return sheet;
     }
-    const available = this.registry
-      .getPlayers(teamId)
-      .filter((player) => !suspended.has(player.id));
     try {
-      const built = buildDefaultSheet(
-        available,
-        sheet.formation,
-        sheet.bench.length,
-      ).sheet;
-      return {
-        ...built,
-        kit: sheet.kit,
-        tactics: { ...sheet.tactics },
-      };
+      return applySuspensionsToSheet(
+        sheet,
+        this.registry.getPlayers(teamId),
+        suspended,
+      );
     } catch (error) {
       this.logger.warn(
-        `Could not rebuild a suspended lineup for ${teamId}`,
+        `Could not apply suspensions for ${teamId}`,
         error,
       );
       return sheet;
     }
-  }
-
-  /**
-   * Start leg two after the full-time board has had a short window. Keeping the
-   * break deterministic (manager ticks, not wall clock) means a reconnect sees
-   * the same countdown.
-   */
-  private startSecondLegIfDue(room: Room, dt: number): boolean {
-    const series = room.series;
-    const match = room.match;
-    if (
-      series === null ||
-      series.scores.length !== 1 ||
-      match === null ||
-      !match.finished ||
-      room.host?.client == null ||
-      room.guest?.client == null ||
-      room.phase !== "live"
-    ) {
-      return false;
-    }
-    room.seriesBreakSeconds = Math.max(0, room.seriesBreakSeconds - dt);
-    if (room.seriesBreakSeconds > 0) {
-      return false;
-    }
-    this.startMatch(room);
-    return room.match !== match;
   }
 
   private startMatch(room: Room): void {
@@ -1158,7 +1164,6 @@ export class RoomManager {
     room.phase = "live";
     room.manualPaused = false;
     room.pauseDeadlineMs = null;
-    room.seriesBreakSeconds = 0;
 
     for (const seat of this.seats(room)) {
       seat.lastAckedSeq = 0;
@@ -1214,13 +1219,14 @@ export class RoomManager {
     return this.registry.validateSheet(seat.teamId, seat.sheet);
   }
 
-  private stopMatch(room: Room): void {
+  private stopMatch(room: Room, preserveSeries = false): void {
     room.match = null;
     room.phase = "waiting";
     room.manualPaused = false;
     room.pauseDeadlineMs = null;
-    room.series = null;
-    room.seriesBreakSeconds = 0;
+    if (!preserveSeries) {
+      room.series = null;
+    }
   }
 
   private broadcastSnapshot(room: Room): void {
