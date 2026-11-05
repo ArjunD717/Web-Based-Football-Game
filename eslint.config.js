@@ -8,7 +8,13 @@ const rootDir = fileURLToPath(new URL(".", import.meta.url));
 
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "**/dist/**", "certs/**", "coverage/**"],
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "certs/**",
+      "coverage/**",
+      ".tmp-assets/**",
+    ],
   },
   js.configs.recommended,
   {

@@ -20,7 +20,7 @@
     "data:preview": "pnpm --filter @fb/data-tools preview",
     "certs": "node scripts/setup-certs.mjs",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r --if-present typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tools/character/tsconfig.json && pnpm -r --if-present typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm lint && pnpm typecheck && pnpm test",

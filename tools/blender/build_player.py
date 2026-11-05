@@ -6,6 +6,7 @@ Run headlessly:
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 from collections.abc import Callable
@@ -19,6 +20,7 @@ SOURCE = os.path.join(REPO, "assets", "source", "makehuman", "makehuman-base.glb
 OUT = os.path.join(REPO, "assets", "characters", "player-01.glb")
 MATCH_OUT = os.path.join(REPO, "assets", "characters", "player-01-match.glb")
 TEXTURES = os.path.join(REPO, "assets", "textures")
+ANIMATIONS = os.path.join(REPO, ".tmp-assets", "player-animations.json")
 
 BODY_NAME = "Avery | anatomical body"
 ARMATURE_NAME = "Avery | anatomical body.rig"
@@ -30,6 +32,7 @@ def reset() -> None:
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_EEVEE"
+    scene.render.fps = 30
     scene.unit_settings.system = "METRIC"
     scene.unit_settings.scale_length = 1.0
 
@@ -470,6 +473,61 @@ def make_boot_sole(
     return obj
 
 
+def iter_fcurves(action: bpy.types.Action):
+    """Blender 5 stores action curves under layered channel bags."""
+    legacy = getattr(action, "fcurves", None)
+    if legacy is not None:
+        yield from legacy
+        return
+    for layer in action.layers:
+        for strip in layer.strips:
+            for channelbag in strip.channelbags:
+                yield from channelbag.fcurves
+
+
+def build_actions(rig: bpy.types.Object) -> None:
+    """Bake the shared match-pose modules into real glTF animation clips.
+
+    The source of truth stays the tested TypeScript pose math. Sampling it at
+    build time gives the runtime real clips (crossfades, looping, authored
+    contacts) without maintaining a second hand-written animation system.
+    """
+    if not os.path.exists(ANIMATIONS):
+        raise RuntimeError(
+            f"Missing animation data {ANIMATIONS}; run the character baker first"
+        )
+    with open(ANIMATIONS, encoding="utf-8") as handle:
+        data = json.load(handle)
+    rig.animation_data_create()
+    max_frame = 1
+    for clip in data["clips"]:
+        action = bpy.data.actions.new(clip["name"])
+        action.use_fake_user = True
+        rig.animation_data.action = action
+        for bone_name, samples in clip["tracks"].items():
+            bone = rig.pose.bones.get(bone_name)
+            if bone is None:
+                raise RuntimeError(f"Missing animation bone {bone_name}")
+            bone.rotation_mode = "XYZ"
+            for sample in samples:
+                bone.rotation_euler = sample["rotation"]
+                bone.keyframe_insert(
+                    "rotation_euler",
+                    frame=1 + int(sample["frame"]),
+                    group=bone_name,
+                )
+            max_frame = max(max_frame, 1 + int(samples[-1]["frame"]))
+        for fcurve in iter_fcurves(action):
+            for point in fcurve.keyframe_points:
+                point.interpolation = "LINEAR"
+    rig.animation_data.action = None
+    for bone in rig.pose.bones:
+        bone.rotation_mode = "XYZ"
+        bone.rotation_euler = (0.0, 0.0, 0.0)
+    bpy.context.scene.frame_end = max_frame
+    print("ACTIONS", len(data["clips"]), "FRAMES", max_frame)
+
+
 def build() -> None:
     reset()
     body, rig = load_base()
@@ -727,6 +785,7 @@ def build() -> None:
     rig["heightM"] = target_height_m
     rig["kit"] = "northbridge-home"
     rig["bodyType"] = "athletic"
+    build_actions(rig)
 
     # Export all renderable objects and the shared armature.
     bpy.ops.object.select_all(action="SELECT")
@@ -736,7 +795,6 @@ def build() -> None:
         export_format="GLB",
         use_selection=False,
         export_apply=False,
-        export_animations=False,
         export_yup=True,
         export_texcoords=True,
         export_normals=True,
@@ -744,6 +802,15 @@ def build() -> None:
         export_extras=True,
         export_image_format="WEBP",
         export_image_quality=90,
+        export_animations=True,
+        export_animation_mode="ACTIONS",
+        export_nla_strips=False,
+        export_anim_slide_to_zero=True,
+        export_frame_range=False,
+        export_bake_animation=False,
+        export_force_sampling=False,
+        export_optimize_animation_size=True,
+        export_anim_single_armature=True,
     )
 
     tris = 0
@@ -812,7 +879,6 @@ def export_match_lod() -> None:
         export_format="GLB",
         use_selection=False,
         export_apply=False,
-        export_animations=False,
         export_yup=True,
         export_texcoords=True,
         export_normals=True,
@@ -820,6 +886,15 @@ def export_match_lod() -> None:
         export_extras=True,
         export_image_format="WEBP",
         export_image_quality=90,
+        export_animations=True,
+        export_animation_mode="ACTIONS",
+        export_nla_strips=False,
+        export_anim_slide_to_zero=True,
+        export_frame_range=False,
+        export_bake_animation=False,
+        export_force_sampling=False,
+        export_optimize_animation_size=True,
+        export_anim_single_armature=True,
     )
     match_tris = 0
     for obj in bpy.data.objects:

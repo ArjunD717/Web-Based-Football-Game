@@ -20,6 +20,11 @@ for (const script of scripts) {
   run(python.command, [...python.prefix, path.join("tools", script)]);
 }
 
+run(process.execPath, [
+  path.join(repoRoot, "packages", "sim", "node_modules", "tsx", "dist", "cli.mjs"),
+  path.join(repoRoot, "tools", "character", "bake_animations.ts"),
+]);
+
 run(blender, [
   "-b",
   "--factory-startup",
