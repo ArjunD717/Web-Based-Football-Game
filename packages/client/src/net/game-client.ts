@@ -52,8 +52,8 @@ export interface GameClientState {
   readonly matchStats: WireMatchStats | null;
   readonly varReview: WireVarReview | null;
   readonly shootout: WireShootout | null;
-  /** Latest goal-triggered clip announced by the server. */
-  readonly replayClip: WireReplayClip | null;
+  /** Goal-triggered clips retained by the server for this room. */
+  readonly replayClips: readonly WireReplayClip[];
   readonly substitutionNotice: string | null;
 }
 
@@ -80,7 +80,7 @@ export class GameClient {
     matchStats: null,
     varReview: null,
     shootout: null,
-    replayClip: null,
+    replayClips: [],
     substitutionNotice: null,
   };
   private socket: WebSocket | null = null;
@@ -362,8 +362,8 @@ export class GameClient {
       case "shootout":
         this.update({ shootout: message.shootout });
         break;
-      case "replayClip":
-        this.update({ replayClip: message.clip });
+      case "replayClips":
+        this.update({ replayClips: message.clips });
         break;
       case "roomClosed":
         this.clearMatch();
@@ -483,7 +483,7 @@ export class GameClient {
       matchStats: null,
       varReview: null,
       shootout: null,
-      replayClip: null,
+      replayClips: [],
       substitutionNotice: null,
     });
   }
@@ -502,7 +502,7 @@ export class GameClient {
       matchStats: null,
       varReview: null,
       shootout: null,
-      replayClip: null,
+      replayClips: [],
       substitutionNotice: null,
     });
   }

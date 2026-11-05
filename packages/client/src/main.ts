@@ -68,6 +68,7 @@ import {
 } from "./camera/modes";
 import { describeMatchEvent, formatCardCounts } from "./match/event-label";
 import { SubstitutionPanel } from "./match/substitution-panel";
+import { buildReplayGalleryItems } from "./match/replay-gallery";
 import { MatchAudio } from "./audio/match-audio";
 import { MatchHaptics } from "./input/haptics";
 import { MatchReplayBuffer } from "./presentation/replay";
@@ -180,9 +181,11 @@ const statsNextLegWait = byId<HTMLElement>("stats-next-leg-wait");
 const matchEvent = byId<HTMLElement>("match-event");
 const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
 const exportReplayLink = byId<HTMLAnchorElement>("export-replay");
-const downloadGoalReplayLink = byId<HTMLAnchorElement>(
-  "download-goal-replay",
-);
+const openReplaysButton = byId<HTMLButtonElement>("open-replays");
+const statsReplaysButton = byId<HTMLButtonElement>("stats-replays");
+const replayGallery = byId<HTMLElement>("replay-gallery");
+const replayGalleryList = byId<HTMLElement>("replay-gallery-list");
+const closeReplaysButton = byId<HTMLButtonElement>("close-replays");
 const pauseMatchButton = byId<HTMLButtonElement>("pause-match");
 const rendererToggleButton =
   byId<HTMLButtonElement>("renderer-toggle");
@@ -240,6 +243,7 @@ const bindingsGamepadTab =
 const toast = byId<HTMLElement>("toast");
 
 let currentState: GameClientState | null = null;
+let replayGalleryKey = "";
 let toastTimer: number | null = null;
 let lastQrRoomCode: string | null = null;
 let cameraMode: CameraMode = loadCameraMode();
@@ -423,6 +427,47 @@ pauseMatchButton.addEventListener("click", () => {
     client.resumeMatch();
   } else {
     client.pauseMatch();
+  }
+});
+
+let replayGalleryOpener: HTMLButtonElement | null = null;
+
+function openReplayGallery(opener: HTMLButtonElement): void {
+  if (
+    currentState === null ||
+    currentState.replayClips.length === 0 ||
+    replayGalleryList.childElementCount === 0
+  ) {
+    return;
+  }
+  replayGalleryOpener = opener;
+  replayGallery.hidden = false;
+  closeReplaysButton.focus();
+}
+
+function closeReplayGallery(): void {
+  if (replayGallery.hidden) {
+    return;
+  }
+  replayGallery.hidden = true;
+  const target =
+    replayGalleryOpener?.hidden === false
+      ? replayGalleryOpener
+      : openReplaysButton;
+  target.focus();
+}
+
+openReplaysButton.addEventListener("click", () => {
+  openReplayGallery(openReplaysButton);
+});
+statsReplaysButton.addEventListener("click", () => {
+  openReplayGallery(statsReplaysButton);
+});
+closeReplaysButton.addEventListener("click", closeReplayGallery);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !replayGallery.hidden) {
+    event.preventDefault();
+    closeReplayGallery();
   }
 });
 
@@ -1144,18 +1189,50 @@ function renderConnection(state: GameClientState): void {
     exportReplayLink.href = `/api/replay/${replayCode}.json`;
     exportReplayLink.download = `replay-${replayCode}.json`;
   }
-  const goalClip = state.replayClip;
-  downloadGoalReplayLink.hidden =
-    replayCode === null || goalClip === null;
-  if (replayCode !== null && goalClip !== null) {
-    downloadGoalReplayLink.href =
-      `/api/replay/${replayCode}/${goalClip.id}.json`;
-    downloadGoalReplayLink.download =
-      `replay-${replayCode}-${goalClip.id}.json`;
-    downloadGoalReplayLink.title =
-      `Goal ${goalClip.scoreHome}-${goalClip.scoreAway}, ` +
-      `${goalClip.frameCount} frames`;
+  renderReplayGallery(state, replayCode);
+}
+
+function renderReplayGallery(
+  state: GameClientState,
+  replayCode: string | null,
+): void {
+  const clips = state.replayClips;
+  const available = replayCode !== null && clips.length > 0;
+  openReplaysButton.hidden = !available;
+  openReplaysButton.textContent =
+    clips.length > 0 ? `Replays (${clips.length})` : "Replays";
+  statsReplaysButton.hidden = !available;
+  if (!available) {
+    if (!replayGallery.hidden) {
+      replayGallery.hidden = true;
+    }
+    replayGalleryList.replaceChildren();
+    replayGalleryKey = "";
+    return;
   }
+
+  const key = `${replayCode}:${clips.map((clip) => clip.id).join(",")}`;
+  if (key === replayGalleryKey) {
+    return;
+  }
+  replayGalleryKey = key;
+  replayGalleryList.replaceChildren(
+    ...buildReplayGalleryItems(replayCode, clips).map(
+      (item) => {
+        const link = document.createElement("a");
+        link.className = "replay-gallery__item";
+        link.href = item.href;
+        link.download = item.download;
+        link.title = item.title;
+        const score = document.createElement("strong");
+        score.textContent = item.score;
+        const meta = document.createElement("span");
+        meta.textContent = item.meta;
+        link.append(score, meta);
+        return link;
+      },
+    ),
+  );
 }
 
 function renderLobby(state: GameClientState): void {

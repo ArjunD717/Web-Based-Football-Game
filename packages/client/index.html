@@ -964,9 +964,9 @@
               <a id="export-replay" class="ui-button ui-button--small ui-button--quiet" href="#" download hidden>
                 Export window
               </a>
-              <a id="download-goal-replay" class="ui-button ui-button--small ui-button--outline-accent" href="#" download hidden>
-                Goal replay
-              </a>
+              <button id="open-replays" class="ui-button ui-button--small ui-button--outline-accent" type="button" hidden>
+                Replays
+              </button>
               <button id="pause-match" class="ui-button ui-button--small" type="button" hidden>
                 Pause
               </button>
@@ -1110,6 +1110,18 @@
               <button id="replay-stop" class="ui-button ui-button--small" type="button">Skip</button>
             </div>
 
+            <section id="replay-gallery" class="replay-gallery" role="dialog" aria-modal="true" aria-labelledby="replay-gallery-title" hidden>
+              <header class="replay-gallery__head">
+                <div>
+                  <p class="ui-kicker">Server clips</p>
+                  <h2 id="replay-gallery-title">Goal replays</h2>
+                </div>
+                <button id="close-replays" class="ui-button ui-button--small" type="button">Close</button>
+              </header>
+              <p class="replay-gallery__hint">Download any goal as JSON frames, including the run-up and celebration.</p>
+              <div id="replay-gallery-list" class="replay-gallery__list"></div>
+            </section>
+
             <section id="stats-screen" class="stats-screen" aria-label="Full-time match statistics" hidden>
               <header class="stats-head">
                 <div class="stats-head__copy">
@@ -1121,6 +1133,9 @@
               <p id="stats-note" class="stats-note"></p>
               <div id="stats-rows" class="stats-rows"></div>
               <div class="stats-actions">
+                <button id="stats-replays" class="ui-button ui-button--outline-accent" type="button" hidden>
+                  Replay goals
+                </button>
                 <button id="stats-next-leg" class="ui-button ui-button--primary" type="button" hidden>
                   Prepare second leg
                 </button>
