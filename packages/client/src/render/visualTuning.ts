@@ -63,6 +63,12 @@ export interface VisualTuning {
   readonly playerScale: number;
   /** Render-only ball model scale; physics stays at the real 0.22 m diameter. */
   readonly ballScale: number;
+  readonly authoredPlayer: {
+    /** Base shoulder drop applied to the glTF A-pose in every grounded pose. */
+    readonly armDownRadians: number;
+    /** Exponential quaternion blend rate between animation targets. */
+    readonly poseBlendRate: number;
+  };
   readonly crowd: {
     /** Stand distance outside the touchlines / goal lines. */
     readonly sideInsetM: number;
@@ -104,6 +110,10 @@ export interface VisualTuning {
 export const VISUAL_TUNING: VisualTuning = {
   playerScale: 1.22,
   ballScale: 1.45,
+  authoredPlayer: {
+    armDownRadians: -0.58,
+    poseBlendRate: 20,
+  },
   crowd: {
     sideInsetM: 5,
     endInsetM: 7,
