@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 22**:
+both devices are thin clients. This repository is at **Milestone 23**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -23,7 +23,8 @@ plays them through a per-player mixer. M19 replaces root-only grounding with
 per-leg analytic IK and world-space foot anchors during stance. M20 scales
 authored clip playback to the speed the player actually covers. M21 adds
 stride-locked footstep events and procedural contact audio. M22 places those
-footsteps against the broadcast camera with stereo pan and distance gain.
+footsteps against the broadcast camera with stereo pan and distance gain. M23
+calibrates stride cadence from each player's authored sprint speed.
 
 ## Requirements
 
@@ -158,6 +159,43 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 23 scope
+
+Implemented:
+
+- The match setup roster now carries each player's authored **1..99 sprint
+  speed**. The parser rejects missing or out-of-range values; both starting XI
+  and bench entries include it
+- The renderer view carries the rating through the same static roster path used
+  by names and shirt numbers. Older or test-only views may omit it and fall
+  back to the neutral rating of **75**
+- `strideReferenceScale` maps sprint speed onto a reference-speed multiplier:
+  **40 → 0.90×**, **75 → 1.00×**, **99 → 1.12×**, with clamping outside that
+  range. Faster players take longer strides, so they play the same clip more
+  slowly at a given ground speed
+- The authored rig computes the scale once at construction and passes it to
+  `gaitPlaybackScale`. The result still feeds the speed multiplier, stamina
+  multiplier, procedural stride phase and stride-locked footstep clock
+- The smoke ran two sprinting players at the same measured **8.16 m/s**:
+  rating 40 produced stride scale **0.90** and action time scale **1.054**;
+  rating 99 produced **1.12** and **0.847**. No animation errors occurred
+- `pnpm check` passes **655 tests**, including roster parsing, calibrations,
+  clamping and replay setup validation. `pnpm build` passes. No simulation
+  movement, camera or asset behaviour changed
+
+Known M23 limitations (by design):
+
+- Calibration uses sprint speed only; height, acceleration and body type do not
+  affect the reference stride
+- Ratings below **40** and above **99** clamp to the same minimum and maximum
+  scales
+- The same proportional calibration applies to jog, sprint and dribble rather
+  than per-state stride lengths
+- The rig changes cadence only; stride amplitude and foot placement remain
+  authored
+- Views that omit sprint speed use the neutral rating because the field is
+  optional on the render contract for fixture compatibility
+
 ## Milestone 22 scope
 
 Implemented:
@@ -261,9 +299,8 @@ Known M20 limitations (by design):
 - Speed is estimated from the rendered, interpolated root position rather than
   authoritative velocity. Network jitter can make the estimate briefly lag or
   lead the simulation
-- Reference speeds are global presentation tuning, not derived from each
-  player's Sprint Speed or stride length. Two players in the same state use the
-  same cadence mapping
+- At M20 reference speeds are global presentation tuning, not derived from each
+  player's Sprint Speed or stride length. M23 adds per-player stride calibration
 - Gait correction is time scaling only. It does not select between walk, jog
   and sprint clips, alter stride amplitude or retime individual foot contacts
 - Very fast direction changes can still reach the foot-anchor release limits;
@@ -1589,6 +1626,11 @@ The two-minute match check:
     frame to the far touchline. Footfalls should move across the stereo field
     and fade with camera distance. Pan the camera and confirm the mix follows
     the new view. Repeat in 2D: no spatial footsteps should play there.
+27. Put two players with noticeably different sprint speeds through the same
+    sprint. At equal ground speed, the faster player's legs must cycle more
+    slowly because of the longer stride reference. Confirm the roster still
+    shows the correct names and numbers, and that substitutions update the
+    rating for the incoming player.
 
 ## Layout
 
