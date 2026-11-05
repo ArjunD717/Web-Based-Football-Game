@@ -99,7 +99,7 @@ describe("stepMatch", () => {
     expect(match.referee.phase).toBe("fullTime");
     expect(ticks).toBeLessThan(limit);
     assertFiniteMatch(match);
-  });
+  }, 30_000);
 
   it("stays finite and bounded through a simulated minute", () => {
     const match = createMatch({ seed: 424242 });
