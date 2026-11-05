@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 23**:
+both devices are thin clients. This repository is at **Milestone 24**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -24,7 +24,9 @@ per-leg analytic IK and world-space foot anchors during stance. M20 scales
 authored clip playback to the speed the player actually covers. M21 adds
 stride-locked footstep events and procedural contact audio. M22 places those
 footsteps against the broadcast camera with stereo pan and distance gain. M23
-calibrates stride cadence from each player's authored sprint speed.
+calibrates stride cadence from each player's authored sprint speed. M24 adds
+camera-distance player LOD and a bounded real-shadow budget for authored
+players.
 
 ## Requirements
 
@@ -158,6 +160,54 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 24 scope
+
+Implemented:
+
+- `player-lod.ts` is a pure presentation policy. Camera distance selects
+  `full` (≤ 40 m), `reduced` (≤ 80 m) or `minimal` (> 80 m) detail; invalid
+  distances and non-finite values fall back to `minimal`
+- Authored rigs expose `setDetail` and `setShadowCasting`. Reduced detail keeps
+  shirt numbers, hides cards and keeps the controlled marker; minimal detail
+  hides numbers, cards, markers and switch rings while preserving the
+  controlled-player ring
+- Only the nearest **four** authored players inside **80 m** of the camera may
+  cast a real skinned shadow. The blob shadow stays visible at lower opacity,
+  so distant players still ground correctly without paying for shadow-map draws
+- The match renderer recomputes the policy after the camera settles each frame,
+  before rendering. Distance is measured from the camera to each author rig's
+  world root; the simulation, snapshot protocol, procedural fallback and replay
+  rendering are unchanged
+- Real shadow casting also requires a medium or high quality profile. Low
+  quality already uses the procedural fallback and has no authored shadow
+  meshes
+- The smoke used two authored players at high quality. In **broadcast**, the
+  near player resolved to `reduced` with a real shadow and the far player to
+  `minimal` without one. Switching to **player** gave `full` and a real shadow
+  near, and `reduced` far. A close-up shadow-on/off diff showed the cast shadow
+  around the planted feet; no animation or console errors occurred
+- `pnpm check` passes **660 tests** and `pnpm build` passes. No simulation,
+  protocol, replay or collision behaviour changed
+
+Known M24 limitations (by design):
+
+- The LOD changes presentation only. Every authored player still runs the full
+  skinned mesh and animation mixer; only overlays, real shadow casting and the
+  blob opacity change
+- The policy uses raw camera-to-root distance, not projected screen height,
+  field of view or occlusion. A player behind the camera is still classified
+  by its Euclidean distance
+- Real shadows are capped at four players and eighty metres. Players outside
+  that budget use the blob shadow, even when they are visibly large on screen
+  because of a zoomed camera
+- In broadcast the near players are normally `reduced`, so cards are hidden and
+  numbers remain. Full detail is mainly visible in player, tele and close
+  replay cameras
+- Shadow casting is not sorted by screen coverage, so a near off-screen player
+  can consume one of the four slots
+- The LOD system does not reduce animation update rate, texture resolution or
+  material complexity; those remain separate performance levers
 
 ## Milestone 23 scope
 
