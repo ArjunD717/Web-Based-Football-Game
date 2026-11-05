@@ -32,6 +32,14 @@ describe("visual quality presets", () => {
     );
   });
 
+  it("keeps foot contacts sticky but releases them above the lift threshold", () => {
+    const ik = VISUAL_TUNING.authoredPlayer.footIk;
+    expect(ik.contactEnterM).toBeGreaterThan(0);
+    expect(ik.contactExitM).toBeGreaterThan(ik.contactEnterM);
+    expect(ik.maxPlantTravelM).toBeGreaterThan(0);
+    expect(ik.teleportResetM).toBeGreaterThan(ik.maxPlantTravelM);
+  });
+
   it("keeps render-only scale values separate from physics", () => {
     expect(VISUAL_TUNING.playerScale).toBeGreaterThanOrEqual(1.1);
     expect(VISUAL_TUNING.playerScale).toBeLessThanOrEqual(1.25);

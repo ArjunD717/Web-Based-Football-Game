@@ -82,6 +82,20 @@ export interface VisualTuning {
       /** Intended ankle lift for states that keep a foot on the pitch. */
       readonly groundLiftM: Partial<Record<PlayerStateName, number>>;
     };
+    readonly footIk: {
+      /** Ankle height below which a stance foot acquires a world anchor. */
+      readonly contactEnterM: number;
+      /** Ankle height above which the stance anchor is released. */
+      readonly contactExitM: number;
+      /** Release a plant once the hip has moved this far from it. */
+      readonly maxPlantTravelM: number;
+      /** Exponential rate at which the leg approaches the IK solution. */
+      readonly blendRate: number;
+      /** Keep the knee just short of a fully straight singular chain. */
+      readonly reachMarginM: number;
+      /** A root jump larger than this resets all foot anchors. */
+      readonly teleportResetM: number;
+    };
     readonly appearance: {
       /** Skin tones are multipliers over the authored pore/vertex map. */
       readonly skinTones: readonly string[];
@@ -147,6 +161,14 @@ export const VISUAL_TUNING: VisualTuning = {
         volley: 0.008,
         tackle: 0,
       },
+    },
+    footIk: {
+      contactEnterM: 0.035,
+      contactExitM: 0.08,
+      maxPlantTravelM: 1.25,
+      blendRate: 24,
+      reachMarginM: 0.008,
+      teleportResetM: 1.5,
     },
     appearance: {
       skinTones: [

@@ -17,6 +17,13 @@ import {
   footPlantOffset,
   groundedLiftFor,
 } from "./character-grounding";
+import {
+  createFootLockState,
+  resetFootLock,
+  solveTwoBoneIk,
+  updateFootLock,
+  type FootLockState,
+} from "./foot-ik";
 import { disposeObject } from "./three-dispose";
 import {
   createControlledMarker,
@@ -31,6 +38,18 @@ import { VISUAL_TUNING } from "./visualTuning";
 import type { RenderPlayer, RenderTeamColors } from "./view";
 
 const HIDDEN_DETAIL_MESH = /^(?:boot_sole|sock_trim|kit_cuff)/;
+
+interface LegRig {
+  readonly thigh: THREE.Bone;
+  readonly calf: THREE.Bone;
+  readonly foot: THREE.Bone;
+  readonly upperLengthM: number;
+  readonly lowerLengthM: number;
+  readonly lock: FootLockState;
+  readonly target: THREE.Vector3;
+  hasTarget: boolean;
+  weight: number;
+}
 
 interface AuthoredPalette {
   readonly materials: ReadonlyMap<string, THREE.Material>;
@@ -152,8 +171,12 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly bones = new Map<string, THREE.Bone>();
   private readonly boneRest = new Map<string, THREE.Quaternion>();
   private readonly footBones: THREE.Bone[] = [];
+  private readonly legs: LegRig[] = [];
   private readonly rootWorld = new THREE.Vector3();
   private readonly footWorld = new THREE.Vector3();
+  private readonly lastRootPosition = new THREE.Vector3();
+  private hasLastRootPosition = false;
+  private lastFootIkState: RenderPlayer["state"] | null = null;
   private restAnkleY = Number.POSITIVE_INFINITY;
   private groundOffset = 0;
   private readonly mixer: THREE.AnimationMixer | null;
@@ -168,6 +191,18 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly workingQuaternion = new THREE.Quaternion();
   private readonly deltaQuaternion = new THREE.Quaternion();
   private readonly workingEuler = new THREE.Euler();
+  private readonly ikHip = new THREE.Vector3();
+  private readonly ikKnee = new THREE.Vector3();
+  private readonly ikAnkle = new THREE.Vector3();
+  private readonly ikPole = new THREE.Vector3();
+  private readonly ikSolvedKnee = new THREE.Vector3();
+  private readonly ikSolvedAnkle = new THREE.Vector3();
+  private readonly ikCurrentDirection = new THREE.Vector3();
+  private readonly ikDesiredDirection = new THREE.Vector3();
+  private readonly ikDeltaQuaternion = new THREE.Quaternion();
+  private readonly ikWorldQuaternion = new THREE.Quaternion();
+  private readonly ikParentQuaternion = new THREE.Quaternion();
+  private readonly ikRootQuaternion = new THREE.Quaternion();
   private lastState: RenderPlayer["state"] | null = null;
   private stateStartedElapsed = 0;
   private lastElapsed: number | null = null;
@@ -251,6 +286,28 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
           return foot.getWorldPosition(this.footWorld).y - rootY;
         }),
       );
+    }
+    for (const side of ["l", "r"] as const) {
+      const thigh = this.bones.get(`thigh_${side}`);
+      const calf = this.bones.get(`calf_${side}`);
+      const foot = this.bones.get(`foot_${side}`);
+      if (thigh === undefined || calf === undefined || foot === undefined) {
+        continue;
+      }
+      thigh.getWorldPosition(this.ikHip);
+      calf.getWorldPosition(this.ikKnee);
+      foot.getWorldPosition(this.ikAnkle);
+      this.legs.push({
+        thigh,
+        calf,
+        foot,
+        upperLengthM: this.ikHip.distanceTo(this.ikKnee),
+        lowerLengthM: this.ikKnee.distanceTo(this.ikAnkle),
+        lock: createFootLockState(),
+        target: new THREE.Vector3(),
+        hasTarget: false,
+        weight: 0,
+      });
     }
 
     this.useClips =
@@ -371,6 +428,20 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       this.lastState = player.state;
       this.stateStartedElapsed = elapsed;
     }
+    const rootJumped =
+      this.hasLastRootPosition &&
+      this.root.position.distanceTo(this.lastRootPosition) >
+        VISUAL_TUNING.authoredPlayer.footIk.teleportResetM;
+    if (
+      rewound ||
+      rootJumped ||
+      player.state !== this.lastFootIkState
+    ) {
+      this.resetFootLocks();
+    }
+    this.lastFootIkState = player.state;
+    this.lastRootPosition.copy(this.root.position);
+    this.hasLastRootPosition = true;
     this.lastElapsed = elapsed;
     const stateAge = Math.max(0, elapsed - this.stateStartedElapsed);
     const deltaSeconds =
@@ -476,10 +547,208 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
             );
     }
     this.tilt.position.y = baseLift + this.groundOffset;
+    if (groundLift !== null) {
+      this.root.updateMatrixWorld(true);
+      this.updateFootIk(player.state, groundLift, deltaSeconds);
+    } else {
+      this.resetFootLocks();
+    }
 
     this.shadow.scale.setScalar(
       1 - Math.min(0.18, player.state === "slide" ? 0.18 : 0),
     );
+  }
+
+  private resetFootLocks(): void {
+    for (const leg of this.legs) {
+      resetFootLock(leg.lock);
+      leg.hasTarget = false;
+      leg.weight = 0;
+    }
+  }
+
+  /**
+   * The clip provides the gait; this pass only corrects feet that are already
+   * close to the pitch. Correcting a swing foot would cancel the step, so the
+   * lock acquires contact at the bottom of the stride and releases on lift.
+   */
+  private updateFootIk(
+    state: RenderPlayer["state"],
+    groundLift: number,
+    deltaSeconds: number,
+  ): void {
+    if (
+      this.legs.length === 0 ||
+      !Number.isFinite(this.restAnkleY)
+    ) {
+      return;
+    }
+    const tuning = VISUAL_TUNING.authoredPlayer.footIk;
+    const rootY = this.root.getWorldPosition(this.rootWorld).y;
+    const targetY = rootY + this.restAnkleY + groundLift;
+    this.root.getWorldQuaternion(this.ikRootQuaternion);
+    this.ikPole
+      .set(0, 0, 1)
+      .applyQuaternion(this.ikRootQuaternion)
+      .normalize();
+
+    const contacts: Array<{
+      readonly leg: LegRig;
+      readonly height: number;
+      hasContact: boolean;
+    }> = [];
+    for (const leg of this.legs) {
+      leg.thigh.getWorldPosition(this.ikHip);
+      leg.foot.getWorldPosition(this.ikAnkle);
+      const height = this.ikAnkle.y - targetY;
+      const contact = updateFootLock(
+        leg.lock,
+        {
+          ankle: this.ikAnkle,
+          hip: this.ikHip,
+          targetY,
+          maxReachM:
+            leg.upperLengthM + leg.lowerLengthM - tuning.reachMarginM,
+          grounded: true,
+        },
+        tuning,
+        leg.target,
+      );
+      contacts.push({
+        leg,
+        height,
+        hasContact: contact !== null && !contact.justReleased,
+      });
+    }
+
+    // A sprint can briefly put both ankles below the contact threshold. Only
+    // the lower foot gets the stance solve; two simultaneous world anchors
+    // would fight the moving hips and force a split stance.
+    if (state !== "idle") {
+      const locked = contacts.filter((entry) => entry.hasContact);
+      if (locked.length > 1) {
+        const keep = locked.reduce((lowest, entry) =>
+          entry.height < lowest.height ? entry : lowest,
+        );
+        for (const entry of locked) {
+          if (entry === keep) {
+            continue;
+          }
+          resetFootLock(entry.leg.lock);
+          entry.hasContact = false;
+        }
+      }
+    }
+
+    for (const entry of contacts) {
+      if (entry.hasContact) {
+        entry.leg.hasTarget = true;
+      }
+      const goalWeight = entry.hasContact ? 1 : 0;
+      entry.leg.weight =
+        deltaSeconds === 0
+          ? goalWeight
+          : THREE.MathUtils.damp(
+              entry.leg.weight,
+              goalWeight,
+              tuning.blendRate,
+              deltaSeconds,
+            );
+      if (
+        !entry.leg.hasTarget ||
+        entry.leg.weight <= 1e-4
+      ) {
+        continue;
+      }
+      // A released foot keeps blending toward its last anchor while the
+      // weight decays, so the clip takes over instead of snapping.
+      this.applyLegIk(
+        entry.leg,
+        entry.leg.target,
+        this.ikPole,
+        entry.leg.weight,
+        tuning,
+      );
+    }
+  }
+
+  private applyLegIk(
+    leg: LegRig,
+    target: THREE.Vector3,
+    pole: THREE.Vector3,
+    weight: number,
+    tuning: typeof VISUAL_TUNING.authoredPlayer.footIk,
+  ): void {
+    leg.thigh.getWorldPosition(this.ikHip);
+    leg.calf.getWorldPosition(this.ikKnee);
+    leg.foot.getWorldPosition(this.ikAnkle);
+    solveTwoBoneIk(
+      {
+        hip: this.ikHip,
+        target,
+        pole,
+        upperLengthM: leg.upperLengthM,
+        lowerLengthM: leg.lowerLengthM,
+        reachMarginM: tuning.reachMarginM,
+      },
+      this.ikSolvedKnee,
+      this.ikSolvedAnkle,
+    );
+    this.rotateBoneToward(
+      leg.thigh,
+      this.ikHip,
+      this.ikKnee,
+      this.ikSolvedKnee,
+      weight,
+    );
+    leg.thigh.updateMatrixWorld(true);
+
+    // The thigh moved the knee and ankle, so re-read them before solving the
+    // lower bone instead of changing the chain's lengths.
+    leg.calf.getWorldPosition(this.ikKnee);
+    leg.foot.getWorldPosition(this.ikAnkle);
+    this.rotateBoneToward(
+      leg.calf,
+      this.ikKnee,
+      this.ikAnkle,
+      this.ikSolvedAnkle,
+      weight,
+    );
+    leg.calf.updateMatrixWorld(true);
+  }
+
+  private rotateBoneToward(
+    bone: THREE.Bone,
+    origin: THREE.Vector3,
+    currentEnd: THREE.Vector3,
+    desiredEnd: THREE.Vector3,
+    weight: number,
+  ): void {
+    const currentLength = currentEnd.distanceTo(origin);
+    const desiredLength = desiredEnd.distanceTo(origin);
+    if (currentLength < 1e-6 || desiredLength < 1e-6) {
+      return;
+    }
+    this.ikCurrentDirection
+      .subVectors(currentEnd, origin)
+      .multiplyScalar(1 / currentLength);
+    this.ikDesiredDirection
+      .subVectors(desiredEnd, origin)
+      .multiplyScalar(1 / desiredLength);
+    this.ikDeltaQuaternion.setFromUnitVectors(
+      this.ikCurrentDirection,
+      this.ikDesiredDirection,
+    );
+    bone.getWorldQuaternion(this.ikWorldQuaternion);
+    this.ikWorldQuaternion.premultiply(this.ikDeltaQuaternion);
+    if (bone.parent === null) {
+      this.ikParentQuaternion.identity();
+    } else {
+      bone.parent.getWorldQuaternion(this.ikParentQuaternion);
+      this.ikParentQuaternion.invert();
+    }
+    this.ikParentQuaternion.multiply(this.ikWorldQuaternion);
+    bone.quaternion.slerp(this.ikParentQuaternion, weight);
   }
 
   private updateClipPose(
