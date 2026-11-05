@@ -40,6 +40,14 @@ describe("visual quality presets", () => {
     expect(ik.teleportResetM).toBeGreaterThan(ik.maxPlantTravelM);
   });
 
+  it("keeps stride calibration ordered and neutral at the reference", () => {
+    const stride = VISUAL_TUNING.authoredPlayer.stride;
+    expect(stride.minRating).toBeLessThan(stride.neutralRating);
+    expect(stride.neutralRating).toBeLessThan(stride.maxRating);
+    expect(stride.minScale).toBeLessThan(1);
+    expect(stride.maxScale).toBeGreaterThan(1);
+  });
+
   it("keeps gait reference speeds inside the simulation's player range", () => {
     const gait = VISUAL_TUNING.authoredPlayer.gait;
     expect(gait.referenceSpeedMps.jog).toBeGreaterThan(0);

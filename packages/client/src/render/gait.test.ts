@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 import {
   gaitPlaybackScale,
   isLocomotionState,
+  strideReferenceScale,
   updateGaitSpeed,
   type GaitTuning,
+  type StrideCalibration,
 } from "./gait";
 
 const tuning: GaitTuning = {
@@ -16,7 +18,31 @@ const tuning: GaitTuning = {
   speedCapMps: 12,
 };
 
+const stride: StrideCalibration = {
+  minRating: 40,
+  neutralRating: 75,
+  maxRating: 99,
+  minScale: 0.9,
+  maxScale: 1.12,
+};
+
 describe("speed-matched gait", () => {
+  it("calibrates stride reference speed from sprint speed", () => {
+    expect(strideReferenceScale(75, stride)).toBe(1);
+    expect(strideReferenceScale(40, stride)).toBeCloseTo(0.9);
+    expect(strideReferenceScale(99, stride)).toBeCloseTo(1.12);
+    expect(strideReferenceScale(20, stride)).toBeCloseTo(0.9);
+    expect(strideReferenceScale(120, stride)).toBeCloseTo(1.12);
+    expect(strideReferenceScale(Number.NaN, stride)).toBe(1);
+  });
+
+  it("uses the calibrated reference when mapping speed", () => {
+    const fast = gaitPlaybackScale("sprint", 8, tuning, 1.12);
+    const neutral = gaitPlaybackScale("sprint", 8, tuning, 1);
+    expect(fast).toBeLessThan(neutral);
+    expect(fast).toBeCloseTo(1 / 1.12);
+  });
+
   it("maps each reference speed to its authored playback rate", () => {
     expect(gaitPlaybackScale("jog", 4, tuning)).toBe(1);
     expect(gaitPlaybackScale("sprint", 8, tuning)).toBe(1);

@@ -96,6 +96,15 @@ export interface VisualTuning {
       /** A root jump larger than this resets all foot anchors. */
       readonly teleportResetM: number;
     };
+    readonly stride: {
+      readonly minRating: number;
+      readonly neutralRating: number;
+      readonly maxRating: number;
+      /** Reference-speed multiplier at minRating. */
+      readonly minScale: number;
+      /** Reference-speed multiplier at maxRating. */
+      readonly maxScale: number;
+    };
     readonly gait: {
       /** Nominal movement speed for each locomotion animation, m/s. */
       readonly referenceSpeedMps: Partial<Record<PlayerStateName, number>>;
@@ -195,6 +204,13 @@ export const VISUAL_TUNING: VisualTuning = {
       blendRate: 24,
       reachMarginM: 0.008,
       teleportResetM: 1.5,
+    },
+    stride: {
+      minRating: 40,
+      neutralRating: 75,
+      maxRating: 99,
+      minScale: 0.9,
+      maxScale: 1.12,
     },
     gait: {
       referenceSpeedMps: {

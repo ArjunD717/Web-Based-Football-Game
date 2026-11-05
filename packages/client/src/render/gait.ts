@@ -7,6 +7,14 @@ import type { PlayerStateName } from "@fb/sim";
  * keeps authored foot contacts closer to the distance the player actually
  * travels between render frames.
  */
+export interface StrideCalibration {
+  readonly minRating: number;
+  readonly neutralRating: number;
+  readonly maxRating: number;
+  readonly minScale: number;
+  readonly maxScale: number;
+}
+
 export interface GaitTuning {
   /** Nominal movement speed for each locomotion state, in metres/second. */
   readonly referenceSpeedMps: Partial<Record<PlayerStateName, number>>;
@@ -30,19 +38,58 @@ export function isLocomotionState(state: PlayerStateName): boolean {
 }
 
 /**
+ * Faster players cover more ground per stride, so their reference cadence is
+ * lower for the same ground speed. The neutral rating keeps the authored
+ * cadence exactly; lower and upper ratings bend it symmetrically.
+ */
+export function strideReferenceScale(
+  sprintSpeed: number,
+  calibration: StrideCalibration,
+): number {
+  if (!Number.isFinite(sprintSpeed)) {
+    return 1;
+  }
+  const rating = Math.max(
+    calibration.minRating,
+    Math.min(calibration.maxRating, sprintSpeed),
+  );
+  if (rating <= calibration.neutralRating) {
+    const span = Math.max(
+      1,
+      calibration.neutralRating - calibration.minRating,
+    );
+    const t = (rating - calibration.minRating) / span;
+    return calibration.minScale + (1 - calibration.minScale) * t;
+  }
+  const span = Math.max(
+    1,
+    calibration.maxRating - calibration.neutralRating,
+  );
+  const t = (rating - calibration.neutralRating) / span;
+  return 1 + (calibration.maxScale - 1) * t;
+}
+
+/**
  * Convert actual planar speed into an animation playback multiplier. The
  * reference speed maps to exactly 1, so a normal jog/sprint keeps its authored
- * cadence; only mismatches are corrected.
+ * cadence; only speed and per-player stride mismatches are corrected.
  */
 export function gaitPlaybackScale(
   state: PlayerStateName,
   speedMps: number,
   tuning: GaitTuning,
+  strideScale = 1,
 ): number {
-  const reference = tuning.referenceSpeedMps[state];
-  if (reference === undefined || !Number.isFinite(reference) || reference <= 0) {
+  const baseReference = tuning.referenceSpeedMps[state];
+  if (
+    baseReference === undefined ||
+    !Number.isFinite(baseReference) ||
+    baseReference <= 0
+  ) {
     return 1;
   }
+  const reference =
+    baseReference * (Number.isFinite(strideScale) ? strideScale : 1);
   const speed = Number.isFinite(speedMps)
     ? Math.min(Math.max(0, speedMps), tuning.speedCapMps)
     : 0;
