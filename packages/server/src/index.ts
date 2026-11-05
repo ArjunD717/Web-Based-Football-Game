@@ -48,6 +48,8 @@ async function main(): Promise<void> {
     devNetwork: config.devNetwork,
     getRuntimeMetrics: () => tickMetrics.snapshot(),
     getReplayExport: (code) => roomManager.exportReplay(code),
+    getReplayClip: (code, clipId) =>
+      roomManager.exportReplayClip(code, clipId),
     handlers: {
       onReady: (client) => {
         roomManager.onReady(client);

@@ -44,6 +44,13 @@ import type { TeamRegistry } from "../data/registry";
 import type { Logger } from "../create-server";
 import type { ReplayExport } from "../http/request-handler";
 import {
+  advanceGoalReplay,
+  beginGoalReplay,
+  finishGoalReplay,
+  type GoalReplayCapture,
+  type GoalReplayRecord,
+} from "./replay-capture";
+import {
   buildMatchStats,
   buildShootoutWire,
   buildSnapshotFrame,
@@ -89,6 +96,9 @@ interface RoomMatch {
   resultSent: boolean;
   lastVarSignature: string | null;
   lastShootoutSignature: string | null;
+  lastScoreHome: number;
+  lastScoreAway: number;
+  goalCapture: GoalReplayCapture | null;
   readonly controls: {
     readonly home: TeamControlRuntime;
     readonly away: TeamControlRuntime;
@@ -117,6 +127,12 @@ interface Room {
   settings: MatchSettingsWire;
   /** Two-legged tie state; null for one-off matches. */
   series: RoomSeries | null;
+  replayClips: Map<string, StoredGoalReplay>;
+  replayClipSeq: number;
+}
+
+interface StoredGoalReplay extends GoalReplayRecord {
+  readonly setup: MatchSetupWire;
 }
 
 export interface RoomManagerOptions {
@@ -389,6 +405,24 @@ export class RoomManager {
     };
   }
 
+  exportReplayClip(code: string, clipId: string): ReplayExport | null {
+    const room = this.rooms.get(normalizeRoomCode(code));
+    const clip = room?.replayClips.get(clipId);
+    if (room === null || room === undefined || clip === undefined) {
+      return null;
+    }
+    return {
+      code: room.code,
+      generatedAtMs: Date.now(),
+      setup: clip.setup,
+      frames: clip.frames,
+      id: clip.id,
+      kind: "goal",
+      scoreHome: clip.scoreHome,
+      scoreAway: clip.scoreAway,
+    };
+  }
+
   close(): void {
     for (const room of this.rooms.values()) {
       this.clearSeatTimer(room.host);
@@ -421,6 +455,8 @@ export class RoomManager {
       pauseDeadlineMs: null,
       settings: { ...DEFAULT_MATCH_SETTINGS },
       series: null,
+      replayClips: new Map(),
+      replayClipSeq: 0,
     };
     this.rooms.set(code, room);
     this.membership.set(client.token, room);
@@ -1173,6 +1209,9 @@ export class RoomManager {
       resultSent: false,
       lastVarSignature: null,
       lastShootoutSignature: null,
+      lastScoreHome: 0,
+      lastScoreAway: 0,
+      goalCapture: null,
       controls: {
         home: createTeamControlRuntime(),
         away: createTeamControlRuntime(),
@@ -1246,6 +1285,89 @@ export class RoomManager {
     }
   }
 
+  private trackGoalReplay(room: Room, frame: SnapshotFrame): void {
+    const match = room.match;
+    if (match === null) {
+      return;
+    }
+    const scored =
+      frame.match.scoreHome > match.lastScoreHome ||
+      frame.match.scoreAway > match.lastScoreAway;
+    match.lastScoreHome = frame.match.scoreHome;
+    match.lastScoreAway = frame.match.scoreAway;
+
+    if (scored) {
+      if (match.goalCapture !== null) {
+        this.commitGoalReplay(room, match);
+      }
+      room.replayClipSeq += 1;
+      match.goalCapture = beginGoalReplay(
+        `g${room.replayClipSeq}`,
+        [...match.snapshots.values()],
+        Date.now(),
+      );
+      if (match.finished) {
+        this.commitGoalReplay(room, match);
+      }
+      return;
+    }
+
+    if (match.goalCapture !== null) {
+      const clip = advanceGoalReplay(match.goalCapture, frame);
+      if (clip !== null) {
+        const stored = { ...clip, setup: match.setup };
+        room.replayClips.set(clip.id, stored);
+        match.goalCapture = null;
+        this.broadcastReplayClip(room, stored);
+      }
+    }
+    if (match.finished && match.goalCapture !== null) {
+      this.commitGoalReplay(room, match);
+    }
+  }
+
+  private commitGoalReplay(room: Room, match: RoomMatch): void {
+    if (match.goalCapture === null) {
+      return;
+    }
+    const clip = { ...finishGoalReplay(match.goalCapture), setup: match.setup };
+    match.goalCapture = null;
+    room.replayClips.set(clip.id, clip);
+    this.broadcastReplayClip(room, clip);
+  }
+
+  private sendReplayClip(
+    client: ClientConnection,
+    clip: StoredGoalReplay,
+  ): void {
+    client.send({
+      t: "replayClip",
+      clip: {
+        id: clip.id,
+        kind: "goal",
+        scoreHome: clip.scoreHome,
+        scoreAway: clip.scoreAway,
+        createdAtMs: clip.createdAtMs,
+        frameCount: clip.frames.length,
+      },
+    });
+  }
+
+  private broadcastReplayClip(room: Room, clip: StoredGoalReplay): void {
+    for (const seat of this.seats(room)) {
+      if (seat.client !== null) {
+        this.sendReplayClip(seat.client, clip);
+      }
+    }
+    while (room.replayClips.size > TUNING.network.goalReplayClipLimit) {
+      const oldest = room.replayClips.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      room.replayClips.delete(oldest);
+    }
+  }
+
   private broadcastSnapshot(room: Room): void {
     const match = room.match;
     if (match === null) {
@@ -1279,6 +1401,7 @@ export class RoomManager {
         this.logger.warn("Failed to encode/send snapshot", error);
       }
     }
+    this.trackGoalReplay(room, frame);
   }
 
   private sendSetupAndSnapshot(room: Room, seat: Seat): void {
@@ -1292,6 +1415,10 @@ export class RoomManager {
     // about substitutions already made while the client was away.
     this.sendRoster(seat.client, room, "home");
     this.sendRoster(seat.client, room, "away");
+    const latestClip = [...room.replayClips.values()].at(-1);
+    if (latestClip !== undefined) {
+      this.sendReplayClip(seat.client, latestClip);
+    }
     const review = room.match.state.referee.varReview;
     if (review !== null) {
       seat.client.send({

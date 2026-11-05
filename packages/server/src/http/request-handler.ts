@@ -37,6 +37,11 @@ export interface ReplayExport {
   readonly generatedAtMs: number;
   readonly setup: MatchSetupWire;
   readonly frames: readonly SnapshotFrame[];
+  /** Present for goal-triggered clips. */
+  readonly id?: string;
+  readonly kind?: "goal";
+  readonly scoreHome?: number;
+  readonly scoreAway?: number;
 }
 
 export interface RequestHandlerOptions {
@@ -48,6 +53,10 @@ export interface RequestHandlerOptions {
   readonly getConnectedClients: () => number;
   readonly getRuntimeMetrics?: () => HealthSimulationMetrics;
   readonly getReplayExport?: (code: string) => ReplayExport | null;
+  readonly getReplayClip?: (
+    code: string,
+    clipId: string,
+  ) => ReplayExport | null;
   readonly onError?: (error: unknown) => void;
 }
 
@@ -202,13 +211,20 @@ function sendReplayExport(
   options: RequestHandlerOptions,
   isHead: boolean,
 ): void {
-  const match = /^\/api\/replay\/([A-Za-z]{4})\.json$/.exec(pathname);
-  if (match === null || options.getReplayExport === undefined) {
+  const match =
+    /^\/api\/replay\/([A-Za-z]{4})(?:\/([A-Za-z0-9_-]{1,32}))?\.json$/.exec(
+      pathname,
+    );
+  if (match === null) {
     sendText(response, isHead, 404, "Not found");
     return;
   }
   const code = (match[1] ?? "").toUpperCase();
-  const replay = options.getReplayExport(code);
+  const clipId = match[2] ?? null;
+  const replay =
+    clipId === null
+      ? options.getReplayExport?.(code) ?? null
+      : options.getReplayClip?.(code, clipId) ?? null;
   if (replay === null) {
     sendText(response, isHead, 404, "Room replay not found");
     return;
@@ -218,7 +234,9 @@ function sendReplayExport(
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(body),
     "Cache-Control": "no-store",
-    "Content-Disposition": `attachment; filename="replay-${code}.json"`,
+    "Content-Disposition": `attachment; filename="replay-${code}${
+      clipId === null ? "" : `-${clipId}`
+    }.json"`,
     "X-Content-Type-Options": "nosniff",
   });
   if (isHead) {

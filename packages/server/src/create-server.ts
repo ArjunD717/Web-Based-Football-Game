@@ -63,6 +63,10 @@ export interface GameServerOptions {
   /** Exposes the server loop's rolling timing sample on /healthz. */
   readonly getRuntimeMetrics?: () => HealthSimulationMetrics;
   readonly getReplayExport?: (code: string) => ReplayExport | null;
+  readonly getReplayClip?: (
+    code: string,
+    clipId: string,
+  ) => ReplayExport | null;
   /** Dev-only artificial one-way latency, jitter and binary snapshot loss. */
   readonly devNetwork?: DevNetworkConfig;
 }
@@ -132,6 +136,9 @@ export async function startGameServer(
     ...(options.getReplayExport === undefined
       ? {}
       : { getReplayExport: options.getReplayExport }),
+    ...(options.getReplayClip === undefined
+      ? {}
+      : { getReplayClip: options.getReplayClip }),
     onError: (error) => {
       logger.error("HTTP request failed", error);
     },
