@@ -125,6 +125,21 @@ describe("match replay buffer", () => {
     expect(replay.sample(6_100)).toBeNull();
   });
 
+  it("changes speed without jumping the clip position", () => {
+    const replay = new MatchReplayBuffer({ speed: 0.5 });
+    replay.loadSaved([
+      { view: view(10), recordedAtMs: 0 },
+      { view: view(11), recordedAtMs: 1_000 },
+      { view: view(12), recordedAtMs: 2_000 },
+      { view: view(13), recordedAtMs: 3_000 },
+    ]);
+    expect(replay.startSaved(0)).toBe(true);
+    expect(replay.sample(1_000)?.elapsedMs).toBeCloseTo(500, 5);
+    replay.setSpeed(1, 1_000);
+    expect(replay.sample(1_500)?.elapsedMs).toBeCloseTo(1_000, 5);
+    expect(replay.speed).toBe(1);
+  });
+
   it("keeps the shorter goal clip available after a full replay", () => {
     const replay = new MatchReplayBuffer({
       captureMs: 10_000,
