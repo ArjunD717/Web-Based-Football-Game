@@ -27,6 +27,7 @@ import type { StadiumVisual } from "./three-stadium";
 import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
+import type { FootstepSink } from "./footsteps";
 import {
   VISUAL_QUALITY,
   VISUAL_TUNING,
@@ -316,6 +317,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
     return this.lastCameraPose === null
       ? null
       : cameraGroundBasis(this.lastCameraPose);
+  }
+
+  setFootstepSink(sink: FootstepSink | null): void {
+    this.authoredPlayers.setFootstepSink(sink);
   }
 
   setQuality(quality: VisualQuality): void {

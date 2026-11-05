@@ -1,6 +1,7 @@
 // packages/client/src/render/renderer.ts
 import type { CameraMode } from "../camera/modes";
 import type { CameraInputBasis } from "../camera/types";
+import type { FootstepSink } from "./footsteps";
 import type { VisualQuality } from "./visualTuning";
 import type { MatchView } from "./view";
 
@@ -37,4 +38,6 @@ export interface MatchRenderer {
   setReplayActive?(active: boolean): void;
   /** Off-screen markers for the ball and controlled player. */
   indicatorStates?(): readonly ScreenIndicator[];
+  /** Route presentation contact events to audio. */
+  setFootstepSink?(sink: FootstepSink | null): void;
 }
