@@ -20,6 +20,7 @@ import {
   type SnapshotFrame,
   type TeamSheet,
   type WireMatchStats,
+  type WireReplayClip,
   type WireShootout,
   type WireVarReview,
 } from "@fb/shared";
@@ -51,6 +52,8 @@ export interface GameClientState {
   readonly matchStats: WireMatchStats | null;
   readonly varReview: WireVarReview | null;
   readonly shootout: WireShootout | null;
+  /** Latest goal-triggered clip announced by the server. */
+  readonly replayClip: WireReplayClip | null;
   readonly substitutionNotice: string | null;
 }
 
@@ -77,6 +80,7 @@ export class GameClient {
     matchStats: null,
     varReview: null,
     shootout: null,
+    replayClip: null,
     substitutionNotice: null,
   };
   private socket: WebSocket | null = null;
@@ -358,6 +362,9 @@ export class GameClient {
       case "shootout":
         this.update({ shootout: message.shootout });
         break;
+      case "replayClip":
+        this.update({ replayClip: message.clip });
+        break;
       case "roomClosed":
         this.clearMatch();
         this.update({
@@ -476,6 +483,7 @@ export class GameClient {
       matchStats: null,
       varReview: null,
       shootout: null,
+      replayClip: null,
       substitutionNotice: null,
     });
   }
@@ -494,6 +502,7 @@ export class GameClient {
       matchStats: null,
       varReview: null,
       shootout: null,
+      replayClip: null,
       substitutionNotice: null,
     });
   }

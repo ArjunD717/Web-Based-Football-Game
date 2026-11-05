@@ -180,6 +180,9 @@ const statsNextLegWait = byId<HTMLElement>("stats-next-leg-wait");
 const matchEvent = byId<HTMLElement>("match-event");
 const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
 const exportReplayLink = byId<HTMLAnchorElement>("export-replay");
+const downloadGoalReplayLink = byId<HTMLAnchorElement>(
+  "download-goal-replay",
+);
 const pauseMatchButton = byId<HTMLButtonElement>("pause-match");
 const rendererToggleButton =
   byId<HTMLButtonElement>("renderer-toggle");
@@ -1140,6 +1143,18 @@ function renderConnection(state: GameClientState): void {
   if (replayCode !== null) {
     exportReplayLink.href = `/api/replay/${replayCode}.json`;
     exportReplayLink.download = `replay-${replayCode}.json`;
+  }
+  const goalClip = state.replayClip;
+  downloadGoalReplayLink.hidden =
+    replayCode === null || goalClip === null;
+  if (replayCode !== null && goalClip !== null) {
+    downloadGoalReplayLink.href =
+      `/api/replay/${replayCode}/${goalClip.id}.json`;
+    downloadGoalReplayLink.download =
+      `replay-${replayCode}-${goalClip.id}.json`;
+    downloadGoalReplayLink.title =
+      `Goal ${goalClip.scoreHome}-${goalClip.scoreAway}, ` +
+      `${goalClip.frameCount} frames`;
   }
 }
 
