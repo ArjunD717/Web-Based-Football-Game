@@ -108,6 +108,12 @@ export interface VisualTuning {
       /** Ignore frame samples above this as network teleports. */
       readonly speedCapMps: number;
     };
+    readonly footsteps: {
+      /** Below this measured speed a contact should stay silent. */
+      readonly minSpeedMps: number;
+      /** Debounce repeated contact acquisitions. */
+      readonly minIntervalSeconds: number;
+    };
     readonly appearance: {
       /** Skin tones are multipliers over the authored pore/vertex map. */
       readonly skinTones: readonly string[];
@@ -192,6 +198,10 @@ export const VISUAL_TUNING: VisualTuning = {
       maxPlaybackScale: 1.45,
       speedSmoothingRate: 9,
       speedCapMps: 13,
+    },
+    footsteps: {
+      minSpeedMps: 1.1,
+      minIntervalSeconds: 0.14,
     },
     appearance: {
       skinTones: [
