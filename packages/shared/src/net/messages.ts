@@ -427,6 +427,17 @@ export interface ServerReplayClipsMessage {
   readonly clips: readonly WireReplayClip[];
 }
 
+/** HTTP-only library payload shared by the server and browser. */
+export interface WireReplayRoom {
+  readonly code: string;
+  readonly updatedAtMs: number;
+  readonly clips: readonly WireReplayClip[];
+}
+
+export interface WireReplayLibrary {
+  readonly rooms: readonly WireReplayRoom[];
+}
+
 export type ServerMessage =
   | ServerWelcomeMessage
   | ServerPresenceMessage

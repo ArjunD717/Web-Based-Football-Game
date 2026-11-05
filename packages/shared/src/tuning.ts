@@ -40,6 +40,8 @@ export const TUNING = {
     goalReplayPostSnapshots: 45,
     /** Goal clips retained per room before evicting the oldest. */
     goalReplayClipLimit: 8,
+    /** Saved rooms retained on disk before deleting the least recently used. */
+    replayLibraryRoomLimit: 32,
     /** Soft pull of the visual predictor toward authoritative position, 1/s. */
     predictionCorrectionPerSecond: 8,
     /** Error beyond this snaps the predicted controlled player, metres. */

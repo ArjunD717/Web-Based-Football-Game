@@ -13,5 +13,8 @@ coverage/
 certs/*
 !certs/.gitkeep
 
+# Persisted goal-clip library (generated at runtime).
+/replays/
+
 .DS_Store
 Thumbs.db

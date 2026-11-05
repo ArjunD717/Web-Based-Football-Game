@@ -24,6 +24,8 @@ export interface ServerConfig {
   readonly keyPath: string;
   readonly staticDir: string;
   readonly dataDir: string;
+  /** Durable goal-clip library; safe to back up or delete between matches. */
+  readonly replayDir: string;
   readonly devNetwork: DevNetworkConfig;
 }
 
@@ -34,6 +36,7 @@ export interface ServerConfig {
  * - FB_CERT_DIR: directory containing dev-cert.pem + dev-key.pem.
  * - FB_STATIC_DIR: built client directory.
  * - FB_DATA_DIR: generated public football data (default repo/data).
+ * - FB_REPLAY_DIR: persisted goal-clip library (default repo/replays).
  * - FB_DEV_LATENCY_MS / FB_DEV_JITTER_MS / FB_DEV_LOSS_PCT: dev-only network
  *   condition simulation; all default to zero.
  */
@@ -51,6 +54,9 @@ export function loadServerConfig(
   const dataDir = env.FB_DATA_DIR
     ? path.resolve(env.FB_DATA_DIR)
     : path.join(REPO_ROOT, "data");
+  const replayDir = env.FB_REPLAY_DIR
+    ? path.resolve(env.FB_REPLAY_DIR)
+    : path.join(REPO_ROOT, "replays");
   const devNetwork = {
     latencyMs: parseNonNegative(env.FB_DEV_LATENCY_MS, "FB_DEV_LATENCY_MS"),
     jitterMs: parseNonNegative(env.FB_DEV_JITTER_MS, "FB_DEV_JITTER_MS"),
@@ -65,6 +71,7 @@ export function loadServerConfig(
     keyPath: path.join(certDir, "dev-key.pem"),
     staticDir,
     dataDir,
+    replayDir,
     devNetwork,
   };
 }
