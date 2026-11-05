@@ -80,6 +80,7 @@ export default defineConfig(({ command, isPreview = false }) => {
           link: path.resolve(packageDir, "link.html"),
           practice: path.resolve(packageDir, "practice.html"),
           controller: path.resolve(packageDir, "controller.html"),
+          character: path.resolve(packageDir, "character.html"),
         },
       },
     },

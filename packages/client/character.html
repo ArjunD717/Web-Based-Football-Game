@@ -1,0 +1,170 @@
+<!-- packages/client/character.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#07100e" />
+    <meta
+      name="description"
+      content="Player lab: inspect the first finished Northbridge Athletic character."
+    />
+    <title>Player lab | Web Football</title>
+  </head>
+  <body class="lab-page">
+    <div class="lab-shell">
+      <header class="lab-masthead">
+        <a class="lab-brand" href="/" aria-label="Web Football home">
+          <span class="lab-brand__mark" aria-hidden="true">WF</span>
+          <span class="lab-brand__name">Web Football</span>
+        </a>
+        <span class="lab-masthead__rule" aria-hidden="true"></span>
+        <p class="lab-masthead__section">Player lab</p>
+        <p class="lab-masthead__meta">Asset 01 · Northbridge Athletic</p>
+      </header>
+
+      <main class="lab-main">
+        <aside class="lab-rail" aria-labelledby="lab-title">
+          <div class="lab-intro">
+            <p class="lab-kicker">Home kit · Centre forward</p>
+            <h1 id="lab-title">No. <span>9</span></h1>
+            <p class="lab-deck">
+              The first finished character pass: a welded anatomical base,
+              hand-built kit geometry, and a 53-bone rig ready for match
+              animation. Drag the stage to inspect the silhouette.
+            </p>
+          </div>
+
+          <dl class="spec-list" aria-label="Asset details">
+            <div>
+              <dt>Height</dt>
+              <dd>1.82 <span>m</span></dd>
+            </div>
+            <div>
+              <dt>Triangles</dt>
+              <dd id="tri-count">—</dd>
+            </div>
+            <div>
+              <dt>Rig</dt>
+              <dd>53 <span>bones</span></dd>
+            </div>
+            <div>
+              <dt>Draw calls</dt>
+              <dd id="draw-count">—</dd>
+            </div>
+            <div>
+              <dt>Kit maps</dt>
+              <dd>2K <span>PBR</span></dd>
+            </div>
+            <div>
+              <dt>Foot</dt>
+              <dd>Right</dd>
+            </div>
+          </dl>
+
+          <section class="lab-controls" aria-label="Character controls">
+            <div class="control-group">
+              <p class="control-label" id="pose-label">Pose</p>
+              <div class="segmented" role="group" aria-labelledby="pose-label">
+                <button type="button" data-pose="idle" aria-pressed="true">Idle</button>
+                <button type="button" data-pose="jog" aria-pressed="false">Jog</button>
+                <button type="button" data-pose="sprint" aria-pressed="false">Sprint</button>
+                <button type="button" data-pose="strike" aria-pressed="false">Strike</button>
+                <button type="button" data-pose="leap" aria-pressed="false">Leap</button>
+                <button type="button" data-pose="celebrate" aria-pressed="false">Celebrate</button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <p class="control-label" id="view-label">View</p>
+              <div class="segmented" role="group" aria-labelledby="view-label">
+                <button type="button" data-view="front" aria-pressed="false">Front</button>
+                <button type="button" data-view="three-quarter" aria-pressed="true">Three-quarter</button>
+                <button type="button" data-view="profile" aria-pressed="false">Profile</button>
+                <button type="button" data-view="back" aria-pressed="false">Back</button>
+              </div>
+            </div>
+
+            <div class="toggle-list">
+              <label class="toggle">
+                <input id="auto-rotate" type="checkbox" checked />
+                <span class="toggle__box" aria-hidden="true"></span>
+                <span>Auto-rotate</span>
+              </label>
+              <label class="toggle">
+                <input id="show-skeleton" type="checkbox" />
+                <span class="toggle__box" aria-hidden="true"></span>
+                <span>Show skeleton</span>
+              </label>
+              <label class="toggle">
+                <input id="show-wireframe" type="checkbox" />
+                <span class="toggle__box" aria-hidden="true"></span>
+                <span>Wireframe</span>
+              </label>
+            </div>
+          </section>
+
+          <p class="lab-hint">
+            <span>Keys</span> 1 to 6 poses · F/S/P/B views · R rotate
+          </p>
+          <p class="lab-note">
+            Base body: CC0 MakeHuman. Kit, crest, face and hair treatment drawn
+            for this project. Shirt numbers are generated, never licensed.
+          </p>
+        </aside>
+
+        <section class="lab-stage" aria-label="3D character viewer">
+          <div id="canvas-host" class="canvas-host">
+            <canvas
+              id="lab-canvas"
+              role="img"
+              aria-label="Interactive 3D model of Northbridge Athletic player number nine"
+            ></canvas>
+          </div>
+
+          <div class="stage-topline">
+            <span>Northbridge / home</span>
+            <span class="stage-topline__state">
+              View <strong id="view-name">three quarter</strong>
+              <i aria-hidden="true"></i>
+              Pose <strong id="pose-name">idle</strong>
+            </span>
+          </div>
+
+          <div id="height-ruler" class="height-ruler" aria-hidden="true">
+            <span class="ruler-label" data-metres="1.82">1.82 m</span>
+            <span class="ruler-label" data-metres="1.5">1.50</span>
+            <span class="ruler-label" data-metres="1.0">1.00</span>
+            <span class="ruler-label" data-metres="0.5">0.50</span>
+            <span class="ruler-label" data-metres="0">0</span>
+          </div>
+
+          <div class="stage-footline">
+            <p>Welded mesh · procedural kit geometry · baked skin tint</p>
+            <p class="stage-footline__hint">Drag to orbit · scroll to zoom</p>
+          </div>
+
+          <div id="loader" class="loader">
+            <div class="loader__inner">
+              <p class="loader__eyebrow">Preparing asset</p>
+              <p id="load-status" class="loader__status" aria-live="polite">
+                Loading kit and rig
+              </p>
+              <span class="loader__track" aria-hidden="true">
+                <span id="load-progress" class="loader__bar"></span>
+              </span>
+            </div>
+          </div>
+
+          <div id="stage-error" class="stage-error" hidden>
+            <p>The 3D viewer is unavailable.</p>
+            <p id="stage-error-text"></p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/src/character/main.ts"></script>
+  </body>
+</html>
