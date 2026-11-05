@@ -278,6 +278,14 @@ const openReplayLibraryButton =
 const replayLibraryDialog =
   byId<HTMLDialogElement>("replay-library-dialog");
 const replayLibraryList = byId<HTMLElement>("replay-library-list");
+const reviewQueueBar = byId<HTMLElement>("review-queue-bar");
+const reviewQueueCount = byId<HTMLElement>("review-queue-count");
+const clearReviewQueueButton = byId<HTMLButtonElement>(
+  "clear-review-queue",
+);
+const startReviewQueueButton = byId<HTMLButtonElement>(
+  "start-review-queue",
+);
 const savedReplayHead = byId<HTMLElement>("saved-replay-head");
 const savedReplayTitle = byId<HTMLElement>("saved-replay-title");
 const closeSavedReplayButton =
@@ -585,6 +593,9 @@ replaySeek.addEventListener("input", () => {
   }
   replayScrubbing = true;
   replayLoopChapterIndex = null;
+  if (reviewQueueActive) {
+    reviewChapterPreference = null;
+  }
   replay.seek(Number(replaySeek.value) / 1_000, performance.now());
   savedAudioJumpPending = true;
   updateReplayTransport();
@@ -622,6 +633,9 @@ replayChapters.addEventListener("click", (event) => {
   replay.seek(progress, performance.now());
   replay.pause(performance.now());
   replayLoopChapterIndex = Number.isInteger(index) ? index : null;
+  if (reviewQueueActive && Number.isInteger(index)) {
+    reviewChapterPreference = index;
+  }
   lastLoopElapsedMs = savedChapters[index]?.timeMs ?? 0;
   lastReplayElapsedMs = lastLoopElapsedMs;
   replayScrubbing = false;
@@ -1171,7 +1185,11 @@ function renderLoop(now: number): void {
   if (replay.active) {
     const sample = replay.sample(now, replayLoopMode === "clip");
     if (sample === null) {
-      stopReplay();
+      if (savedReplayActive && reviewQueueActive) {
+        advanceReviewQueue();
+      } else {
+        stopReplay();
+      }
     } else {
       if (sample.wrapped) {
         savedAudioJumpPending = true;
@@ -1443,6 +1461,16 @@ let savedReplayRef: {
   readonly roomCode: string;
   readonly clipId: string;
 } | null = null;
+interface ReviewQueueItem {
+  readonly roomCode: string;
+  readonly clip: WireReplayClip;
+}
+let reviewQueue: ReviewQueueItem[] = [];
+let reviewQueueActive = false;
+let reviewQueueIndex = -1;
+let reviewQueueRequest = 0;
+let reviewAdvancing = false;
+let reviewChapterPreference: number | null = null;
 
 function openReplayLibrary(): void {
   if (!replayLibraryDialog.open) {
@@ -1533,6 +1561,28 @@ function createLibraryClipRow(
   watch.addEventListener("click", () => {
     void watchSavedReplay(roomCode, clip, watch);
   });
+  const queue = document.createElement("button");
+  queue.className = "ui-button ui-button--small replay-library__queue";
+  queue.type = "button";
+  queue.dataset.reviewRoom = roomCode;
+  queue.dataset.reviewClip = clip.id;
+  queue.textContent = isReviewQueued(roomCode, clip.id)
+    ? "Queued"
+    : "Queue";
+  queue.setAttribute(
+    "aria-pressed",
+    String(isReviewQueued(roomCode, clip.id)),
+  );
+  queue.setAttribute(
+    "aria-label",
+    `Add goal replay ${clip.scoreHome}–${clip.scoreAway} to review queue`,
+  );
+  queue.addEventListener("click", () => {
+    toggleReviewQueueItem(roomCode, clip);
+    const queued = isReviewQueued(roomCode, clip.id);
+    queue.textContent = queued ? "Queued" : "Queue";
+    queue.setAttribute("aria-pressed", String(queued));
+  });
   const link = document.createElement("a");
   link.className = "replay-library__download";
   link.href = item.href;
@@ -1543,8 +1593,60 @@ function createLibraryClipRow(
   const meta = document.createElement("span");
   meta.textContent = item.meta;
   link.append(score, meta);
-  row.append(watch, link);
+  row.append(watch, queue, link);
   return row;
+}
+
+function isReviewQueued(roomCode: string, clipId: string): boolean {
+  return reviewQueue.some(
+    (item) => item.roomCode === roomCode && item.clip.id === clipId,
+  );
+}
+
+function toggleReviewQueueItem(
+  roomCode: string,
+  clip: WireReplayClip,
+): void {
+  const index = reviewQueue.findIndex(
+    (item) => item.roomCode === roomCode && item.clip.id === clip.id,
+  );
+  if (index >= 0) {
+    reviewQueue = [
+      ...reviewQueue.slice(0, index),
+      ...reviewQueue.slice(index + 1),
+    ];
+  } else {
+    reviewQueue = [...reviewQueue, { roomCode, clip }];
+  }
+  updateReviewQueueBar();
+}
+
+function updateReviewQueueButtons(): void {
+  for (const button of replayLibraryList.querySelectorAll<HTMLButtonElement>(
+    ".replay-library__queue",
+  )) {
+    const queued = isReviewQueued(
+      button.dataset.reviewRoom ?? "",
+      button.dataset.reviewClip ?? "",
+    );
+    button.textContent = queued ? "Queued" : "Queue";
+    button.setAttribute("aria-pressed", String(queued));
+  }
+}
+
+function updateReviewQueueBar(): void {
+  updateReviewQueueButtons();
+  reviewQueueBar.hidden = reviewQueue.length === 0;
+  reviewQueueCount.textContent =
+    reviewQueue.length === 1
+      ? "1 clip queued"
+      : `${reviewQueue.length} clips queued`;
+  startReviewQueueButton.textContent =
+    reviewQueue.length === 0
+      ? "Start review"
+      : `Start review (${reviewQueue.length})`;
+  startReviewQueueButton.disabled =
+    reviewQueue.length === 0 || reviewQueueActive;
 }
 
 async function watchSavedReplay(
@@ -1578,6 +1680,91 @@ async function watchSavedReplay(
     button.disabled = false;
     button.textContent = original;
   }
+}
+
+async function loadReviewQueueClip(index: number): Promise<void> {
+  if (!reviewQueueActive) {
+    return;
+  }
+  const item = reviewQueue[index];
+  if (item === undefined) {
+    finishReviewQueue();
+    return;
+  }
+  const request = ++reviewQueueRequest;
+  reviewAdvancing = true;
+  try {
+    const response = await fetch(
+      `/api/replay/${item.roomCode}/${item.clip.id}.json`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw new Error(`Replay download returned ${response.status}`);
+    }
+    const replayExport = parseReplayExport(await response.json());
+    if (replayExport === null) {
+      throw new Error("Replay payload is invalid");
+    }
+    if (request !== reviewQueueRequest || !reviewQueueActive) {
+      return;
+    }
+    reviewQueueIndex = index;
+    if (
+      !playSavedReplay(
+        replayExport,
+        reviewChapterPreference,
+        true,
+      )
+    ) {
+      throw new Error("Queued replay could not start");
+    }
+  } catch (error) {
+    if (request !== reviewQueueRequest) {
+      return;
+    }
+    console.error(
+      "Review queue clip failed",
+      error instanceof Error ? error.message : String(error),
+    );
+    reviewQueueActive = false;
+    stopReplay();
+    showToast("Review queue could not load its next clip");
+  } finally {
+    if (request === reviewQueueRequest) {
+      reviewAdvancing = false;
+    }
+  }
+}
+
+function startReviewQueue(): void {
+  if (reviewQueue.length === 0 || reviewQueueActive) {
+    return;
+  }
+  reviewQueueActive = true;
+  reviewQueueIndex = 0;
+  reviewChapterPreference = null;
+  reviewAdvancing = false;
+  void loadReviewQueueClip(0);
+}
+
+function finishReviewQueue(): void {
+  reviewQueueActive = false;
+  reviewQueueIndex = -1;
+  reviewChapterPreference = null;
+  stopReplay();
+  showToast("Review complete");
+}
+
+function advanceReviewQueue(): void {
+  if (!reviewQueueActive || reviewAdvancing) {
+    return;
+  }
+  const next = reviewQueueIndex + 1;
+  if (next >= reviewQueue.length) {
+    finishReviewQueue();
+    return;
+  }
+  void loadReviewQueueClip(next);
 }
 
 function currentSharedChapterIndex(): number | null {
@@ -1698,7 +1885,8 @@ async function openSharedReplay(
 function playSavedReplay(
   replayExport: WireReplayExport,
   startChapterIndex: number | null = null,
-): void {
+  fromQueue = false,
+): boolean {
   const viewBuilder = new WireViewBuilder(replayExport.setup, null);
   const intervalMs =
     1_000 / Math.max(1, replayExport.setup.snapshotHz);
@@ -1712,17 +1900,22 @@ function playSavedReplay(
   );
   if (frames.length < 2) {
     showToast("Saved replay has too few renderable frames");
-    return;
+    return false;
   }
 
   if (replay.active) {
-    stopReplay();
+    if (fromQueue) {
+      replay.stop();
+      replay.clear();
+    } else {
+      stopReplay();
+    }
   }
   replay.clear();
   replay.setSpeed(replaySpeed, performance.now());
   if (!replay.loadSaved(frames) || !replay.startSaved(performance.now())) {
     showToast("Saved replay could not start");
-    return;
+    return false;
   }
   savedChapters = buildReplayChapters(replayExport.frames, intervalMs);
   savedChapterViews = frameViews;
@@ -1733,7 +1926,9 @@ function playSavedReplay(
   };
   savedReplayFrames = replayExport.frames;
   savedReplayIntervalMs = intervalMs;
-  replayLoopMode = "off";
+  if (!fromQueue) {
+    replayLoopMode = "off";
+  }
   replayLoopChapterIndex = null;
   lastLoopElapsedMs = 0;
   lastReplayElapsedMs = 0;
@@ -1742,7 +1937,9 @@ function playSavedReplay(
     const chapter = savedChapters[startChapterIndex];
     if (chapter !== undefined) {
       replay.seek(chapter.progress, performance.now());
-      replay.pause(performance.now());
+      if (!fromQueue) {
+        replay.pause(performance.now());
+      }
       replayLoopChapterIndex = startChapterIndex;
       lastLoopElapsedMs = chapter.timeMs;
       lastReplayElapsedMs = chapter.timeMs;
@@ -1758,14 +1955,21 @@ function playSavedReplay(
     audio.prime(firstFrame);
   }
   updateReplayUrl(selectedChapter);
-  replayLibraryDialog.close();
+  if (replayLibraryDialog.open) {
+    replayLibraryDialog.close();
+  }
   showMatch();
   document.body.dataset.savedReplay = "true";
   document.title = "Saved goal replay | Web Football";
   savedReplayHead.hidden = false;
+  const queueLabel =
+    reviewQueueActive && reviewQueueIndex >= 0
+      ? `Clip ${reviewQueueIndex + 1}/${reviewQueue.length} · `
+      : "";
   savedReplayTitle.textContent =
-    `Room ${replayExport.code} · ${replayExport.scoreHome} – ` +
-    `${replayExport.scoreAway} · ${formatGoalMinute(replayExport.clockSeconds)}`;
+    `${queueLabel}Room ${replayExport.code} · ` +
+    `${replayExport.scoreHome} – ${replayExport.scoreAway} · ` +
+    `${formatGoalMinute(replayExport.clockSeconds)}`;
   replayBanner.hidden = false;
   matchOverlay.hidden = true;
   statsScreen.hidden = true;
@@ -1774,6 +1978,7 @@ function playSavedReplay(
   updateReplayButtons();
   updateReplayCameraButtons();
   updateCameraControl();
+  return true;
 }
 
 function createLibraryNotice(text: string): HTMLParagraphElement {
@@ -1790,6 +1995,11 @@ refreshReplayLibraryButton.addEventListener("click", () => {
 closeReplayLibraryButton.addEventListener("click", () => {
   replayLibraryDialog.close();
 });
+clearReviewQueueButton.addEventListener("click", () => {
+  reviewQueue = [];
+  updateReviewQueueBar();
+});
+startReviewQueueButton.addEventListener("click", startReviewQueue);
 closeSavedReplayButton.addEventListener("click", stopReplay);
 
 function renderLobby(state: GameClientState): void {
@@ -2618,6 +2828,11 @@ function stopReplay(): void {
   lastLoopElapsedMs = 0;
   lastReplayElapsedMs = 0;
   replayLoopMode = "off";
+  reviewQueueRequest += 1;
+  reviewQueueActive = false;
+  reviewQueueIndex = -1;
+  reviewAdvancing = false;
+  reviewChapterPreference = null;
   if (wasSaved) {
     savedReplayRef = null;
     clearReplayUrl();
