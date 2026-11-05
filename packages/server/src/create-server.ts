@@ -17,6 +17,7 @@ import {
   parseClientMessage,
   type ServerErrorCode,
   type ServerMessage,
+  type WireReplayLibrary,
 } from "@fb/shared";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import type {
@@ -67,6 +68,7 @@ export interface GameServerOptions {
     code: string,
     clipId: string,
   ) => ReplayExport | null;
+  readonly getReplayLibrary?: () => WireReplayLibrary;
   /** Dev-only artificial one-way latency, jitter and binary snapshot loss. */
   readonly devNetwork?: DevNetworkConfig;
 }
@@ -139,6 +141,9 @@ export async function startGameServer(
     ...(options.getReplayClip === undefined
       ? {}
       : { getReplayClip: options.getReplayClip }),
+    ...(options.getReplayLibrary === undefined
+      ? {}
+      : { getReplayLibrary: options.getReplayLibrary }),
     onError: (error) => {
       logger.error("HTTP request failed", error);
     },

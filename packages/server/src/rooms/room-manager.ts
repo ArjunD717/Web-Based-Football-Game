@@ -43,12 +43,15 @@ import type { ClientConnection } from "../client";
 import type { TeamRegistry } from "../data/registry";
 import type { Logger } from "../create-server";
 import type { ReplayExport } from "../http/request-handler";
+import type {
+  ReplayStore,
+  StoredReplayClip,
+} from "../replays/replay-store";
 import {
   advanceGoalReplay,
   beginGoalReplay,
   finishGoalReplay,
   type GoalReplayCapture,
-  type GoalReplayRecord,
 } from "./replay-capture";
 import {
   buildMatchStats,
@@ -127,12 +130,8 @@ interface Room {
   settings: MatchSettingsWire;
   /** Two-legged tie state; null for one-off matches. */
   series: RoomSeries | null;
-  replayClips: Map<string, StoredGoalReplay>;
+  replayClips: Map<string, StoredReplayClip>;
   replayClipSeq: number;
-}
-
-interface StoredGoalReplay extends GoalReplayRecord {
-  readonly setup: MatchSetupWire;
 }
 
 export interface RoomManagerOptions {
@@ -141,6 +140,7 @@ export interface RoomManagerOptions {
   readonly reconnectGraceMs?: number;
   readonly generateCode?: () => string;
   readonly onRoomCreated?: (code: string) => void;
+  readonly replayStore?: ReplayStore;
 }
 
 /**
@@ -155,6 +155,7 @@ export class RoomManager {
   private readonly reconnectGraceMs: number;
   private readonly generateCode: () => string;
   private readonly onRoomCreated: (code: string) => void;
+  private readonly replayStore: ReplayStore | null;
 
   constructor(options: RoomManagerOptions) {
     this.logger = options.logger;
@@ -163,6 +164,7 @@ export class RoomManager {
       options.reconnectGraceMs ?? TUNING.network.reconnectGraceMs;
     this.generateCode = options.generateCode ?? (() => this.randomCode());
     this.onRoomCreated = options.onRoomCreated ?? (() => undefined);
+    this.replayStore = options.replayStore ?? null;
     if (!Number.isFinite(this.reconnectGraceMs) || this.reconnectGraceMs <= 0) {
       throw new RangeError("reconnectGraceMs must be positive");
     }
@@ -406,13 +408,17 @@ export class RoomManager {
   }
 
   exportReplayClip(code: string, clipId: string): ReplayExport | null {
-    const room = this.rooms.get(normalizeRoomCode(code));
-    const clip = room?.replayClips.get(clipId);
-    if (room === null || room === undefined || clip === undefined) {
+    const normalized = normalizeRoomCode(code);
+    const room = this.rooms.get(normalized);
+    const clip =
+      room?.replayClips.get(clipId) ??
+      this.replayStore?.getClip(normalized, clipId) ??
+      null;
+    if (clip === null) {
       return null;
     }
     return {
-      code: room.code,
+      code: normalized,
       generatedAtMs: Date.now(),
       setup: clip.setup,
       frames: clip.frames,
@@ -420,6 +426,8 @@ export class RoomManager {
       kind: "goal",
       scoreHome: clip.scoreHome,
       scoreAway: clip.scoreAway,
+      clockSeconds: clip.clockSeconds,
+      half: clip.half,
     };
   }
 
@@ -1317,6 +1325,7 @@ export class RoomManager {
       if (clip !== null) {
         const stored = { ...clip, setup: match.setup };
         room.replayClips.set(clip.id, stored);
+        this.persistReplayClip(room, stored);
         match.goalCapture = null;
         this.pruneReplayClips(room);
         this.broadcastReplayClips(room);
@@ -1334,6 +1343,7 @@ export class RoomManager {
     const clip = { ...finishGoalReplay(match.goalCapture), setup: match.setup };
     match.goalCapture = null;
     room.replayClips.set(clip.id, clip);
+    this.persistReplayClip(room, clip);
     this.pruneReplayClips(room);
     this.broadcastReplayClips(room);
   }
@@ -1373,6 +1383,13 @@ export class RoomManager {
         this.sendReplayClips(seat.client, room);
       }
     }
+  }
+
+  private persistReplayClip(
+    room: Room,
+    clip: StoredReplayClip,
+  ): void {
+    this.replayStore?.saveClip(room.code, clip);
   }
 
   private broadcastSnapshot(room: Room): void {

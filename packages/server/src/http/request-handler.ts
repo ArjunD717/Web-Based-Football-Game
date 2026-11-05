@@ -10,6 +10,7 @@ import {
   TUNING,
   type MatchSetupWire,
   type SnapshotFrame,
+  type WireReplayLibrary,
 } from "@fb/shared";
 
 export interface HealthSimulationMetrics {
@@ -42,6 +43,8 @@ export interface ReplayExport {
   readonly kind?: "goal";
   readonly scoreHome?: number;
   readonly scoreAway?: number;
+  readonly clockSeconds?: number;
+  readonly half?: 1 | 2 | 3 | 4;
 }
 
 export interface RequestHandlerOptions {
@@ -57,6 +60,7 @@ export interface RequestHandlerOptions {
     code: string,
     clipId: string,
   ) => ReplayExport | null;
+  readonly getReplayLibrary?: () => WireReplayLibrary;
   readonly onError?: (error: unknown) => void;
 }
 
@@ -147,6 +151,11 @@ async function handleRequest(
     return;
   }
 
+  if (pathname === "/api/replays.json") {
+    sendReplayLibrary(response, options, isHead);
+    return;
+  }
+
   if (pathname.startsWith("/api/replay/")) {
     sendReplayExport(response, pathname, options, isHead);
     return;
@@ -203,6 +212,29 @@ async function handleRequest(
   }
 
   sendText(response, isHead, 404, "Not found");
+}
+
+function sendReplayLibrary(
+  response: ServerResponse,
+  options: RequestHandlerOptions,
+  isHead: boolean,
+): void {
+  if (options.getReplayLibrary === undefined) {
+    sendText(response, isHead, 404, "Replay library not found");
+    return;
+  }
+  const body = JSON.stringify(options.getReplayLibrary());
+  response.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  if (isHead) {
+    response.end();
+    return;
+  }
+  response.end(body);
 }
 
 function sendReplayExport(

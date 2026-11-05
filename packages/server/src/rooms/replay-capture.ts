@@ -17,7 +17,9 @@ export interface GoalReplayCapture {
   remaining: number;
 }
 
-export type GoalReplayRecord = Omit<GoalReplayCapture, "remaining">;
+export type GoalReplayRecord = Omit<GoalReplayCapture, "remaining"> & {
+  readonly kind: "goal";
+};
 
 /**
  * Starts a clip from the retained history. The current frame is the final
@@ -59,6 +61,7 @@ export function finishGoalReplay(
 ): GoalReplayRecord {
   return {
     id: capture.id,
+    kind: "goal",
     createdAtMs: capture.createdAtMs,
     scoreHome: capture.scoreHome,
     scoreAway: capture.scoreAway,

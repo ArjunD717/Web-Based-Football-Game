@@ -10,6 +10,7 @@ import { consoleLogger, startGameServer } from "./create-server";
 import { loadServerConfig } from "./config";
 import { loadTeamRegistry } from "./data/registry";
 import { formatHttpsUrl, listLanIpv4Addresses } from "./lan";
+import { ReplayStore } from "./replays/replay-store";
 import { RoomManager } from "./rooms/room-manager";
 import { ServerTickMetrics } from "./performance";
 import { loadTlsMaterial } from "./tls";
@@ -18,6 +19,11 @@ async function main(): Promise<void> {
   const config = loadServerConfig();
   const tls = await loadTlsMaterial(config.certPath, config.keyPath);
   const registry = await loadTeamRegistry(config.dataDir);
+  const replayStore = new ReplayStore({
+    dir: config.replayDir,
+    logger: consoleLogger,
+  });
+  await replayStore.initialize();
   const lanAddresses = listLanIpv4Addresses();
   const primaryAddress = lanAddresses[0] ?? "localhost";
   const tickMetrics = new ServerTickMetrics();
@@ -27,6 +33,7 @@ async function main(): Promise<void> {
   const roomManager = new RoomManager({
     logger: consoleLogger,
     registry,
+    replayStore,
     onRoomCreated: (code) => {
       const base = formatHttpsUrl(primaryAddress, runtimePort);
       const url = `${base}/?room=${code}`;
@@ -50,6 +57,7 @@ async function main(): Promise<void> {
     getReplayExport: (code) => roomManager.exportReplay(code),
     getReplayClip: (code, clipId) =>
       roomManager.exportReplayClip(code, clipId),
+    getReplayLibrary: () => ({ rooms: replayStore.listRooms() }),
     handlers: {
       onReady: (client) => {
         roomManager.onReady(client);
@@ -108,6 +116,7 @@ async function main(): Promise<void> {
   );
   console.log(`Client dist:   ${config.staticDir}`);
   console.log(`Match data:    ${config.dataDir} (${registry.teams.length} teams)`);
+  console.log(`Replay library: ${config.replayDir}`);
   if (
     config.devNetwork.latencyMs > 0 ||
     config.devNetwork.jitterMs > 0 ||
@@ -134,15 +143,18 @@ async function main(): Promise<void> {
     console.log(`\n${signal} received; closing connections...`);
     clearInterval(simulationLoop);
     roomManager.close();
-    void running.close().then(
-      () => {
-        process.exit(0);
-      },
-      (error: unknown) => {
-        console.error("Shutdown failed", error);
-        process.exit(1);
-      },
-    );
+    void replayStore
+      .flush()
+      .then(() => running.close())
+      .then(
+        () => {
+          process.exit(0);
+        },
+        (error: unknown) => {
+          console.error("Shutdown failed", error);
+          process.exit(1);
+        },
+      );
   };
 
   process.once("SIGINT", () => {
