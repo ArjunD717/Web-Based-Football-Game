@@ -11,6 +11,8 @@ export interface GoalReplayCapture {
   readonly createdAtMs: number;
   readonly scoreHome: number;
   readonly scoreAway: number;
+  readonly clockSeconds: number;
+  readonly half: 1 | 2 | 3 | 4;
   readonly frames: SnapshotFrame[];
   remaining: number;
 }
@@ -29,11 +31,14 @@ export function beginGoalReplay(
   const frames = [...history]
     .sort((a, b) => a.seq - b.seq)
     .slice(-GOAL_REPLAY_PRE_SNAPSHOTS);
+  const goalFrame = frames.at(-1);
   return {
     id,
     createdAtMs: nowMs,
-    scoreHome: frames.at(-1)?.match.scoreHome ?? 0,
-    scoreAway: frames.at(-1)?.match.scoreAway ?? 0,
+    scoreHome: goalFrame?.match.scoreHome ?? 0,
+    scoreAway: goalFrame?.match.scoreAway ?? 0,
+    clockSeconds: goalFrame?.match.clockSeconds ?? 0,
+    half: goalFrame?.match.half ?? 1,
     frames,
     remaining: GOAL_REPLAY_POST_SNAPSHOTS,
   };
@@ -57,6 +62,8 @@ export function finishGoalReplay(
     createdAtMs: capture.createdAtMs,
     scoreHome: capture.scoreHome,
     scoreAway: capture.scoreAway,
+    clockSeconds: capture.clockSeconds,
+    half: capture.half,
     frames: capture.frames,
   };
 }

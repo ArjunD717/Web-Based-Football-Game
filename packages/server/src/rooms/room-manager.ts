@@ -1318,7 +1318,8 @@ export class RoomManager {
         const stored = { ...clip, setup: match.setup };
         room.replayClips.set(clip.id, stored);
         match.goalCapture = null;
-        this.broadcastReplayClip(room, stored);
+        this.pruneReplayClips(room);
+        this.broadcastReplayClips(room);
       }
     }
     if (match.finished && match.goalCapture !== null) {
@@ -1333,38 +1334,44 @@ export class RoomManager {
     const clip = { ...finishGoalReplay(match.goalCapture), setup: match.setup };
     match.goalCapture = null;
     room.replayClips.set(clip.id, clip);
-    this.broadcastReplayClip(room, clip);
+    this.pruneReplayClips(room);
+    this.broadcastReplayClips(room);
   }
 
-  private sendReplayClip(
-    client: ClientConnection,
-    clip: StoredGoalReplay,
-  ): void {
-    client.send({
-      t: "replayClip",
-      clip: {
-        id: clip.id,
-        kind: "goal",
-        scoreHome: clip.scoreHome,
-        scoreAway: clip.scoreAway,
-        createdAtMs: clip.createdAtMs,
-        frameCount: clip.frames.length,
-      },
-    });
-  }
-
-  private broadcastReplayClip(room: Room, clip: StoredGoalReplay): void {
-    for (const seat of this.seats(room)) {
-      if (seat.client !== null) {
-        this.sendReplayClip(seat.client, clip);
-      }
-    }
+  private pruneReplayClips(room: Room): void {
     while (room.replayClips.size > TUNING.network.goalReplayClipLimit) {
       const oldest = room.replayClips.keys().next().value;
       if (oldest === undefined) {
         break;
       }
       room.replayClips.delete(oldest);
+    }
+  }
+
+  private sendReplayClips(
+    client: ClientConnection,
+    room: Room,
+  ): void {
+    client.send({
+      t: "replayClips",
+      clips: [...room.replayClips.values()].map((clip) => ({
+        id: clip.id,
+        kind: "goal" as const,
+        scoreHome: clip.scoreHome,
+        scoreAway: clip.scoreAway,
+        clockSeconds: clip.clockSeconds,
+        half: clip.half,
+        createdAtMs: clip.createdAtMs,
+        frameCount: clip.frames.length,
+      })),
+    });
+  }
+
+  private broadcastReplayClips(room: Room): void {
+    for (const seat of this.seats(room)) {
+      if (seat.client !== null) {
+        this.sendReplayClips(seat.client, room);
+      }
     }
   }
 
@@ -1415,9 +1422,8 @@ export class RoomManager {
     // about substitutions already made while the client was away.
     this.sendRoster(seat.client, room, "home");
     this.sendRoster(seat.client, room, "away");
-    const latestClip = [...room.replayClips.values()].at(-1);
-    if (latestClip !== undefined) {
-      this.sendReplayClip(seat.client, latestClip);
+    if (room.replayClips.size > 0) {
+      this.sendReplayClips(seat.client, room);
     }
     const review = room.match.state.referee.varReview;
     if (review !== null) {
