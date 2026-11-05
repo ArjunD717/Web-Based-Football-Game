@@ -42,6 +42,7 @@ import {
 import type { ClientConnection } from "../client";
 import type { TeamRegistry } from "../data/registry";
 import type { Logger } from "../create-server";
+import type { ReplayExport } from "../http/request-handler";
 import {
   buildMatchStats,
   buildShootoutWire,
@@ -366,6 +367,26 @@ export class RoomManager {
         match.accumulator = 0;
       }
     }
+  }
+
+  /** Latest authoritative snapshot window for a room, newest frames last. */
+  exportReplay(code: string): ReplayExport | null {
+    const room = this.rooms.get(normalizeRoomCode(code));
+    if (room === undefined || room.match === null) {
+      return null;
+    }
+    const frames = [...room.match.snapshots.values()].sort(
+      (a, b) => a.seq - b.seq,
+    );
+    if (frames.length === 0) {
+      return null;
+    }
+    return {
+      code: room.code,
+      generatedAtMs: Date.now(),
+      setup: room.match.setup,
+      frames,
+    };
   }
 
   close(): void {

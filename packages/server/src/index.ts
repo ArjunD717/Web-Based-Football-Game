@@ -47,6 +47,7 @@ async function main(): Promise<void> {
     tls,
     devNetwork: config.devNetwork,
     getRuntimeMetrics: () => tickMetrics.snapshot(),
+    getReplayExport: (code) => roomManager.exportReplay(code),
     handlers: {
       onReady: (client) => {
         roomManager.onReady(client);

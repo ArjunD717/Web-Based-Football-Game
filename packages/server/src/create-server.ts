@@ -26,6 +26,7 @@ import type {
 import {
   createRequestHandler,
   type HealthSimulationMetrics,
+  type ReplayExport,
   type RequestHandler,
 } from "./http/request-handler";
 import type { TlsMaterial } from "./tls";
@@ -61,6 +62,7 @@ export interface GameServerOptions {
   readonly heartbeatIntervalMs?: number;
   /** Exposes the server loop's rolling timing sample on /healthz. */
   readonly getRuntimeMetrics?: () => HealthSimulationMetrics;
+  readonly getReplayExport?: (code: string) => ReplayExport | null;
   /** Dev-only artificial one-way latency, jitter and binary snapshot loss. */
   readonly devNetwork?: DevNetworkConfig;
 }
@@ -127,6 +129,9 @@ export async function startGameServer(
     ...(options.getRuntimeMetrics === undefined
       ? {}
       : { getRuntimeMetrics: options.getRuntimeMetrics }),
+    ...(options.getReplayExport === undefined
+      ? {}
+      : { getReplayExport: options.getReplayExport }),
     onError: (error) => {
       logger.error("HTTP request failed", error);
     },

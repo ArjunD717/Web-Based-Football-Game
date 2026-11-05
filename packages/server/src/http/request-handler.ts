@@ -4,7 +4,13 @@ import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
-import { APP_VERSION, PROTOCOL_VERSION, TUNING } from "@fb/shared";
+import {
+  APP_VERSION,
+  PROTOCOL_VERSION,
+  TUNING,
+  type MatchSetupWire,
+  type SnapshotFrame,
+} from "@fb/shared";
 
 export interface HealthSimulationMetrics {
   readonly loopHz: number;
@@ -26,6 +32,13 @@ export interface HealthPayload {
   readonly simulation?: HealthSimulationMetrics;
 }
 
+export interface ReplayExport {
+  readonly code: string;
+  readonly generatedAtMs: number;
+  readonly setup: MatchSetupWire;
+  readonly frames: readonly SnapshotFrame[];
+}
+
 export interface RequestHandlerOptions {
   readonly staticDir: string;
   /** Generated data root. Only whitelisted public JSON and assets are served. */
@@ -34,6 +47,7 @@ export interface RequestHandlerOptions {
   readonly secure: boolean;
   readonly getConnectedClients: () => number;
   readonly getRuntimeMetrics?: () => HealthSimulationMetrics;
+  readonly getReplayExport?: (code: string) => ReplayExport | null;
   readonly onError?: (error: unknown) => void;
 }
 
@@ -124,6 +138,11 @@ async function handleRequest(
     return;
   }
 
+  if (pathname.startsWith("/api/replay/")) {
+    sendReplayExport(response, pathname, options, isHead);
+    return;
+  }
+
   let decodedPath: string;
   try {
     decodedPath = decodeURIComponent(pathname);
@@ -175,6 +194,38 @@ async function handleRequest(
   }
 
   sendText(response, isHead, 404, "Not found");
+}
+
+function sendReplayExport(
+  response: ServerResponse,
+  pathname: string,
+  options: RequestHandlerOptions,
+  isHead: boolean,
+): void {
+  const match = /^\/api\/replay\/([A-Za-z]{4})\.json$/.exec(pathname);
+  if (match === null || options.getReplayExport === undefined) {
+    sendText(response, isHead, 404, "Not found");
+    return;
+  }
+  const code = (match[1] ?? "").toUpperCase();
+  const replay = options.getReplayExport(code);
+  if (replay === null) {
+    sendText(response, isHead, 404, "Room replay not found");
+    return;
+  }
+  const body = JSON.stringify(replay);
+  response.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "no-store",
+    "Content-Disposition": `attachment; filename="replay-${code}.json"`,
+    "X-Content-Type-Options": "nosniff",
+  });
+  if (isHead) {
+    response.end();
+    return;
+  }
+  response.end(body);
 }
 
 function isPublicDataPath(relativePath: string): boolean {
