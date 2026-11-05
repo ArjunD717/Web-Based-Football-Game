@@ -492,9 +492,32 @@ describe("M10 match management messages", () => {
     expect(
       parseServerMessage(encodeServerMessage(shootoutMessage)),
     ).toEqual(shootoutMessage);
+
+    const replayMessage = {
+      t: "replayClip" as const,
+      clip: {
+        id: "g3",
+        kind: "goal" as const,
+        scoreHome: 2,
+        scoreAway: 1,
+        createdAtMs: 1234,
+        frameCount: 135,
+      },
+    };
+    expect(
+      parseServerMessage(encodeServerMessage(replayMessage)),
+    ).toEqual(replayMessage);
   });
 
   it("rejects malformed management payloads", () => {
+    expect(
+      parseServerMessage(
+        JSON.stringify({
+          t: "replayClip",
+          clip: { id: "g1", kind: "save" },
+        }),
+      ),
+    ).toBeNull();
     expect(
       parseServerMessage(
         JSON.stringify({

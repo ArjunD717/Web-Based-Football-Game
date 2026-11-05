@@ -199,9 +199,18 @@ describe("game server", () => {
       setup: {} as ReplayExport["setup"],
       frames: [],
     };
+    const clip: ReplayExport = {
+      ...replay,
+      id: "g1",
+      kind: "goal",
+      scoreHome: 1,
+      scoreAway: 0,
+    };
     const server = await startTestServer({
       getReplayExport: (code) =>
         code === "ABCD" ? replay : null,
+      getReplayClip: (code, clipId) =>
+        code === "ABCD" && clipId === "g1" ? clip : null,
     });
 
     const response = await fetch(
@@ -215,6 +224,15 @@ describe("game server", () => {
       "replay-ABCD.json",
     );
     expect(await response.json()).toEqual(replay);
+
+    const clipResponse = await fetch(
+      `${baseUrl(server)}/api/replay/ABCD/g1.json`,
+    );
+    expect(clipResponse.status).toBe(200);
+    expect(clipResponse.headers.get("content-disposition")).toContain(
+      "replay-ABCD-g1.json",
+    );
+    expect(await clipResponse.json()).toEqual(clip);
 
     const missing = await fetch(
       `${baseUrl(server)}/api/replay/ZZZZ.json`,

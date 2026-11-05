@@ -496,6 +496,47 @@ describe("server replay export", () => {
     expect(sequences).toEqual([...sequences].sort((a, b) => a - b));
   });
 
+  it("captures and announces a goal-triggered clip", () => {
+    const fixture = setupRoom();
+    startReadyMatch(fixture);
+    const internal = fixture.manager as unknown as {
+      rooms: Map<
+        string,
+        {
+          match: {
+            state: MatchState;
+            finished: boolean;
+          } | null;
+        }
+      >;
+    };
+    const match = [...internal.rooms.values()][0]?.match;
+    if (match === null || match === undefined) {
+      throw new Error("Room has no match");
+    }
+    match.state.referee.scoreHome = 1;
+    for (let tick = 0; tick < 100; tick += 1) {
+      fixture.manager.tick(1 / 60);
+    }
+
+    const message = fixture.host.lastMessageType("replayClip");
+    expect(message?.clip).toMatchObject({
+      kind: "goal",
+      scoreHome: 1,
+      scoreAway: 0,
+    });
+    expect(message?.clip.frameCount).toBeGreaterThan(0);
+
+    const clip = fixture.manager.exportReplayClip(
+      fixture.code,
+      message?.clip.id ?? "",
+    );
+    expect(clip?.id).toBe(message?.clip.id);
+    expect(clip?.kind).toBe("goal");
+    expect(clip?.frames.length).toBe(message?.clip.frameCount);
+    expect(fixture.manager.exportReplayClip(fixture.code, "missing")).toBeNull();
+  });
+
   it("returns null for an unknown room", () => {
     expect(setupRoom().manager.exportReplay("ZZZZ")).toBeNull();
   });
