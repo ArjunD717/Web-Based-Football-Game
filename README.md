@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 19**:
+both devices are thin clients. This repository is at **Milestone 20**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -20,7 +20,8 @@ foot planting and deterministic per-player skin and boot colours. M17 delivers
 the authored asset as WebP textures and warms the parsed template from the
 lobby. M18 bakes the tested pose model into fifteen glTF animation clips and
 plays them through a per-player mixer. M19 replaces root-only grounding with
-per-leg analytic IK and world-space foot anchors during stance.
+per-leg analytic IK and world-space foot anchors during stance. M20 scales
+authored clip playback to the speed the player actually covers.
 
 ## Requirements
 
@@ -155,6 +156,45 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 20 scope
+
+Implemented:
+
+- Each authored rig estimates planar speed from its interpolated render
+  position. The estimate uses a **9 s⁻¹** exponential smoother and a **13 m/s**
+  sanity cap; rewinds, teleports and root jumps reset it
+- `gaitPlaybackScale` maps the authored reference speeds (**jog 4.2 m/s,
+  sprint 8.6 m/s, dribble 3.1 m/s**) to playback 1.0 and clamps all locomotion
+  between **0.55× and 1.45×**. Idle, passes, shots, tackles, headers and other
+  one-shot states stay at 1.0
+- The gait multiplier drives the `AnimationAction` time scale together with the
+  existing stamina multiplier. The procedural fallback uses the same multiplier
+  for `stridePhase`, so both animation paths slow and speed up together
+- The M19 foot anchors and two-bone IK still run after the animation. Faster
+  playback shortens each cycle's wall-clock time to match a larger movement
+  speed; slower playback stretches it
+- The smoke measured jog **4.19 m/s → 1.00×**, slow jog **1.00 m/s → 0.55×**,
+  sprint **8.57 m/s → 0.997×**, over-speed sprint **11.99 m/s → 1.39×**, and a
+  pass at 8.6 m/s **→ 1.00×**. Foot contacts remained active
+- `pnpm check` passes **642 tests**, including mapping, clamping, smoothing and
+  invalid/teleport sample tests. `pnpm build` passes. No simulation, protocol,
+  input, camera or asset files changed
+
+Known M20 limitations (by design):
+
+- Speed is estimated from the rendered, interpolated root position rather than
+  authoritative velocity. Network jitter can make the estimate briefly lag or
+  lead the simulation
+- Reference speeds are global presentation tuning, not derived from each
+  player's Sprint Speed or stride length. Two players in the same state use the
+  same cadence mapping
+- Gait correction is time scaling only. It does not select between walk, jog
+  and sprint clips, alter stride amplitude or retime individual foot contacts
+- Very fast direction changes can still reach the foot-anchor release limits;
+  the speed estimate does not model stride length or acceleration
+- One-shot clips intentionally ignore gait scaling
+- There is still no footstep audio or contact dust
+
 ## Milestone 19 scope
 
 Implemented:
@@ -192,9 +232,8 @@ Known M19 limitations (by design):
 - Contact is inferred from ankle height, not from explicit animation events or
   authoritative simulation contact. It is intentionally a presentation
   approximation
-- The gait remains the baked clip cadence; stride length is not matched to
-  movement speed, so a locked foot can reach its release limits during very
-  fast direction changes
+- At M19 the gait remains the baked clip cadence; stride length is not matched
+  to movement speed. M20 adds the speed multiplier
 - Low visual quality still uses the procedural rig without this IK. The
   authored high/medium path only
 - The root is corrected for the lowest ankle, but it is not re-solved for two
@@ -1462,6 +1501,10 @@ The two-minute match check:
     over it, then lifts cleanly. No knee should bend backward, no leg should
     visibly stretch, and a state change or replay rewind must not leave a foot
     anchored behind the player.
+24. Compare a slow jog, a normal jog and a sprint. The legs must cycle slower
+    at low speed and faster at sprint speed, while the torso does not change
+    scale. A pass or shot must keep its authored one-shot timing. Pause/rewind
+    and rejoin to confirm gait speed resets instead of spiking.
 
 ## Layout
 
