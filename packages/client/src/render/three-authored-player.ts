@@ -30,7 +30,11 @@ import {
   updateFootstepClock,
   type FootstepSink,
 } from "./footsteps";
-import { gaitPlaybackScale, updateGaitSpeed } from "./gait";
+import {
+  gaitPlaybackScale,
+  strideReferenceScale,
+  updateGaitSpeed,
+} from "./gait";
 import { disposeObject } from "./three-dispose";
 import {
   createControlledMarker,
@@ -193,6 +197,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private hasLastRootPosition = false;
   private hasLastGaitPosition = false;
   private gaitSpeedMps = 0;
+  private readonly strideScale: number;
   private lastFootIkState: RenderPlayer["state"] | null = null;
   private lastFootstepElapsed = Number.NEGATIVE_INFINITY;
   private readonly footstepClock = createFootstepClock();
@@ -235,6 +240,10 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   ) {
     this.root.name = `authored-player-${player.id}`;
     this.root.scale.setScalar(VISUAL_TUNING.playerScale);
+    this.strideScale = strideReferenceScale(
+      player.sprintSpeed ?? VISUAL_TUNING.authoredPlayer.stride.neutralRating,
+      VISUAL_TUNING.authoredPlayer.stride,
+    );
 
     // glTF +Z is the character's forward. The existing pitch contract uses
     // local +X forward, so this wrapper preserves facingToRotationY.
@@ -496,6 +505,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       player.state,
       this.gaitSpeedMps,
       VISUAL_TUNING.authoredPlayer.gait,
+      this.strideScale,
     );
 
     const cadence = cadenceFor(player.state) * gaitScale;
