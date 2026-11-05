@@ -9,11 +9,20 @@ export type FootstepSide = "left" | "right";
  * Presentation-only contact notification. Audio consumes it; the simulation
  * and network protocol never see it.
  */
-export interface FootstepEvent {
+export interface FootstepClockEvent {
   readonly side: FootstepSide;
   readonly state: PlayerStateName;
   /** 0..1 loudness estimate derived from the measured gait speed. */
   readonly intensity: number;
+}
+
+export interface FootstepEvent extends FootstepClockEvent {
+  /** World-space position of the foot at the stride crossing. */
+  readonly x: number;
+  readonly z: number;
+  /** Camera-relative mix added by the 3D renderer. */
+  readonly pan?: number;
+  readonly gain?: number;
 }
 
 export type FootstepSink = (event: FootstepEvent) => void;
@@ -68,7 +77,7 @@ export function updateFootstepClock(
   lastEmittedSeconds: number,
   tuning: FootstepTuning,
   gait: GaitTuning,
-): FootstepEvent | null {
+): FootstepClockEvent | null {
   if (!isSteppingState(state) || !Number.isFinite(stridePhase)) {
     resetFootstepClock(clock);
     return null;

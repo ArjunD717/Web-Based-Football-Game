@@ -633,7 +633,24 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       return;
     }
     this.lastFootstepElapsed = elapsedSeconds;
-    this.footstepSink?.(event);
+    const leg = this.legs.find(
+      (entry) =>
+        (entry.foot.name.endsWith("_l") ? "left" : "right") === event.side,
+    );
+    if (leg === undefined) {
+      this.footstepSink?.({
+        ...event,
+        x: this.root.position.x,
+        z: this.root.position.z,
+      });
+      return;
+    }
+    leg.foot.getWorldPosition(this.footWorld);
+    this.footstepSink?.({
+      ...event,
+      x: this.footWorld.x,
+      z: this.footWorld.z,
+    });
   }
 
   private resetFootLocks(): void {
