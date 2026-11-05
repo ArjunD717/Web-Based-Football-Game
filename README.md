@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 15**:
+both devices are thin clients. This repository is at **Milestone 16**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -15,7 +15,8 @@ available to either seat that survives reloads and reconnects. M14 adds the
 first authored player-character asset pipeline: a rigged, textured glTF player
 built reproducibly in Blender and a presentation-only character lab. M15 wires
 that authored rig into the Three.js match renderer through a decimated match
-LOD, team palettes and a procedural bone-animation layer.
+LOD, team palettes and a procedural bone-animation layer. M16 adds root-level
+foot planting and deterministic per-player skin and boot colours.
 
 ## Requirements
 
@@ -150,6 +151,53 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 16 scope
+
+![Root-level foot planting and per-player boot colours](assets/previews/authored-grounding.webp)
+
+Implemented:
+
+- Authored players now measure both `foot_l` and `foot_r` after the bone pose
+  and correct the visual root so the lower ankle returns to its bind-pose
+  height. The correction is capped at **0.12 m**, eased at **16 s⁻¹**, and is
+  applied only in `idle`, `jog`, `sprint`, `dribble`, `pass`, `shoot`, `volley`
+  and `tackle`. Header, slide, dive, fall, injured and celebrate keep their
+  authored root lift/tilt and let the offset decay to zero
+- The rest ankle reference is captured once from the cloned skeleton, so the
+  correction works with the match LOD's player scale and does not depend on the
+  pitch. It is a presentation-only root adjustment; simulation positions,
+  collision capsules and snapshots are unchanged
+- Per-player appearance is deterministic from `team:id:number` using a local
+  FNV-1a seed. Skin tone and boot colour are picked from tuned palettes and
+  applied to per-rig material clones. Shirt, shorts, socks and collar continue
+  to use the shared team palette, so 22 players do not create 22 copies of the
+  kit materials
+- The cloned skin and boot materials are disposed with their rig; shared
+  textures and the team palette are not disposed by a player swap. Reconnecting
+  or replaying a player yields the same skin/boot combination
+- Pure tests cover the foot-plant offset (lower, raise, no double-count,
+  clamping and invalid numbers), grounded-versus-airborne state selection, and
+  deterministic appearance selection
+- A three-player smoke render exercised idle, jog and sprint at close range:
+  the lower ankle settled at **+0.002 m**, **−0.111 m** and **−0.046 m** of root
+  correction respectively. All 623 tests pass. No simulation, protocol or input
+  code changed
+
+Known M16 limitations (by design):
+
+- Foot planting is root-level correction, not per-foot two-bone IK. It removes
+  the both-feet-floating silhouette but cannot lock an individual foot to a
+  world position, so foot sliding and extreme poses remain possible
+- The **0.12 m** correction budget means unusually high poses can still leave a
+  foot above the pitch. Airborne and ground-contact states are intentionally
+  excluded from correction
+- Appearance varies skin tone and boot colour only. Hair is baked into the body
+  material's vertex colours, so it is tinted by the same skin multiplier rather
+  than varied independently. Body shape, face, hair style and sock tape remain
+  shared
+- This milestone does not add authored animation clips, KTX2/meshopt
+  compression, distance LODs or real player shadows
+
 ## Milestone 15 scope
 
 ![Authored players in the Three.js match presentation](assets/previews/authored-match.webp)
@@ -198,11 +246,11 @@ Known M15 limitations (by design):
 - The match LOD is decimated and omits boot soles, sock trims and sleeve cuffs.
   The painted shirt crest, sponsor, name and number are replaced by solid team
   colour; only the floating number sprite identifies a player
-- Authored players have no authored animation clips, foot IK, cloth or facial
-  animation. The procedural bones are presentation-only; at some sprint phases
-  both feet can appear off the ground
-- The authored model is one body/face/hair mesh set. There is no per-player skin
-  tone, body shape, hair or boot variation yet
+- Authored players have no authored animation clips or per-foot IK, cloth or
+  facial animation. M16 adds root-level foot planting, but the procedural bones
+  remain presentation-only
+- The authored model is one body/face/hair mesh set. M16 adds deterministic
+  skin and boot variation; body shape and hair remain shared
 - The authored rig does not cast a real shadow; the existing blob shadow is the
   grounding cue. This is deliberate for the 22-player frame budget
 - Low quality falls back to the procedural rigs even though the authored LOD is
@@ -1248,6 +1296,14 @@ The two-minute match check:
     procedural rigs return. Switch back to **High**: authored rigs return. Open
     `character.html` and confirm the lab still uses the high-detail
     `player-01.glb`. `pnpm character:build` must reproduce both GLBs.
+20. Watch authored players in idle, jog and sprint from the TV and player
+    cameras: at least one boot should sit on the pitch instead of both feet
+    floating. Check that different players have visibly different skin tones
+    and boot colours, that team kit colours still match the room, and that
+    headers, slides, dives and celebrations still leave the ground. Reconnect a
+    seat: that player must keep the same skin/boot appearance. Switch to low
+    quality and back; procedural fallback and authored rigs must not retain
+    stale foot offsets.
 
 ## Layout
 
