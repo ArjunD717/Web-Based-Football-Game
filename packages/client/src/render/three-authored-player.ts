@@ -24,6 +24,7 @@ import {
   updateFootLock,
   type FootLockState,
 } from "./foot-ik";
+import { gaitPlaybackScale, updateGaitSpeed } from "./gait";
 import { disposeObject } from "./three-dispose";
 import {
   createControlledMarker,
@@ -175,7 +176,10 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly rootWorld = new THREE.Vector3();
   private readonly footWorld = new THREE.Vector3();
   private readonly lastRootPosition = new THREE.Vector3();
+  private readonly lastGaitPosition = new THREE.Vector3();
   private hasLastRootPosition = false;
+  private hasLastGaitPosition = false;
+  private gaitSpeedMps = 0;
   private lastFootIkState: RenderPlayer["state"] | null = null;
   private restAnkleY = Number.POSITIVE_INFINITY;
   private groundOffset = 0;
@@ -449,7 +453,32 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         ? 0
         : Math.max(0, elapsed - previousElapsed);
 
-    const cadence = cadenceFor(player.state);
+    const movedDistance = this.hasLastGaitPosition
+      ? this.root.position.distanceTo(this.lastGaitPosition)
+      : 0;
+    if (
+      !this.hasLastGaitPosition ||
+      rewound ||
+      rootJumped
+    ) {
+      this.gaitSpeedMps = 0;
+    } else if (deltaSeconds > 0) {
+      this.gaitSpeedMps = updateGaitSpeed(
+        this.gaitSpeedMps,
+        movedDistance,
+        deltaSeconds,
+        VISUAL_TUNING.authoredPlayer.gait,
+      );
+    }
+    this.lastGaitPosition.copy(this.root.position);
+    this.hasLastGaitPosition = true;
+    const gaitScale = gaitPlaybackScale(
+      player.state,
+      this.gaitSpeedMps,
+      VISUAL_TUNING.authoredPlayer.gait,
+    );
+
+    const cadence = cadenceFor(player.state) * gaitScale;
     if (previousElapsed === null || rewound) {
       this.stridePhase = elapsed * cadence + player.number * 0.63;
     } else {
@@ -468,6 +497,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       deltaSeconds,
       rewound,
       player.stamina,
+      gaitScale,
     );
     if (!clipped) {
       const blend =
@@ -757,6 +787,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     deltaSeconds: number,
     rewound: boolean,
     stamina: number,
+    gaitScale: number,
   ): boolean {
     const mixer = this.mixer;
     const spec = clipSpecFor(state);
@@ -792,11 +823,11 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         ? (stateAgeSeconds + this.clipPhaseOffset) % duration
         : Math.min(stateAgeSeconds, duration);
     }
-    action.setEffectiveTimeScale(
+    const staminaScale =
       VISUAL_TUNING.authoredPlayer.clipStaminaTimeScaleMin +
-        (1 - VISUAL_TUNING.authoredPlayer.clipStaminaTimeScaleMin) *
-          Math.max(0, Math.min(1, stamina)),
-    );
+      (1 - VISUAL_TUNING.authoredPlayer.clipStaminaTimeScaleMin) *
+        Math.max(0, Math.min(1, stamina));
+    action.setEffectiveTimeScale(staminaScale * gaitScale);
     mixer.update(Math.max(0, deltaSeconds));
     return true;
   }

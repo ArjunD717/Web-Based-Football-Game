@@ -96,6 +96,18 @@ export interface VisualTuning {
       /** A root jump larger than this resets all foot anchors. */
       readonly teleportResetM: number;
     };
+    readonly gait: {
+      /** Nominal movement speed for each locomotion animation, m/s. */
+      readonly referenceSpeedMps: Partial<Record<PlayerStateName, number>>;
+      /** Slowest playback when the player is nearly stationary. */
+      readonly minPlaybackScale: number;
+      /** Fastest playback for an over-speed state. */
+      readonly maxPlaybackScale: number;
+      /** Exponential smoothing rate for measured root speed. */
+      readonly speedSmoothingRate: number;
+      /** Ignore frame samples above this as network teleports. */
+      readonly speedCapMps: number;
+    };
     readonly appearance: {
       /** Skin tones are multipliers over the authored pore/vertex map. */
       readonly skinTones: readonly string[];
@@ -169,6 +181,17 @@ export const VISUAL_TUNING: VisualTuning = {
       blendRate: 24,
       reachMarginM: 0.008,
       teleportResetM: 1.5,
+    },
+    gait: {
+      referenceSpeedMps: {
+        jog: 4.2,
+        sprint: 8.6,
+        dribble: 3.1,
+      },
+      minPlaybackScale: 0.55,
+      maxPlaybackScale: 1.45,
+      speedSmoothingRate: 9,
+      speedCapMps: 13,
     },
     appearance: {
       skinTones: [

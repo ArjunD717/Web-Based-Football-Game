@@ -40,6 +40,19 @@ describe("visual quality presets", () => {
     expect(ik.teleportResetM).toBeGreaterThan(ik.maxPlantTravelM);
   });
 
+  it("keeps gait reference speeds inside the simulation's player range", () => {
+    const gait = VISUAL_TUNING.authoredPlayer.gait;
+    expect(gait.referenceSpeedMps.jog).toBeGreaterThan(0);
+    expect(gait.referenceSpeedMps.jog).toBeLessThan(
+      gait.referenceSpeedMps.sprint ?? 0,
+    );
+    expect(gait.minPlaybackScale).toBeLessThan(1);
+    expect(gait.maxPlaybackScale).toBeGreaterThan(1);
+    expect(gait.speedCapMps).toBeGreaterThan(
+      gait.referenceSpeedMps.sprint ?? 0,
+    );
+  });
+
   it("keeps render-only scale values separate from physics", () => {
     expect(VISUAL_TUNING.playerScale).toBeGreaterThanOrEqual(1.1);
     expect(VISUAL_TUNING.playerScale).toBeLessThanOrEqual(1.25);
