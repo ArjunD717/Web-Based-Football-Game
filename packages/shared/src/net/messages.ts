@@ -410,6 +410,20 @@ export interface ServerShootoutMessage {
   readonly shootout: WireShootout | null;
 }
 
+export interface WireReplayClip {
+  readonly id: string;
+  readonly kind: "goal";
+  readonly scoreHome: number;
+  readonly scoreAway: number;
+  readonly createdAtMs: number;
+  readonly frameCount: number;
+}
+
+export interface ServerReplayClipMessage {
+  readonly t: "replayClip";
+  readonly clip: WireReplayClip;
+}
+
 export type ServerMessage =
   | ServerWelcomeMessage
   | ServerPresenceMessage
@@ -425,7 +439,8 @@ export type ServerMessage =
   | ServerMatchStatsMessage
   | ServerMatchEndedMessage
   | ServerVarReviewMessage
-  | ServerShootoutMessage;
+  | ServerShootoutMessage
+  | ServerReplayClipMessage;
 
 export function encodeClientMessage(message: ClientMessage): string {
   return JSON.stringify(message);
@@ -635,6 +650,34 @@ export function parseServerMessage(text: string): ServerMessage | null {
       }
       const review = parseVarReview(value.review);
       return review === null ? null : { t: "varReview", review };
+    }
+    case "replayClip": {
+      const clip = value.clip;
+      if (
+        typeof clip !== "object" ||
+        clip === null ||
+        !isEntityId((clip as Record<string, unknown>).id) ||
+        (clip as Record<string, unknown>).kind !== "goal" ||
+        !isCount((clip as Record<string, unknown>).scoreHome) ||
+        !isCount((clip as Record<string, unknown>).scoreAway) ||
+        !isTimestamp((clip as Record<string, unknown>).createdAtMs) ||
+        !isCount((clip as Record<string, unknown>).frameCount)
+      ) {
+        return null;
+      }
+      return {
+        t: "replayClip",
+        clip: {
+          id: (clip as Record<string, unknown>).id as string,
+          kind: "goal",
+          scoreHome: (clip as Record<string, unknown>).scoreHome as number,
+          scoreAway: (clip as Record<string, unknown>).scoreAway as number,
+          createdAtMs: (clip as Record<string, unknown>)
+            .createdAtMs as number,
+          frameCount: (clip as Record<string, unknown>)
+            .frameCount as number,
+        },
+      };
     }
     case "shootout": {
       if (value.shootout === null) {

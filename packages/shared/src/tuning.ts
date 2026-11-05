@@ -34,6 +34,12 @@ export const TUNING = {
     snapshotInterpolationDelayMs: 100,
     /** Snapshots retained for delta baselines, count. */
     snapshotHistorySize: 180,
+    /** Goal replay pre-roll retained from history, snapshots (~3 s at 30 Hz). */
+    goalReplayPreSnapshots: 90,
+    /** Goal replay post-roll captured after the score change, snapshots. */
+    goalReplayPostSnapshots: 45,
+    /** Goal clips retained per room before evicting the oldest. */
+    goalReplayClipLimit: 8,
     /** Soft pull of the visual predictor toward authoritative position, 1/s. */
     predictionCorrectionPerSecond: 8,
     /** Error beyond this snaps the predicted controlled player, metres. */
