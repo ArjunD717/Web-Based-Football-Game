@@ -867,9 +867,20 @@ body[data-saved-replay] .replay-banner {
   padding: 0.25rem 0.55rem;
 }
 
-.replay-seek {
+.replay-seek-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
   width: clamp(5rem, 13vw, 11rem);
   min-width: 4rem;
+  height: 1.35rem;
+}
+
+.replay-seek {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-width: 0;
   accent-color: var(--ui-orange);
   cursor: pointer;
 }
@@ -877,6 +888,52 @@ body[data-saved-replay] .replay-banner {
 .replay-seek:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.replay-loop-range {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--ui-orange-hot);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.65),
+    0 0 5px color-mix(in srgb, var(--ui-orange) 55%, transparent);
+  pointer-events: none;
+}
+
+.replay-timeline-markers {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.replay-timeline-marker {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 0.9rem;
+  transform: translate(-50%, -50%);
+  background: var(--ui-chalk-dim);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8);
+}
+
+.replay-timeline-marker--goal {
+  background: var(--ui-success);
+}
+
+.replay-timeline-marker--yellowCard {
+  background: var(--ui-warning);
+}
+
+.replay-timeline-marker--redCard {
+  background: var(--ui-danger);
+}
+
+.replay-timeline-marker--fullTime {
+  background: var(--ui-ice);
 }
 
 .replay-speed {

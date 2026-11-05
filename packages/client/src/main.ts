@@ -216,6 +216,10 @@ const replayStopButton = byId<HTMLButtonElement>("replay-stop");
 const replayBanner = byId<HTMLElement>("replay-banner");
 const replayProgress = byId<HTMLElement>("replay-progress");
 const replaySeek = byId<HTMLInputElement>("replay-seek");
+const replayLoopRange = byId<HTMLElement>("replay-loop-range");
+const replayTimelineMarkers = byId<HTMLElement>(
+  "replay-timeline-markers",
+);
 const replayPauseButton = byId<HTMLButtonElement>("replay-pause");
 const replayStepBackButton =
   byId<HTMLButtonElement>("replay-step-back");
@@ -225,6 +229,7 @@ const replaySpeedSelect =
   byId<HTMLSelectElement>("replay-speed");
 const replayChapters = byId<HTMLElement>("replay-chapters");
 const replayLoopButton = byId<HTMLButtonElement>("replay-loop");
+const replayShareButton = byId<HTMLButtonElement>("replay-share");
 const replayAngles = byId<HTMLElement>("replay-angles");
 const replayCameraButtons = [
   ...document.querySelectorAll<HTMLButtonElement>("[data-replay-camera]"),
@@ -354,7 +359,8 @@ if (rendererFellBack) {
 }
 
 const queryCode = readQueryRoomCode();
-if (queryCode !== null) {
+const replayDeepLink = readReplayDeepLink();
+if (queryCode !== null && replayDeepLink === null) {
   roomInput.value = queryCode;
   roomInput.dispatchEvent(new Event("input", { bubbles: true }));
 }
@@ -414,6 +420,9 @@ client.subscribe((state) => {
 
 client.start();
 requestAnimationFrame(renderLoop);
+if (replayDeepLink !== null) {
+  void openSharedReplay(replayDeepLink);
+}
 
 createRoomButton.addEventListener("click", () => {
   client.createRoom();
@@ -583,6 +592,7 @@ replaySeek.addEventListener("input", () => {
 
 replaySeek.addEventListener("change", () => {
   replayScrubbing = false;
+  updateReplayUrl(null);
   updateReplayTransport();
 });
 
@@ -613,17 +623,30 @@ replayChapters.addEventListener("click", (event) => {
   replay.pause(performance.now());
   replayLoopChapterIndex = Number.isInteger(index) ? index : null;
   lastLoopElapsedMs = savedChapters[index]?.timeMs ?? 0;
+  lastReplayElapsedMs = lastLoopElapsedMs;
   replayScrubbing = false;
   savedAudioJumpPending = true;
+  updateReplayUrl(Number.isInteger(index) ? index : null);
   updateReplayTransport();
 });
 
 replayLoopButton.addEventListener("click", () => {
-  replayLoopEnabled = !replayLoopEnabled;
-  if (replayLoopEnabled) {
+  if (replayLoopMode === "off") {
+    replayLoopMode = savedChapters.length >= 2 ? "chapter" : "clip";
+  } else if (replayLoopMode === "chapter") {
+    replayLoopMode = "clip";
+  } else {
+    replayLoopMode = "off";
+  }
+  if (replayLoopMode === "clip") {
     replayLoopChapterIndex = null;
+    updateReplayUrl(null);
   }
   updateReplayTransport();
+});
+
+replayShareButton.addEventListener("click", () => {
+  void shareSavedReplayLink();
 });
 
 document.addEventListener("keydown", (event) => {
@@ -1146,10 +1169,13 @@ function renderLoop(now: number): void {
   lastLoopAt = now;
 
   if (replay.active) {
-    const sample = replay.sample(now);
+    const sample = replay.sample(now, replayLoopMode === "clip");
     if (sample === null) {
       stopReplay();
     } else {
+      if (sample.wrapped) {
+        savedAudioJumpPending = true;
+      }
       renderer.render(sample.view);
       hideCameraIndicators();
       replayBanner.hidden = false;
@@ -1408,9 +1434,15 @@ let savedAudioIndex = -1;
 let savedAudioJumpPending = false;
 let savedChapters: readonly ReplayChapter[] = [];
 let savedChapterViews: readonly (MatchView | null)[] = [];
-let replayLoopEnabled = false;
+type ReplayLoopMode = "off" | "chapter" | "clip";
+let replayLoopMode: ReplayLoopMode = "off";
 let replayLoopChapterIndex: number | null = null;
 let lastLoopElapsedMs = 0;
+let lastReplayElapsedMs = 0;
+let savedReplayRef: {
+  readonly roomCode: string;
+  readonly clipId: string;
+} | null = null;
 
 function openReplayLibrary(): void {
   if (!replayLibraryDialog.open) {
@@ -1548,7 +1580,125 @@ async function watchSavedReplay(
   }
 }
 
-function playSavedReplay(replayExport: WireReplayExport): void {
+function currentSharedChapterIndex(): number | null {
+  if (savedChapters.length === 0) {
+    return null;
+  }
+  const index =
+    replayLoopChapterIndex ??
+    chapterIndexAt(savedChapters, lastReplayElapsedMs);
+  return index >= 0 && index < savedChapters.length ? index : null;
+}
+
+function replayShareUrl(chapterIndex: number | null): string | null {
+  if (savedReplayRef === null) {
+    return null;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.delete("room");
+  url.searchParams.set(
+    "replay",
+    `${savedReplayRef.roomCode}/${savedReplayRef.clipId}`,
+  );
+  if (chapterIndex === null) {
+    url.searchParams.delete("chapter");
+  } else {
+    url.searchParams.set("chapter", String(chapterIndex));
+  }
+  return url.href;
+}
+
+function updateReplayUrl(chapterIndex: number | null): void {
+  const url = replayShareUrl(chapterIndex);
+  if (url !== null) {
+    window.history.replaceState(null, "", url);
+  }
+}
+
+function clearReplayUrl(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("replay");
+  url.searchParams.delete("chapter");
+  window.history.replaceState(
+    null,
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
+async function shareSavedReplayLink(): Promise<void> {
+  const chapterIndex =
+    replayLoopMode === "clip" ? null : currentSharedChapterIndex();
+  const url = replayShareUrl(chapterIndex);
+  if (url === null) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast("Replay link copied");
+  } catch {
+    showToast(url);
+  }
+}
+
+function readReplayDeepLink(): {
+  readonly roomCode: string;
+  readonly clipId: string;
+  readonly chapterIndex: number | null;
+} | null {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("replay");
+  if (raw === null) {
+    return null;
+  }
+  const match = /^([A-Za-z]{4})\/([a-z0-9][a-z0-9-]{0,63})$/.exec(raw);
+  if (match === null) {
+    return null;
+  }
+  const roomCode = match[1]?.toUpperCase();
+  const clipId = match[2];
+  if (roomCode === undefined || clipId === undefined) {
+    return null;
+  }
+  const chapterRaw = params.get("chapter");
+  const chapter = chapterRaw === null ? Number.NaN : Number(chapterRaw);
+  return {
+    roomCode,
+    clipId,
+    chapterIndex:
+      Number.isInteger(chapter) && chapter >= 0 ? chapter : null,
+  };
+}
+
+async function openSharedReplay(
+  link: NonNullable<ReturnType<typeof readReplayDeepLink>>,
+): Promise<void> {
+  try {
+    const response = await fetch(
+      `/api/replay/${link.roomCode}/${link.clipId}.json`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw new Error(`Replay download returned ${response.status}`);
+    }
+    const replayExport = parseReplayExport(await response.json());
+    if (replayExport === null) {
+      throw new Error("Replay payload is invalid");
+    }
+    playSavedReplay(replayExport, link.chapterIndex);
+  } catch (error) {
+    console.error(
+      "Shared replay failed",
+      error instanceof Error ? error.message : String(error),
+    );
+    showToast("Shared replay could not be loaded");
+  }
+}
+
+function playSavedReplay(
+  replayExport: WireReplayExport,
+  startChapterIndex: number | null = null,
+): void {
   const viewBuilder = new WireViewBuilder(replayExport.setup, null);
   const intervalMs =
     1_000 / Math.max(1, replayExport.setup.snapshotHz);
@@ -1576,19 +1726,38 @@ function playSavedReplay(replayExport: WireReplayExport): void {
   }
   savedChapters = buildReplayChapters(replayExport.frames, intervalMs);
   savedChapterViews = frameViews;
-  replayLoopChapterIndex = null;
-  lastLoopElapsedMs = 0;
-  renderReplayChapters();
   savedReplayActive = true;
+  savedReplayRef = {
+    roomCode: replayExport.code,
+    clipId: replayExport.id,
+  };
   savedReplayFrames = replayExport.frames;
   savedReplayIntervalMs = intervalMs;
+  replayLoopMode = "off";
+  replayLoopChapterIndex = null;
+  lastLoopElapsedMs = 0;
+  lastReplayElapsedMs = 0;
+  let selectedChapter: number | null = null;
+  if (startChapterIndex !== null) {
+    const chapter = savedChapters[startChapterIndex];
+    if (chapter !== undefined) {
+      replay.seek(chapter.progress, performance.now());
+      replay.pause(performance.now());
+      replayLoopChapterIndex = startChapterIndex;
+      lastLoopElapsedMs = chapter.timeMs;
+      lastReplayElapsedMs = chapter.timeMs;
+      selectedChapter = startChapterIndex;
+    }
+  }
+  renderReplayChapters();
   savedAudioIndex = 0;
-  savedAudioJumpPending = false;
+  savedAudioJumpPending = selectedChapter !== null;
   audio.reset();
   const firstFrame = replayExport.frames[0];
   if (firstFrame !== undefined) {
     audio.prime(firstFrame);
   }
+  updateReplayUrl(selectedChapter);
   replayLibraryDialog.close();
   showMatch();
   document.body.dataset.savedReplay = "true";
@@ -2369,7 +2538,7 @@ function toggleReplay(source: ReplaySource = "goal"): void {
 function driveChapterLoop(sample: ReplaySample): void {
   if (
     !savedReplayActive ||
-    !replayLoopEnabled ||
+    replayLoopMode !== "chapter" ||
     savedChapters.length < 2 ||
     sample.paused
   ) {
@@ -2447,7 +2616,12 @@ function stopReplay(): void {
   savedChapterViews = [];
   replayLoopChapterIndex = null;
   lastLoopElapsedMs = 0;
-  replayLoopEnabled = false;
+  lastReplayElapsedMs = 0;
+  replayLoopMode = "off";
+  if (wasSaved) {
+    savedReplayRef = null;
+    clearReplayUrl();
+  }
   renderReplayChapters();
   audio.reset();
   if (wasSaved) {
@@ -2459,6 +2633,51 @@ function stopReplay(): void {
   updateReplayButtons();
   updateReplayCameraButtons();
   updateCameraControl();
+}
+
+function renderReplayTimelineMarkers(): void {
+  replayTimelineMarkers.replaceChildren(
+    ...savedChapters.map((chapter) => {
+      const marker = document.createElement("span");
+      marker.className =
+        `replay-timeline-marker replay-timeline-marker--${chapter.kind}`;
+      marker.style.left = `${chapter.progress * 100}%`;
+      marker.title = chapter.label;
+      return marker;
+    }),
+  );
+}
+
+function updateReplayLoopRange(sample?: ReplaySample | null): void {
+  let range: { readonly start: number; readonly end: number } | null =
+    null;
+  if (replay.active && replayLoopMode === "clip") {
+    range = { start: 0, end: 1 };
+  } else if (
+    replay.active &&
+    replayLoopMode === "chapter" &&
+    sample !== undefined &&
+    sample !== null
+  ) {
+    const index =
+      replayLoopChapterIndex ??
+      chapterIndexAt(savedChapters, sample.elapsedMs);
+    const chapter = savedChapters[index];
+    if (chapter !== undefined) {
+      const next = savedChapters[index + 1];
+      range = {
+        start: chapter.progress,
+        end: next?.progress ?? 1,
+      };
+    }
+  }
+  if (range === null || range.end <= range.start) {
+    replayLoopRange.hidden = true;
+    return;
+  }
+  replayLoopRange.hidden = false;
+  replayLoopRange.style.left = `${range.start * 100}%`;
+  replayLoopRange.style.width = `${(range.end - range.start) * 100}%`;
 }
 
 function renderReplayChapters(): void {
@@ -2484,6 +2703,7 @@ function renderReplayChapters(): void {
     }),
   );
   replayChapters.hidden = savedChapters.length === 0;
+  renderReplayTimelineMarkers();
   updateReplayTransport();
 }
 
@@ -2503,9 +2723,22 @@ function updateReplayTransport(sample?: ReplaySample | null): void {
   replayStepForwardButton.disabled = !active;
   replaySeek.disabled = !active;
   replaySpeedSelect.disabled = !active;
-  replayLoopButton.disabled = !active || savedChapters.length < 2;
-  replayLoopButton.setAttribute("aria-pressed", String(replayLoopEnabled));
-  replayLoopButton.textContent = replayLoopEnabled ? "Looping" : "Loop";
+  replayLoopButton.disabled = !active;
+  replayLoopButton.setAttribute(
+    "aria-pressed",
+    String(replayLoopMode !== "off"),
+  );
+  replayLoopButton.textContent =
+    replayLoopMode === "chapter"
+      ? "Loop chapter"
+      : replayLoopMode === "clip"
+        ? "Loop clip"
+        : "Loop";
+  replayLoopButton.title =
+    "Cycle loop: off, chapter range, whole clip";
+  replayShareButton.hidden = !savedReplayActive;
+  replayShareButton.disabled = !savedReplayActive;
+  replayShareButton.title = "Copy a link to this clip at the current chapter";
   const chapterButtons = replayChapters.querySelectorAll("button");
   chapterButtons.forEach((button, index) => {
     button.disabled = !active;
@@ -2521,6 +2754,10 @@ function updateReplayTransport(sample?: ReplaySample | null): void {
     }
   });
   replayPauseButton.textContent = replay.paused ? "Resume" : "Pause";
+  if (sample !== undefined && sample !== null) {
+    lastReplayElapsedMs = sample.elapsedMs;
+  }
+  updateReplayLoopRange(sample);
   if (!active) {
     replaySeek.value = "0";
     replaySeek.setAttribute("aria-valuetext", "0:00");
@@ -2691,6 +2928,7 @@ function showLobby(): void {
 function maybeAutoJoin(state: GameClientState): void {
   if (
     autoJoinAttempted ||
+    replayDeepLink !== null ||
     queryCode === null ||
     state.status !== "online" ||
     state.lobby === null ||
