@@ -36,7 +36,7 @@ function clip(id: string, scoreHome = 1): StoredReplayClip {
     kind: "goal",
     scoreHome,
     scoreAway: 0,
-    clockSeconds: 1_440,
+    clockSeconds: 51.5,
     half: 1,
     createdAtMs: 5_000,
     setup: { matchId: "match-1" } as unknown as MatchSetupWire,
@@ -62,7 +62,7 @@ describe("replay store", () => {
             kind: "goal",
             scoreHome: 1,
             scoreAway: 0,
-            clockSeconds: 1_440,
+            clockSeconds: 51.5,
             half: 1,
             createdAtMs: 5_000,
             frameCount: 0,
@@ -78,7 +78,7 @@ describe("replay store", () => {
     expect(reopened.getClip("ABCD", "g1")).toMatchObject({
       id: "g1",
       scoreHome: 1,
-      clockSeconds: 1_440,
+      clockSeconds: 51.5,
       half: 1,
     });
     expect(reopened.getClip("ABCD", "missing")).toBeNull();

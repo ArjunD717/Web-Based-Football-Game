@@ -501,7 +501,7 @@ describe("M10 match management messages", () => {
           kind: "goal" as const,
           scoreHome: 2,
           scoreAway: 1,
-          clockSeconds: 1_440,
+          clockSeconds: 51.5,
           half: 1 as const,
           createdAtMs: 1234,
           frameCount: 135,

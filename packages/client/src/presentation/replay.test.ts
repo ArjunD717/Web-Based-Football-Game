@@ -79,6 +79,26 @@ describe("match replay buffer", () => {
     expect(replay.sample(4_999)?.view.tick).toBe(3);
   });
 
+  it("plays a saved clip with synthetic timestamps", () => {
+    const replay = new MatchReplayBuffer({ speed: 1 });
+    expect(replay.loadSaved([])).toBe(false);
+    expect(
+      replay.loadSaved([
+        { view: view(10), recordedAtMs: 0 },
+        { view: view(11), recordedAtMs: 1_000 },
+        { view: view(12), recordedAtMs: 2_000 },
+      ]),
+    ).toBe(true);
+    expect(replay.hasSavedClip).toBe(true);
+    expect(replay.startSaved(5_000)).toBe(true);
+    expect(replay.sample(6_000)).toMatchObject({
+      progress: 0.5,
+      durationMs: 2_000,
+      view: { tick: 11 },
+    });
+    expect(replay.sample(7_001)).toBeNull();
+  });
+
   it("keeps the shorter goal clip available after a full replay", () => {
     const replay = new MatchReplayBuffer({
       captureMs: 10_000,

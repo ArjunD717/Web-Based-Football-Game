@@ -5,6 +5,7 @@ import {
   buildReplayGalleryItems,
   formatGoalMinute,
   formatHalf,
+  parseReplayExport,
   parseReplayLibrary,
 } from "./replay-gallery";
 
@@ -66,6 +67,70 @@ describe("replay gallery", () => {
         ],
       })?.rooms[0]?.clips,
     ).toHaveLength(1);
+  });
+
+  it("accepts a valid downloaded replay and rejects bad setups", () => {
+    const players = (side: "home" | "away") =>
+      Array.from({ length: 11 }, (_, index) => ({
+        id: `${side}:${index}`,
+        name: `${side} ${index + 1}`,
+        number: index + 1,
+        goalkeeper: index === 0,
+      }));
+    const setup = {
+      matchId: "match-1",
+      seed: 42,
+      tickHz: 60,
+      snapshotHz: 30,
+      pitch: {
+        lengthM: 105,
+        widthM: 68,
+        goalWidthM: 7.32,
+        goalHeightM: 2.44,
+        goalPostRadiusM: 0.06,
+        goalNetDepthM: 1.8,
+        penaltyAreaLengthM: 16.5,
+        penaltyAreaWidthM: 40.32,
+        goalAreaLengthM: 5.5,
+        goalAreaWidthM: 18.32,
+        penaltySpotDistanceM: 11,
+        penaltyArcRadiusM: 9.15,
+        cornerArcRadiusM: 1,
+      },
+      home: {
+        side: "home",
+        name: "Home",
+        colors: { primary: "#111", secondary: "#eee", keeper: "#fc0" },
+        players: players("home"),
+        bench: [],
+      },
+      away: {
+        side: "away",
+        name: "Away",
+        colors: { primary: "#222", secondary: "#ccc", keeper: "#0cf" },
+        players: players("away"),
+        bench: [],
+      },
+    };
+    const frame = {
+      players: Array.from({ length: 22 }, () => ({})),
+      match: {},
+    };
+    const value = {
+      ...clip("g1", 51.5, 1),
+      frameCount: 2,
+      code: "ABCD",
+      generatedAtMs: 2_000,
+      setup,
+      frames: [frame, frame],
+    };
+    expect(parseReplayExport(value)).toMatchObject({
+      code: "ABCD",
+      id: "g1",
+      frames: [frame, frame],
+    });
+    expect(parseReplayExport({ ...value, setup: null })).toBeNull();
+    expect(parseReplayExport({ ...value, frames: [] })).toBeNull();
   });
 
   it("formats match minutes and extra time", () => {
