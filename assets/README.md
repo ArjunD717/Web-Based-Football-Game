@@ -12,7 +12,9 @@ number 9. It is a self-contained glTF 2.0 binary with embedded WebP textures.
 | Triangles | 19,358 | 7,385 |
 | Meshes | 16 | 10 |
 | Bones | 53 | 53 |
-| Size | 1.4 MB | 0.93 MB |
+| Animation clips | 15 | 15 |
+| Animated bones per clip | 14 | 14 |
+| Size | 1.6 MB | 1.11 MB |
 | Unit scale | metres | metres |
 | Forward / up | `+Z` / `+Y` | `+Z` / `+Y` |
 | Skin influences | 4 per vertex | 4 per vertex |
@@ -39,8 +41,9 @@ pnpm character:build
 
 The command regenerates the support textures, rebuilds both the high-detail GLB
 and the decimated match LOD from the MakeHuman base, and copies both into the
-Vite public directory. Both GLBs embed WebP images at quality 90. It looks
-for Blender on `PATH` and in the Windows Program Files locations. Override the
+Vite public directory. Both GLBs embed WebP images at quality 90 and carry the
+fifteen M18 animation clips. It looks for Blender on `PATH` and in the Windows
+Program Files locations. Override the
 executables when needed:
 
 ```bash
@@ -78,9 +81,10 @@ fingers). The viewer's pose module addresses the large joints only.
 This is a clean first character pass, not a scanned likeness or a final
 animation library:
 
-- The body is a static A-pose skinned mesh; there is no authored animation set,
-  facial rig, blend shapes or per-foot inverse kinematics. The match renderer
-  applies procedural poses and root-level foot planting.
+- The body is an A-pose skinned mesh; the fifteen clips are baked from the
+  procedural pose model rather than hand-authored by an animator. There is no
+  facial rig, blend shapes or per-foot inverse kinematics; the match renderer
+  applies root-level foot planting.
 - The eye decal is a conforming painted surface, not modelled cornea/iris
   geometry; the eyelids and face are from the MakeHuman base.
 - Garments derive from the body surface and are thickened with a solidify

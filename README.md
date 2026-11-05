@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 17**:
+both devices are thin clients. This repository is at **Milestone 18**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -18,7 +18,8 @@ that authored rig into the Three.js match renderer through a decimated match
 LOD, team palettes and a procedural bone-animation layer. M16 adds root-level
 foot planting and deterministic per-player skin and boot colours. M17 delivers
 the authored asset as WebP textures and warms the parsed template from the
-lobby.
+lobby. M18 bakes the tested pose model into fifteen glTF animation clips and
+plays them through a per-player mixer.
 
 ## Requirements
 
@@ -153,6 +154,50 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 18 scope
+
+Implemented:
+
+- Fifteen clips cover every `PlayerStateName`. A build-time baker samples the
+  tested `computeCharacterPose` model at **30 Hz** and writes explicit bone
+  tracks; it is not a second hand-written animation system. The generated
+  clips contain **14 animated bones** each and a total of **500 samples**
+- The GLBs now carry real glTF animations: `idle`, `jog`, `sprint`, `dribble`,
+  `pass`, `shoot`, `header`, `volley`, `tackle`, `slide`, `fall`, `injured`,
+  `celebrate`, `diveLeft` and `diveRight`. Clips are exported with linear
+  keyframes, action names preserved, per-action timing and animation
+  optimization enabled
+- Each authored rig owns an `AnimationMixer`. Locomotion loops; one-shot states
+  use `LoopOnce` with clamping. State changes cross-fade over **0.14 s**, loop
+  phases are offset by shirt number so 22 players do not move in lockstep, and
+  low stamina uses a **0.86–1.0** action time scale
+- The existing procedural pose path remains the fallback when the asset has no
+  clips or a clip is missing. Root lift/body tilt, foot planting and the team
+  palette still come from the presentation layer; the simulation is untouched
+- Animation clips add **0.18 MB** to the match GLB: the WebP asset is now
+  **1.11 MB** for the match LOD and **1.6 MB** for the high-detail lab asset.
+  The build wrapper still verifies both outputs
+- `pnpm check` passes **626 tests**, including clip-plan coverage of every
+  state, positive durations and explicit loop flags. `pnpm build` passes. A
+  three-player close-range smoke test exercised locomotion and the
+  `pass`, `shoot`, `header`, `tackle`, `slide`, `diveLeft` and `celebrate`
+  clips without a T-pose or binding error
+- No simulation, protocol, input or camera code changed
+
+Known M18 limitations (by design):
+
+- Clip content is baked from the procedural pose model, not hand-authored by an
+  animator. It has authored timing and asset-level clips, but no bespoke
+  contact poses or hand-keyed follow-through
+- The mixer preserves stamina through time scale, not stride amplitude; the
+  baked poses use full-stamina amplitude
+- There is still no per-foot two-bone IK. Foot planting remains a root
+  correction, so foot sliding and extreme foot heights are still possible
+- Clip durations are rounded to 30 Hz samples, so a planned 0.9 s one-shot is
+  approximately 0.933 s in the GLB
+- No distance LODs, real shadow pass, KTX2/Basis or meshopt/Draco compression
+  yet
+
 ## Milestone 17 scope
 
 Implemented:
@@ -178,8 +223,9 @@ Implemented:
   and keeps the **1 MB** floor for the high-detail asset
 - `pnpm character:build` reproduces both files; `pnpm check` passes all **623
   tests**; `pnpm build` copies the compressed assets into `dist/characters/`
-- A DevTools network check shows one **949,060-byte**
-  `player-01-match.glb?v=20261105-7` request from the lobby, before match entry
+- A DevTools network check at M17 measured one **949,060-byte**
+  `player-01-match.glb?v=20261105-7` request from the lobby, before match entry.
+  M18 adds clips, so the current request is **1,111,424 bytes** at `v=8`
 
 Known M17 limitations (by design):
 
@@ -191,7 +237,7 @@ Known M17 limitations (by design):
   silently keeps the procedural fallback
 - The parsed template is retained for the app lifetime; there is no eviction
   when returning to the lobby
-- The high-detail lab asset remains a separate **1.4 MB** download
+- The high-detail lab asset remains a separate **1.6 MB** download (including clips)
 
 ## Milestone 16 scope
 
@@ -248,8 +294,8 @@ Implemented:
 
 - The Three.js match renderer now loads the authored player as a second,
   decimated match LOD: `player-01-match.glb` is **7,385 triangles**, **10
-  meshes**, **53 joints** and **0.93 MB** with the same embedded WebP materials
-  and textures as the lab asset. The high-detail 19,358-triangle version remains
+  meshes**, **53 joints** and **1.11 MB** with the same embedded WebP materials
+  and textures as the lab asset; the M18 clip set adds the animation payload. The high-detail 19,358-triangle version remains
   the character-lab source
 - `AuthoredPlayerLibrary` loads the GLB once, clones players with
   `SkeletonUtils`, shares geometry and textures, and builds team/keeper palettes
@@ -298,7 +344,7 @@ Known M15 limitations (by design):
 - Low quality falls back to the procedural rigs even though the authored LOD is
   already loaded. There is no per-player distance LOD or streaming; all authored
   players use the same match LOD
-- The match GLB is WebP-textured at 0.93 MB since M17. It is not KTX2/Basis,
+- The match GLB is WebP-textured at 1.11 MB after the M18 clips. It is not KTX2/Basis,
   Draco or meshopt compressed, and distance LODs and real player shadows remain
   future work
 - The authored rig is not used by the Canvas 2D renderer, replays that switch to
@@ -356,7 +402,7 @@ Known M14 limitations (by design):
   or rib texture
 - The eye is a painted decal rather than modelled cornea/iris geometry. At
   extreme close range its flatness is visible
-- Textures are embedded WebPs in a 1.4 MB GLB since M17. They are not yet
+- Textures are embedded WebPs in a 1.6 MB GLB after the M18 clips. They are not yet
   KTX2/Basis or meshopt/Draco compressed. M15 adds a separate geometry match
   LOD, but both LODs still embed the same maps
 - The high-detail asset is not itself used by the match renderer; M15 uses the
@@ -1348,13 +1394,19 @@ The two-minute match check:
     quality and back; procedural fallback and authored rigs must not retain
     stale foot offsets.
 21. Clear the browser cache, open DevTools Network and load the lobby. Before
-    creating a room, exactly one `player-01-match.glb?v=20261105-7` request
-    should start and complete at roughly **0.93 MB**. Join a match: authored
+    creating a room, exactly one `player-01-match.glb?v=20261105-8` request
+    should start and complete at roughly **1.11 MB**. Join a match: authored
     players should appear without a procedural fallback frame and no second
     GLB request should be made. Open `character.html` and confirm the
-    high-detail lab still renders from its **1.4 MB** WebP GLB. Run
+    high-detail lab still renders from its **1.6 MB** WebP GLB. Run
     `pnpm character:build` and confirm both outputs remain above the build
     floors.
+22. In a live match, verify the authored rigs play through idle/jog/sprint
+    cycles, then trigger pass, shot, header, volley, tackle, slide, dive, fall,
+    injury and celebration. One-shot states must clamp instead of snapping to
+    T-pose; transitions must cross-fade. Repeat at low stamina and confirm the
+    cycles slow without losing their poses. Switch to low quality to confirm
+    the procedural fallback, then back to high.
 
 ## Layout
 
