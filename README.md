@@ -889,8 +889,11 @@ Not implemented yet (by milestone design):
   the final whistle; timeline ticks mark those chapters, and **Loop** cycles
   chapter-range, whole-clip and off modes. **Share** copies a
   `?replay=<CODE>/<CLIP>&chapter=<N>` link that reopens the saved clip at that
-  chapter after the lobby has closed. Match events drive the procedural whistle
-  and goal audio during playback. Playback works
+  chapter after the lobby has closed. The library's **Queue** buttons build a
+  review queue; **Start review** plays the selected clips in order and
+  auto-advances at each clip end while carrying speed, loop mode and the chosen
+  chapter index. Match events drive the procedural whistle and goal audio during
+  playback. Playback works
   after the room has closed. No auth is applied beyond the private-LAN trust
   boundary.
 - The client renders 100 ms behind arrival to absorb 30 Hz spacing and LAN jitter.
@@ -1079,8 +1082,12 @@ The two-minute match check:
     select a chapter and resume: playback must return to it at the next chapter.
     Press **Loop** again for whole-clip looping and verify it wraps at the end.
     Press **Share**, open the copied URL in a new tab, and verify the saved clip
-    opens paused at the shared chapter. Confirm the whistle/goal audio tracks the
-    event sequence without replaying missed events after a seek. **Back to library**
+    opens paused at the shared chapter. In the library, press **Queue** on two
+    clips, then **Start review**. Confirm the title shows `Clip 1/2`, each clip
+    advances automatically, the chosen chapter index and loop button state carry
+    into the next clip, and the library returns with **Review complete** after
+    the last clip. Confirm the whistle/goal audio tracks the event sequence
+    without replaying missed events after a seek. **Back to library**
     must return to the saved-room list. The in-memory export-window URL must
     404 after room closure.
     Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
