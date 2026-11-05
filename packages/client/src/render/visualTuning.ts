@@ -78,6 +78,11 @@ export interface VisualTuning {
       /** Intended ankle lift for states that keep a foot on the pitch. */
       readonly groundLiftM: Partial<Record<PlayerStateName, number>>;
     };
+    readonly appearance: {
+      /** Skin tones are multipliers over the authored pore/vertex map. */
+      readonly skinTones: readonly string[];
+      readonly bootColors: readonly string[];
+    };
   };
   readonly crowd: {
     /** Stand distance outside the touchlines / goal lines. */
@@ -136,6 +141,17 @@ export const VISUAL_TUNING: VisualTuning = {
         volley: 0.008,
         tackle: 0,
       },
+    },
+    appearance: {
+      skinTones: [
+        "#f0c8a8",
+        "#d9a477",
+        "#b77b52",
+        "#8d5b3a",
+        "#633d28",
+        "#412617",
+      ],
+      bootColors: ["#f2efe4", "#111715", "#d52632", "#1d4ed8", "#e3b341"],
     },
   },
   crowd: {

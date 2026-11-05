@@ -5,6 +5,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import type { Pitch } from "@fb/sim";
 import { PLAYER_MATCH_ASSET_URL } from "../character/asset";
+import { appearanceFor } from "./character-appearance";
 import { computeCharacterPose } from "./character-animation";
 import {
   footPlantOffset,
@@ -190,6 +191,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly switchRing: THREE.Mesh;
   private readonly marker: THREE.Sprite;
   private readonly card: THREE.Mesh;
+  private readonly ownedMaterials: THREE.Material[] = [];
   private readonly bones = new Map<string, THREE.Bone>();
   private readonly boneRest = new Map<string, THREE.Quaternion>();
   private readonly footBones: THREE.Bone[] = [];
@@ -219,6 +221,23 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     this.root.add(this.visual);
     this.visual.add(this.tilt);
 
+    const appearance = appearanceFor(
+      `${player.team}:${player.id}:${player.number}`,
+    );
+    const materials = new Map(palette.materials);
+    for (const [name, color] of [
+      ["skin", appearance.skin],
+      ["kit_boots", appearance.boots],
+    ] as const) {
+      const source = template.materials.get(name);
+      if (source instanceof THREE.MeshStandardMaterial) {
+        const tinted = source.clone();
+        tinted.color.set(color);
+        this.ownedMaterials.push(tinted);
+        materials.set(name, tinted);
+      }
+    }
+
     const model = cloneSkeleton(template.scene) as THREE.Group;
     model.position.y = template.modelBaseY;
     this.tilt.add(model);
@@ -232,9 +251,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       >;
       mesh.material = Array.isArray(mesh.material)
         ? mesh.material.map(
-            (entry) => palette.materials.get(entry.name) ?? entry,
+            (entry) => materials.get(entry.name) ?? entry,
           )
-        : palette.materials.get(mesh.material.name) ?? mesh.material;
+        : materials.get(mesh.material.name) ?? mesh.material;
       mesh.visible = !HIDDEN_DETAIL_MESH.test(mesh.name);
       // The blob shadow is the authored player's shadow. Casting the full
       // skinned mesh into the 2K shadow map costs more than the main pass.
@@ -465,6 +484,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
 
   dispose(): void {
     disposeObject(this.overlays);
+    for (const material of this.ownedMaterials) {
+      material.dispose();
+    }
   }
 }
 
