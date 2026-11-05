@@ -35,7 +35,7 @@ const publicDir = path.join(repoRoot, "packages", "client", "public", "character
 mkdirSync(publicDir, { recursive: true });
 copyFileSync(source, path.join(publicDir, "player-01.glb"));
 const matchSource = path.join(repoRoot, "assets", "characters", "player-01-match.glb");
-if (!existsSync(matchSource) || statSync(matchSource).size < 1_000_000) {
+if (!existsSync(matchSource) || statSync(matchSource).size < 500_000) {
   fail(`Blender did not produce a usable match LOD at ${matchSource}`);
 }
 copyFileSync(matchSource, path.join(publicDir, "player-01-match.glb"));

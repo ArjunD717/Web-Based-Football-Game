@@ -742,6 +742,8 @@ def build() -> None:
         export_normals=True,
         export_materials="EXPORT",
         export_extras=True,
+        export_image_format="WEBP",
+        export_image_quality=90,
     )
 
     tris = 0
@@ -816,6 +818,8 @@ def export_match_lod() -> None:
         export_normals=True,
         export_materials="EXPORT",
         export_extras=True,
+        export_image_format="WEBP",
+        export_image_quality=90,
     )
     match_tris = 0
     for obj in bpy.data.objects:
