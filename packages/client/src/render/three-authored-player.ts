@@ -6,6 +6,10 @@ import type { Pitch } from "@fb/sim";
 import { appearanceFor } from "./character-appearance";
 import { computeCharacterPose } from "./character-animation";
 import {
+  AUTHORED_CLIP_PLAN,
+  clipSpecFor,
+} from "./character-clip-plan";
+import {
   loadAuthoredTemplate,
   type AuthoredTemplate,
 } from "./authored-asset";
@@ -152,6 +156,15 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly footWorld = new THREE.Vector3();
   private restAnkleY = Number.POSITIVE_INFINITY;
   private groundOffset = 0;
+  private readonly mixer: THREE.AnimationMixer | null;
+  private readonly useClips: boolean;
+  private readonly clipActions = new Map<
+    RenderPlayer["state"],
+    THREE.AnimationAction
+  >();
+  private activeClipState: RenderPlayer["state"] | null = null;
+  private activeClipAction: THREE.AnimationAction | null = null;
+  private readonly clipPhaseOffset: number;
   private readonly workingQuaternion = new THREE.Quaternion();
   private readonly deltaQuaternion = new THREE.Quaternion();
   private readonly workingEuler = new THREE.Euler();
@@ -238,6 +251,30 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
           return foot.getWorldPosition(this.footWorld).y - rootY;
         }),
       );
+    }
+
+    this.useClips =
+      template.clips.size > 0 &&
+      AUTHORED_CLIP_PLAN.every((spec) => template.clips.has(spec.state));
+    if (this.useClips) {
+      this.mixer = new THREE.AnimationMixer(model);
+      for (const spec of AUTHORED_CLIP_PLAN) {
+        const clip = template.clips.get(spec.state);
+        if (clip === undefined) {
+          continue;
+        }
+        const action = this.mixer.clipAction(clip);
+        action.setLoop(
+          spec.loop ? THREE.LoopRepeat : THREE.LoopOnce,
+          spec.loop ? Number.POSITIVE_INFINITY : 1,
+        );
+        action.clampWhenFinished = !spec.loop;
+        this.clipActions.set(spec.state, action);
+      }
+      this.clipPhaseOffset = (player.number * 0.173) % 1;
+    } else {
+      this.mixer = null;
+      this.clipPhaseOffset = 0;
     }
 
     this.shadow = new THREE.Mesh(
@@ -354,24 +391,34 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       player.stamina,
       stateAge,
     );
-    const blend =
-      deltaSeconds === 0
-        ? 1
-        : 1 - Math.exp(-deltaSeconds * VISUAL_TUNING.authoredPlayer.poseBlendRate);
-
-    for (const [name, rest] of this.boneRest) {
-      const bone = this.bones.get(name);
-      if (bone === undefined) {
-        continue;
+    const clipped = this.updateClipPose(
+      player.state,
+      stateAge,
+      deltaSeconds,
+      rewound,
+      player.stamina,
+    );
+    if (!clipped) {
+      const blend =
+        deltaSeconds === 0
+          ? 1
+          : 1 - Math.exp(
+              -deltaSeconds * VISUAL_TUNING.authoredPlayer.poseBlendRate,
+            );
+      for (const [name, rest] of this.boneRest) {
+        const bone = this.bones.get(name);
+        if (bone === undefined) {
+          continue;
+        }
+        const rotation = target.rotations[name];
+        this.workingQuaternion.copy(rest);
+        if (rotation !== undefined) {
+          this.workingEuler.set(rotation.x, rotation.y, rotation.z, "XYZ");
+          this.deltaQuaternion.setFromEuler(this.workingEuler);
+          this.workingQuaternion.multiply(this.deltaQuaternion);
+        }
+        bone.quaternion.slerp(this.workingQuaternion, blend);
       }
-      const rotation = target.rotations[name];
-      this.workingQuaternion.copy(rest);
-      if (rotation !== undefined) {
-        this.workingEuler.set(rotation.x, rotation.y, rotation.z, "XYZ");
-        this.deltaQuaternion.setFromEuler(this.workingEuler);
-        this.workingQuaternion.multiply(this.deltaQuaternion);
-      }
-      bone.quaternion.slerp(this.workingQuaternion, blend);
     }
 
     const groundLift = groundedLiftFor(player.state);
@@ -435,7 +482,60 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     );
   }
 
+  private updateClipPose(
+    state: RenderPlayer["state"],
+    stateAgeSeconds: number,
+    deltaSeconds: number,
+    rewound: boolean,
+    stamina: number,
+  ): boolean {
+    const mixer = this.mixer;
+    const spec = clipSpecFor(state);
+    const action = this.clipActions.get(state);
+    if (mixer === null || spec === undefined || action === undefined) {
+      return false;
+    }
+    if (rewound) {
+      mixer.stopAllAction();
+      this.activeClipState = null;
+      this.activeClipAction = null;
+    }
+    if (state !== this.activeClipState) {
+      const previous = this.activeClipAction;
+      action.reset();
+      action.enabled = true;
+      action.setEffectiveWeight(1);
+      action.setEffectiveTimeScale(1);
+      action.play();
+      if (previous !== null && previous !== action && deltaSeconds > 0) {
+        action.crossFadeFrom(
+          previous,
+          VISUAL_TUNING.authoredPlayer.clipFadeSeconds,
+          false,
+        );
+      } else if (previous !== null && previous !== action) {
+        previous.stop();
+      }
+      this.activeClipState = state;
+      this.activeClipAction = action;
+      const duration = Math.max(0.001, action.getClip().duration);
+      action.time = spec.loop
+        ? (stateAgeSeconds + this.clipPhaseOffset) % duration
+        : Math.min(stateAgeSeconds, duration);
+    }
+    action.setEffectiveTimeScale(
+      VISUAL_TUNING.authoredPlayer.clipStaminaTimeScaleMin +
+        (1 - VISUAL_TUNING.authoredPlayer.clipStaminaTimeScaleMin) *
+          Math.max(0, Math.min(1, stamina)),
+    );
+    mixer.update(Math.max(0, deltaSeconds));
+    return true;
+  }
+
   dispose(): void {
+    this.mixer?.stopAllAction();
+    this.clipActions.clear();
+    this.activeClipAction = null;
     disposeObject(this.overlays);
     for (const material of this.ownedMaterials) {
       material.dispose();

@@ -8,6 +8,7 @@ export interface AuthoredTemplate {
   readonly scene: THREE.Group;
   readonly materials: ReadonlyMap<string, THREE.Material>;
   readonly modelBaseY: number;
+  readonly clips: ReadonlyMap<string, THREE.AnimationClip>;
 }
 
 let templatePromise: Promise<AuthoredTemplate | null> | null = null;
@@ -58,6 +59,7 @@ export function loadAuthoredTemplate(): Promise<AuthoredTemplate | null> {
         scene,
         materials,
         modelBaseY: -bounds.min.y,
+        clips: new Map(gltf.animations.map((clip) => [clip.name, clip])),
       };
       return template;
     })
