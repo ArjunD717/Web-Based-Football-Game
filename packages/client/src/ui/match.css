@@ -867,6 +867,18 @@ body[data-saved-replay] .replay-banner {
   padding: 0.25rem 0.55rem;
 }
 
+.replay-seek {
+  width: clamp(5rem, 13vw, 11rem);
+  min-width: 4rem;
+  accent-color: var(--ui-orange);
+  cursor: pointer;
+}
+
+.replay-seek:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .replay-angles {
   display: flex;
   align-items: center;

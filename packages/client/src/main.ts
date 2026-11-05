@@ -80,7 +80,10 @@ import {
 } from "./match/replay-gallery";
 import { MatchAudio } from "./audio/match-audio";
 import { MatchHaptics } from "./input/haptics";
-import { MatchReplayBuffer } from "./presentation/replay";
+import {
+  MatchReplayBuffer,
+  type ReplaySample,
+} from "./presentation/replay";
 import {
   renderMatchStatsScreen,
   type MatchStatsViewRow,
@@ -206,6 +209,12 @@ const replayLastButton =
 const replayStopButton = byId<HTMLButtonElement>("replay-stop");
 const replayBanner = byId<HTMLElement>("replay-banner");
 const replayProgress = byId<HTMLElement>("replay-progress");
+const replaySeek = byId<HTMLInputElement>("replay-seek");
+const replayPauseButton = byId<HTMLButtonElement>("replay-pause");
+const replayStepBackButton =
+  byId<HTMLButtonElement>("replay-step-back");
+const replayStepForwardButton =
+  byId<HTMLButtonElement>("replay-step-forward");
 const replayAngles = byId<HTMLElement>("replay-angles");
 const replayCameraButtons = [
   ...document.querySelectorAll<HTMLButtonElement>("[data-replay-camera]"),
@@ -516,6 +525,74 @@ replayButton.addEventListener("click", () => {
 
 replayLastButton.addEventListener("click", () => {
   toggleReplay("capture");
+});
+
+let replayScrubbing = false;
+
+replayPauseButton.addEventListener("click", () => {
+  if (!replay.active) {
+    return;
+  }
+  replay.togglePaused(performance.now());
+  updateReplayTransport();
+});
+
+replayStepBackButton.addEventListener("click", () => {
+  if (replay.stepFrame(-1, performance.now())) {
+    savedAudioJumpPending = true;
+    updateReplayTransport();
+  }
+});
+
+replayStepForwardButton.addEventListener("click", () => {
+  if (replay.stepFrame(1, performance.now())) {
+    savedAudioJumpPending = true;
+    updateReplayTransport();
+  }
+});
+
+replaySeek.addEventListener("input", () => {
+  if (!replay.active) {
+    return;
+  }
+  replayScrubbing = true;
+  replay.seek(Number(replaySeek.value) / 1_000, performance.now());
+  savedAudioJumpPending = true;
+  updateReplayTransport();
+});
+
+replaySeek.addEventListener("change", () => {
+  replayScrubbing = false;
+  updateReplayTransport();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (!replay.active) {
+    return;
+  }
+  if (
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLButtonElement ||
+    event.target instanceof HTMLSelectElement ||
+    event.target instanceof HTMLTextAreaElement
+  ) {
+    return;
+  }
+  if (event.code === "Space") {
+    event.preventDefault();
+    replay.togglePaused(performance.now());
+    updateReplayTransport();
+  } else if (event.code === "ArrowLeft") {
+    event.preventDefault();
+    replay.stepFrame(-1, performance.now());
+    savedAudioJumpPending = true;
+    updateReplayTransport();
+  } else if (event.code === "ArrowRight") {
+    event.preventDefault();
+    replay.stepFrame(1, performance.now());
+    savedAudioJumpPending = true;
+    updateReplayTransport();
+  }
 });
 
 for (const button of replayCameraButtons) {
@@ -1016,9 +1093,8 @@ function renderLoop(now: number): void {
       renderer.render(sample.view);
       hideCameraIndicators();
       replayBanner.hidden = false;
-      replayProgress.textContent = `${(sample.elapsedMs / 1_000).toFixed(
-        1,
-      )}s / ${(sample.durationMs / 1_000).toFixed(1)}s`;
+      updateReplayTransport(sample);
+      driveSavedReplayAudio(sample);
     }
   } else if (builder !== null) {
     const frame = client.sampleSnapshot(now);
@@ -1265,6 +1341,10 @@ function renderReplayGallery(
 
 let replayLibraryRequest = 0;
 let savedReplayActive = false;
+let savedReplayFrames: readonly SnapshotFrame[] = [];
+let savedReplayIntervalMs = 1_000 / 30;
+let savedAudioIndex = -1;
+let savedAudioJumpPending = false;
 
 function openReplayLibrary(): void {
   if (!replayLibraryDialog.open) {
@@ -1377,6 +1457,7 @@ async function watchSavedReplay(
   const original = button.textContent;
   button.disabled = true;
   button.textContent = "Loading…";
+  void audio.unlock();
   try {
     const response = await fetch(
       `/api/replay/${roomCode}/${clip.id}.json`,
@@ -1425,6 +1506,15 @@ function playSavedReplay(replayExport: WireReplayExport): void {
     return;
   }
   savedReplayActive = true;
+  savedReplayFrames = replayExport.frames;
+  savedReplayIntervalMs = intervalMs;
+  savedAudioIndex = 0;
+  savedAudioJumpPending = false;
+  audio.reset();
+  const firstFrame = replayExport.frames[0];
+  if (firstFrame !== undefined) {
+    audio.prime(firstFrame);
+  }
   replayLibraryDialog.close();
   showMatch();
   document.body.dataset.savedReplay = "true";
@@ -2201,6 +2291,36 @@ function toggleReplay(source: ReplaySource = "goal"): void {
   updateCameraControl();
 }
 
+function driveSavedReplayAudio(sample: ReplaySample): void {
+  if (!savedReplayActive || savedReplayFrames.length === 0) {
+    return;
+  }
+  const index = Math.min(
+    savedReplayFrames.length - 1,
+    Math.max(0, Math.floor(sample.elapsedMs / savedReplayIntervalMs)),
+  );
+  if (savedAudioJumpPending || index < savedAudioIndex) {
+    const frame = savedReplayFrames[index];
+    audio.reset();
+    if (frame !== undefined) {
+      audio.prime(frame);
+    }
+    savedAudioIndex = index;
+    savedAudioJumpPending = false;
+    return;
+  }
+  if (sample.paused || index <= savedAudioIndex) {
+    return;
+  }
+  for (let next = savedAudioIndex + 1; next <= index; next += 1) {
+    const frame = savedReplayFrames[next];
+    if (frame !== undefined) {
+      audio.handleSnapshot(frame);
+    }
+  }
+  savedAudioIndex = index;
+}
+
 function stopReplay(): void {
   const wasSaved = savedReplayActive;
   savedReplayActive = false;
@@ -2211,6 +2331,10 @@ function stopReplay(): void {
   replayBanner.hidden = true;
   savedReplayHead.hidden = true;
   delete document.body.dataset.savedReplay;
+  savedReplayFrames = [];
+  savedAudioIndex = -1;
+  savedAudioJumpPending = false;
+  audio.reset();
   if (wasSaved) {
     showLobby();
     openReplayLibrary();
@@ -2228,6 +2352,35 @@ function updateReplayButtons(): void {
   replayButton.disabled = !active && !replay.hasClip;
   replayLastButton.disabled =
     active || !replay.hasCapture || replay.captureDurationMs < 2_000;
+  updateReplayTransport();
+}
+
+function updateReplayTransport(sample?: ReplaySample | null): void {
+  const active = replay.active;
+  replayPauseButton.disabled = !active;
+  replayStepBackButton.disabled = !active;
+  replayStepForwardButton.disabled = !active;
+  replaySeek.disabled = !active;
+  replayPauseButton.textContent = replay.paused ? "Resume" : "Pause";
+  if (!active) {
+    replaySeek.value = "0";
+    replaySeek.setAttribute("aria-valuetext", "0:00");
+    replayProgress.textContent = "0.0s";
+    return;
+  }
+  if (sample === undefined || sample === null) {
+    return;
+  }
+  if (!replayScrubbing) {
+    replaySeek.value = String(Math.round(sample.progress * 1_000));
+  }
+  replaySeek.setAttribute(
+    "aria-valuetext",
+    `${(sample.elapsedMs / 1_000).toFixed(1)} seconds`,
+  );
+  replayProgress.textContent = `${(sample.elapsedMs / 1_000).toFixed(
+    1,
+  )}s / ${(sample.durationMs / 1_000).toFixed(1)}s`;
 }
 
 function setReplayCamera(mode: CameraMode): void {

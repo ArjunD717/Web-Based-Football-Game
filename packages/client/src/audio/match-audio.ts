@@ -84,6 +84,13 @@ export class MatchAudio {
     return this.enabled;
   }
 
+  /** Sets edge-detection state without emitting sound, e.g. after a seek. */
+  prime(frame: SnapshotFrame): void {
+    this.score = `${frame.match.scoreHome}:${frame.match.scoreAway}`;
+    this.phase = frame.match.phase;
+    this.eventSeq = frame.match.lastEvent?.seq ?? 0;
+  }
+
   handleSnapshot(frame: SnapshotFrame): void {
     if (!this.enabled || !this.unlocked || this.context === null) {
       return;
