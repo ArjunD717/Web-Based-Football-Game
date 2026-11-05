@@ -911,6 +911,21 @@
   gap: var(--ui-space-3);
   padding: var(--ui-space-3) var(--ui-space-4);
   color: var(--ui-chalk);
+}
+
+.replay-library__watch {
+  flex: none;
+  min-width: 5rem;
+}
+
+.replay-library__download {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  min-width: 0;
+  color: var(--ui-chalk);
   text-decoration: none;
 }
 

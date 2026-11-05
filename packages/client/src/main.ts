@@ -9,6 +9,8 @@ import {
   type MatchSetupWire,
   type ServerLobbyStateMessage,
   type SnapshotFrame,
+  type WireReplayClip,
+  type WireReplayExport,
   type WireReplayLibrary,
 } from "@fb/shared";
 import { WireViewBuilder } from "./match/view-from-wire";
@@ -71,7 +73,9 @@ import { describeMatchEvent, formatCardCounts } from "./match/event-label";
 import { SubstitutionPanel } from "./match/substitution-panel";
 import {
   buildReplayGalleryItems,
+  formatGoalMinute,
   formatLibraryTime,
+  parseReplayExport,
   parseReplayLibrary,
 } from "./match/replay-gallery";
 import { MatchAudio } from "./audio/match-audio";
@@ -250,6 +254,10 @@ const openReplayLibraryButton =
 const replayLibraryDialog =
   byId<HTMLDialogElement>("replay-library-dialog");
 const replayLibraryList = byId<HTMLElement>("replay-library-list");
+const savedReplayHead = byId<HTMLElement>("saved-replay-head");
+const savedReplayTitle = byId<HTMLElement>("saved-replay-title");
+const closeSavedReplayButton =
+  byId<HTMLButtonElement>("close-saved-replay");
 const refreshReplayLibraryButton =
   byId<HTMLButtonElement>("refresh-replay-library");
 const closeReplayLibraryButton =
@@ -479,9 +487,15 @@ statsReplaysButton.addEventListener("click", () => {
 });
 closeReplaysButton.addEventListener("click", closeReplayGallery);
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !replayGallery.hidden) {
+  if (event.key !== "Escape") {
+    return;
+  }
+  if (!replayGallery.hidden) {
     event.preventDefault();
     closeReplayGallery();
+  } else if (savedReplayActive) {
+    event.preventDefault();
+    stopReplay();
   }
 });
 
@@ -1250,6 +1264,7 @@ function renderReplayGallery(
 }
 
 let replayLibraryRequest = 0;
+let savedReplayActive = false;
 
 function openReplayLibrary(): void {
   if (!replayLibraryDialog.open) {
@@ -1313,26 +1328,119 @@ function renderReplayLibrary(library: WireReplayLibrary): void {
       const list = document.createElement("div");
       list.className = "replay-library__clips";
       list.append(
-        ...buildReplayGalleryItems(room.code, room.clips).map(
-          (item) => {
-            const link = document.createElement("a");
-            link.className = "replay-library__clip";
-            link.href = item.href;
-            link.download = item.download;
-            link.title = item.title;
-            const score = document.createElement("strong");
-            score.textContent = item.score;
-            const meta = document.createElement("span");
-            meta.textContent = item.meta;
-            link.append(score, meta);
-            return link;
-          },
-        ),
+        ...[...room.clips]
+          .reverse()
+          .map((clip) => createLibraryClipRow(room.code, clip)),
       );
       section.append(head, list);
       return section;
     }),
   );
+}
+
+function createLibraryClipRow(
+  roomCode: string,
+  clip: WireReplayClip,
+): HTMLElement {
+  const item = buildReplayGalleryItems(roomCode, [clip])[0];
+  if (item === undefined) {
+    return document.createElement("span");
+  }
+  const row = document.createElement("div");
+  row.className = "replay-library__clip";
+  const watch = document.createElement("button");
+  watch.className = "ui-button ui-button--small replay-library__watch";
+  watch.type = "button";
+  watch.textContent = "Watch";
+  watch.addEventListener("click", () => {
+    void watchSavedReplay(roomCode, clip, watch);
+  });
+  const link = document.createElement("a");
+  link.className = "replay-library__download";
+  link.href = item.href;
+  link.download = item.download;
+  link.title = item.title;
+  const score = document.createElement("strong");
+  score.textContent = item.score;
+  const meta = document.createElement("span");
+  meta.textContent = item.meta;
+  link.append(score, meta);
+  row.append(watch, link);
+  return row;
+}
+
+async function watchSavedReplay(
+  roomCode: string,
+  clip: WireReplayClip,
+  button: HTMLButtonElement,
+): Promise<void> {
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = "Loading…";
+  try {
+    const response = await fetch(
+      `/api/replay/${roomCode}/${clip.id}.json`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw new Error(`Replay download returned ${response.status}`);
+    }
+    const replayExport = parseReplayExport(await response.json());
+    if (replayExport === null) {
+      throw new Error("Replay payload is invalid");
+    }
+    playSavedReplay(replayExport);
+  } catch (error) {
+    console.error(
+      "Saved replay failed",
+      error instanceof Error ? error.message : String(error),
+    );
+    showToast("Saved replay could not be loaded");
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+function playSavedReplay(replayExport: WireReplayExport): void {
+  const viewBuilder = new WireViewBuilder(replayExport.setup, null);
+  const intervalMs =
+    1_000 / Math.max(1, replayExport.setup.snapshotHz);
+  const frames = replayExport.frames.flatMap((frame, index) => {
+    const view = viewBuilder.build(frame);
+    return view === null
+      ? []
+      : [{ view, recordedAtMs: index * intervalMs }];
+  });
+  if (frames.length < 2) {
+    showToast("Saved replay has too few renderable frames");
+    return;
+  }
+
+  if (replay.active) {
+    stopReplay();
+  }
+  replay.clear();
+  if (!replay.loadSaved(frames) || !replay.startSaved(performance.now())) {
+    showToast("Saved replay could not start");
+    return;
+  }
+  savedReplayActive = true;
+  replayLibraryDialog.close();
+  showMatch();
+  document.body.dataset.savedReplay = "true";
+  document.title = "Saved goal replay | Web Football";
+  savedReplayHead.hidden = false;
+  savedReplayTitle.textContent =
+    `Room ${replayExport.code} · ${replayExport.scoreHome} – ` +
+    `${replayExport.scoreAway} · ${formatGoalMinute(replayExport.clockSeconds)}`;
+  replayBanner.hidden = false;
+  matchOverlay.hidden = true;
+  statsScreen.hidden = true;
+  renderer.setReplayActive?.(true);
+  renderer.setCameraMode?.(replayCamera);
+  updateReplayButtons();
+  updateReplayCameraButtons();
+  updateCameraControl();
 }
 
 function createLibraryNotice(text: string): HTMLParagraphElement {
@@ -1349,6 +1457,7 @@ refreshReplayLibraryButton.addEventListener("click", () => {
 closeReplayLibraryButton.addEventListener("click", () => {
   replayLibraryDialog.close();
 });
+closeSavedReplayButton.addEventListener("click", stopReplay);
 
 function renderLobby(state: GameClientState): void {
   const room = state.lobby?.room ?? null;
@@ -2093,12 +2202,19 @@ function toggleReplay(source: ReplaySource = "goal"): void {
 }
 
 function stopReplay(): void {
+  const wasSaved = savedReplayActive;
+  savedReplayActive = false;
   replay.stop();
   localPrediction.reset();
   renderer.setReplayActive?.(false);
   renderer.setCameraMode?.(cameraMode);
   replayBanner.hidden = true;
-  if (currentState !== null) {
+  savedReplayHead.hidden = true;
+  delete document.body.dataset.savedReplay;
+  if (wasSaved) {
+    showLobby();
+    openReplayLibrary();
+  } else if (currentState !== null) {
     updateStatsScreen(currentState);
   }
   updateReplayButtons();

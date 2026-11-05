@@ -1,8 +1,11 @@
 // packages/client/src/match/replay-gallery.ts
-import type {
-  WireReplayClip,
-  WireReplayLibrary,
-  WireReplayRoom,
+import {
+  parseMatchSetup,
+  type SnapshotFrame,
+  type WireReplayClip,
+  type WireReplayExport,
+  type WireReplayLibrary,
+  type WireReplayRoom,
 } from "@fb/shared";
 
 export interface ReplayGalleryItem {
@@ -109,7 +112,7 @@ function parseClip(value: unknown): WireReplayClip | null {
     kind !== "goal" ||
     !isNonNegativeInteger(scoreHome) ||
     !isNonNegativeInteger(scoreAway) ||
-    !isNonNegativeInteger(clockSeconds) ||
+    !isNonNegativeNumber(clockSeconds) ||
     !isHalf(half) ||
     typeof createdAtMs !== "number" ||
     !Number.isFinite(createdAtMs) ||
@@ -137,6 +140,50 @@ function isNonNegativeInteger(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0;
 }
 
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 function isHalf(value: unknown): value is 1 | 2 | 3 | 4 {
   return value === 1 || value === 2 || value === 3 || value === 4;
+}
+
+/** Validates a downloaded saved clip before building render frames. */
+export function parseReplayExport(
+  value: unknown,
+): WireReplayExport | null {
+  const clip = parseClip(value);
+  if (
+    !isRecord(value) ||
+    clip === null ||
+    typeof value.code !== "string" ||
+    !/^[A-Z]{4}$/.test(value.code) ||
+    typeof value.generatedAtMs !== "number" ||
+    !Number.isFinite(value.generatedAtMs)
+  ) {
+    return null;
+  }
+  const setup = parseMatchSetup(value.setup);
+  if (setup === null || !Array.isArray(value.frames) || value.frames.length < 2) {
+    return null;
+  }
+  for (const frame of value.frames) {
+    if (
+      !isRecord(frame) ||
+      !Array.isArray(frame.players) ||
+      frame.players.length < 22 ||
+      !isRecord(frame.match)
+    ) {
+      return null;
+    }
+  }
+  // Frames come from our own server and only need the shape the view builder reads.
+  const frames = value.frames as unknown as SnapshotFrame[];
+  return {
+    ...clip,
+    code: value.code,
+    generatedAtMs: value.generatedAtMs,
+    setup,
+    frames,
+  };
 }

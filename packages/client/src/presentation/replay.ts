@@ -43,6 +43,7 @@ export class MatchReplayBuffer {
   private readonly frames: ReplayFrame[] = [];
   private goalClip: ReplayFrame[] = [];
   private playbackFrames: ReplayFrame[] = [];
+  private savedClip: ReplayFrame[] = [];
   private previousScore: string | null = null;
   private playbackStartedAtMs: number | null = null;
   private playbackStartMs = 0;
@@ -65,6 +66,10 @@ export class MatchReplayBuffer {
 
   get hasCapture(): boolean {
     return this.frames.length >= 2;
+  }
+
+  get hasSavedClip(): boolean {
+    return this.savedClip.length >= 2;
   }
 
   get captureDurationMs(): number {
@@ -132,6 +137,7 @@ export class MatchReplayBuffer {
     this.frames.length = 0;
     this.goalClip = [];
     this.playbackFrames = [];
+    this.savedClip = [];
     this.previousScore = null;
     this.playbackStartedAtMs = null;
     this.playbackStartMs = 0;
@@ -148,6 +154,29 @@ export class MatchReplayBuffer {
       this.goalClip,
       this.goalStartMs,
       this.goalDurationMs,
+      nowMs,
+    );
+    return true;
+  }
+
+  /** Replaces the saved clip used by `startSaved`; timestamps are synthetic. */
+  loadSaved(frames: readonly ReplayFrame[]): boolean {
+    this.savedClip = [...frames].sort(
+      (a, b) => a.recordedAtMs - b.recordedAtMs,
+    );
+    return this.savedClip.length >= 2;
+  }
+
+  startSaved(nowMs: number): boolean {
+    const first = this.savedClip[0];
+    const last = this.savedClip.at(-1);
+    if (!this.hasSavedClip || first === undefined || last === undefined) {
+      return false;
+    }
+    this.beginPlayback(
+      this.savedClip,
+      first.recordedAtMs,
+      Math.max(1, last.recordedAtMs - first.recordedAtMs),
       nowMs,
     );
     return true;

@@ -781,6 +781,50 @@ body[data-view="match"] ::selection {
   box-shadow: 0 0 0.7rem color-mix(in srgb, var(--ui-danger) 40%, transparent);
 }
 
+/* Saved replay viewer ----------------------------------------------------- */
+.saved-replay-head {
+  position: absolute;
+  top: var(--ui-space-4);
+  left: var(--ui-space-4);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-3);
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border: 1px solid var(--ui-line-strong);
+  background: rgba(5, 7, 4, 0.92);
+  box-shadow: var(--ui-shadow-hard);
+}
+
+.saved-replay-head div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.saved-replay-head strong {
+  color: var(--ui-chalk);
+  font-size: var(--ui-text-sm);
+}
+
+body[data-saved-replay] .match-shell {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+body[data-saved-replay] .match-head,
+body[data-saved-replay] .match-footer,
+body[data-saved-replay] .match-strip,
+body[data-saved-replay] .match-feedbar,
+body[data-saved-replay] .hud,
+body[data-saved-replay] .control-card,
+body[data-saved-replay] .power-meter {
+  display: none !important;
+}
+
+body[data-saved-replay] .replay-banner {
+  top: auto;
+  bottom: var(--ui-space-4);
+}
+
 /* Replay ----------------------------------------------------------------- */
 .replay-banner {
   position: absolute;
