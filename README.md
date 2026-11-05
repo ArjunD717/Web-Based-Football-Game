@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 16**:
+both devices are thin clients. This repository is at **Milestone 17**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -16,7 +16,9 @@ first authored player-character asset pipeline: a rigged, textured glTF player
 built reproducibly in Blender and a presentation-only character lab. M15 wires
 that authored rig into the Three.js match renderer through a decimated match
 LOD, team palettes and a procedural bone-animation layer. M16 adds root-level
-foot planting and deterministic per-player skin and boot colours.
+foot planting and deterministic per-player skin and boot colours. M17 delivers
+the authored asset as WebP textures and warms the parsed template from the
+lobby.
 
 ## Requirements
 
@@ -151,6 +153,46 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 17 scope
+
+Implemented:
+
+- Both authored GLBs now use **WebP quality 90** for their embedded images.
+  `player-01.glb` falls from **3.0 MB to 1.4 MB**; the match LOD falls from
+  **2.6 MB to 0.93 MB**. Geometry, bones, material names and texture resolution
+  are unchanged, so the existing palette and appearance code is untouched
+- The WebP eye decal finished with its alpha channel intact; skin, cloth,
+  normal maps and kit prints were inspected in both the lab and the decimated
+  match LOD. The labelled WebP loader is part of current Chromium, Firefox and
+  Safari, matching the supported browser baseline
+- The match GLB is loaded through a shared app-lifetime template cache. The
+  lobby fires `preloadAuthoredPlayer()` during startup, so the GLB request and
+  JSON parse happen before a room is joined. The match renderer asks for the
+  same promise and normally finds the template ready, eliminating the initial
+  procedural fallback frame
+- The template cache is deliberately not disposed when a match renderer is
+  destroyed: repeated matches reuse the parsed geometry, textures and material
+  sources. Per-team palettes and per-player skin/boot clones still follow the
+  renderer's lifetime
+- The build wrapper now accepts the smaller match LOD with a **500 KB** floor
+  and keeps the **1 MB** floor for the high-detail asset
+- `pnpm character:build` reproduces both files; `pnpm check` passes all **623
+  tests**; `pnpm build` copies the compressed assets into `dist/characters/`
+- A DevTools network check shows one **949,060-byte**
+  `player-01-match.glb?v=20261105-7` request from the lobby, before match entry
+
+Known M17 limitations (by design):
+
+- WebP is the only compression step. There is no KTX2/Basis, Draco or meshopt
+  compression
+- The palette still does not use distance LODs, and authored players still do
+  not cast a real shadow
+- The lobby preload has no progress, cancellation or failure UI. A failed load
+  silently keeps the procedural fallback
+- The parsed template is retained for the app lifetime; there is no eviction
+  when returning to the lobby
+- The high-detail lab asset remains a separate **1.4 MB** download
+
 ## Milestone 16 scope
 
 ![Root-level foot planting and per-player boot colours](assets/previews/authored-grounding.webp)
@@ -206,8 +248,8 @@ Implemented:
 
 - The Three.js match renderer now loads the authored player as a second,
   decimated match LOD: `player-01-match.glb` is **7,385 triangles**, **10
-  meshes**, **53 joints** and **2.6 MB** with the same embedded materials and
-  textures as the lab asset. The high-detail 19,358-triangle version remains
+  meshes**, **53 joints** and **0.93 MB** with the same embedded WebP materials
+  and textures as the lab asset. The high-detail 19,358-triangle version remains
   the character-lab source
 - `AuthoredPlayerLibrary` loads the GLB once, clones players with
   `SkeletonUtils`, shares geometry and textures, and builds team/keeper palettes
@@ -256,8 +298,9 @@ Known M15 limitations (by design):
 - Low quality falls back to the procedural rigs even though the authored LOD is
   already loaded. There is no per-player distance LOD or streaming; all authored
   players use the same match LOD
-- The match GLB is still PNG-textured at 2.6 MB. It is not KTX2/Basis, Draco or
-  meshopt compressed, and it is fetched after the match renderer mounts
+- The match GLB is WebP-textured at 0.93 MB since M17. It is not KTX2/Basis,
+  Draco or meshopt compressed, and distance LODs and real player shadows remain
+  future work
 - The authored rig is not used by the Canvas 2D renderer, replays that switch to
   2D, or the phone controller page
 
@@ -269,7 +312,7 @@ Implemented:
 
 - A reproducible Blender pipeline builds a fictional 19,358-triangle,
   53-joint player from a CC0 MakeHuman/MPFB anatomical base. The GLB is
-  self-contained with embedded PNG maps, metre scale, `+Y` up and `+Z` forward.
+  self-contained with embedded WebP maps, metre scale, `+Y` up and `+Z` forward.
   `pnpm character:build` regenerates the skin pores, fabric weave, eye decal,
   hair normal, kit atlas and the binary; the tracked source outputs live under
   `assets/characters/`, with Vite's served copy under
@@ -313,9 +356,9 @@ Known M14 limitations (by design):
   or rib texture
 - The eye is a painted decal rather than modelled cornea/iris geometry. At
   extreme close range its flatness is visible
-- Textures are embedded PNGs in a 3.0 MB GLB. They are not yet KTX2/Basis or
-  meshopt/Draco compressed. M15 adds a separate geometry match LOD, but both
-  LODs still embed the same PNG maps
+- Textures are embedded WebPs in a 1.4 MB GLB since M17. They are not yet
+  KTX2/Basis or meshopt/Draco compressed. M15 adds a separate geometry match
+  LOD, but both LODs still embed the same maps
 - The high-detail asset is not itself used by the match renderer; M15 uses the
   decimated `player-01-match.glb` LOD and generates bone poses at runtime
 - Blender and Python are development-only requirements. Normal runs and CI use
@@ -1304,6 +1347,14 @@ The two-minute match check:
     seat: that player must keep the same skin/boot appearance. Switch to low
     quality and back; procedural fallback and authored rigs must not retain
     stale foot offsets.
+21. Clear the browser cache, open DevTools Network and load the lobby. Before
+    creating a room, exactly one `player-01-match.glb?v=20261105-7` request
+    should start and complete at roughly **0.93 MB**. Join a match: authored
+    players should appear without a procedural fallback frame and no second
+    GLB request should be made. Open `character.html` and confirm the
+    high-detail lab still renders from its **1.4 MB** WebP GLB. Run
+    `pnpm character:build` and confirm both outputs remain above the build
+    floors.
 
 ## Layout
 

@@ -3,7 +3,7 @@
 ## Player asset
 
 `characters/player-01.glb` is **Avery Cole**, a fictional Northbridge Athletic
-number 9. It is a self-contained glTF 2.0 binary with embedded PNG textures.
+number 9. It is a self-contained glTF 2.0 binary with embedded WebP textures.
 `characters/player-01-match.glb` is the match-only LOD derived from it.
 
 | Item | High-detail lab asset | Match LOD |
@@ -12,7 +12,7 @@ number 9. It is a self-contained glTF 2.0 binary with embedded PNG textures.
 | Triangles | 19,358 | 7,385 |
 | Meshes | 16 | 10 |
 | Bones | 53 | 53 |
-| Size | 3.0 MB | 2.6 MB |
+| Size | 1.4 MB | 0.93 MB |
 | Unit scale | metres | metres |
 | Forward / up | `+Z` / `+Y` | `+Z` / `+Y` |
 | Skin influences | 4 per vertex | 4 per vertex |
@@ -39,7 +39,7 @@ pnpm character:build
 
 The command regenerates the support textures, rebuilds both the high-detail GLB
 and the decimated match LOD from the MakeHuman base, and copies both into the
-Vite public directory. It looks
+Vite public directory. Both GLBs embed WebP images at quality 90. It looks
 for Blender on `PATH` and in the Windows Program Files locations. Override the
 executables when needed:
 
@@ -79,7 +79,8 @@ This is a clean first character pass, not a scanned likeness or a final
 animation library:
 
 - The body is a static A-pose skinned mesh; there is no authored animation set,
-  facial rig, blend shapes or inverse-kinematics foot planting.
+  facial rig, blend shapes or per-foot inverse kinematics. The match renderer
+  applies procedural poses and root-level foot planting.
 - The eye decal is a conforming painted surface, not modelled cornea/iris
   geometry; the eyelids and face are from the MakeHuman base.
 - Garments derive from the body surface and are thickened with a solidify
@@ -89,5 +90,6 @@ animation library:
   groom.
 - Shirt numbers and crests are generated 2D atlas art, not cloth embroidery or a
   normal-mapped print. The kit is fictional and the palette is fixed.
-- The asset uses embedded PNGs. A shipping build should transcode the normal and
-  colour maps to a GPU-compressed format and reduce the GLB below 1 MB.
+- The asset uses embedded WebP images at quality 90. A shipping GPU path should
+  move the normal and colour maps to KTX2/Basis and add meshopt/Draco geometry
+  compression.
