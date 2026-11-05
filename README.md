@@ -883,8 +883,10 @@ Not implemented yet (by milestone design):
   atomic `index.json`. `/api/replays.json` returns the saved-room index, and
   the lobby's **Replays** browser lists persisted rooms, downloads clips and
   plays them back in the 3D/2D match viewer with the usual TV, goal, player and
-  drone camera angles. Playback works after the room has closed. No auth is
-  applied beyond the private-LAN trust boundary.
+  drone camera angles. Saved playback exposes a draggable timeline, pause,
+  single-frame stepping and Space/arrow shortcuts; match events drive the
+  procedural whistle and goal audio during playback. Playback works after the
+  room has closed. No auth is applied beyond the private-LAN trust boundary.
 - The client renders 100 ms behind arrival to absorb 30 Hz spacing and LAN jitter.
   The ball and remote players are always server-driven. An opt-in **Local
   prediction** setting advances only the locally controlled body from the last
@@ -1008,7 +1010,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 69 test files and 601 tests passing.
+13. `pnpm check`: expect 69 test files and 602 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -1064,9 +1066,11 @@ The two-minute match check:
     open the lobby's **Replays** browser and verify the saved room and clip
     remain listed; `/api/replays.json` must return the room and the clip URL
     must still download. Click **Watch** and verify the saved clip enters the
-    match viewer, exposes replay camera angles and returns to the library with
-    **Back to library**. The in-memory export-window URL must 404 after room
-    closure.
+    match viewer. Pause, drag the timeline, step one frame at a time, press
+    Space/arrow keys, and confirm the whistle/goal audio tracks the event
+    sequence without replaying missed events after a seek. **Back to library**
+    must return to the saved-room list. The in-memory export-window URL must
+    404 after room closure.
     Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
     16.67 ms and `p95TickMs` stays below the budget during a live match.
 17. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish

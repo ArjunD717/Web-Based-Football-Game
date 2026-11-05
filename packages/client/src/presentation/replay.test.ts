@@ -99,6 +99,32 @@ describe("match replay buffer", () => {
     expect(replay.sample(7_001)).toBeNull();
   });
 
+  it("pauses, seeks and steps through a saved clip", () => {
+    const replay = new MatchReplayBuffer({ speed: 1 });
+    replay.loadSaved([
+      { view: view(10), recordedAtMs: 0 },
+      { view: view(11), recordedAtMs: 1_000 },
+      { view: view(12), recordedAtMs: 2_000 },
+    ]);
+    expect(replay.startSaved(0)).toBe(true);
+    expect(replay.pause(500)).toBe(true);
+    expect(replay.sample(5_000)).toMatchObject({
+      progress: 0.25,
+      paused: true,
+    });
+    expect(replay.stepFrame(1, 5_000)).toBe(true);
+    expect(replay.sample(5_000)?.view.tick).toBe(11);
+    expect(replay.stepFrame(1, 5_000)).toBe(true);
+    expect(replay.sample(5_000)?.view.tick).toBe(12);
+    expect(replay.seek(0.5, 5_000)).toBe(true);
+    expect(replay.sample(5_000)).toMatchObject({
+      progress: 0.5,
+      paused: true,
+    });
+    expect(replay.resume(5_000)).toBe(true);
+    expect(replay.sample(6_100)).toBeNull();
+  });
+
   it("keeps the shorter goal clip available after a full replay", () => {
     const replay = new MatchReplayBuffer({
       captureMs: 10_000,
