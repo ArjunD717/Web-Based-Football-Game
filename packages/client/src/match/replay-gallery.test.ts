@@ -5,6 +5,7 @@ import {
   buildReplayGalleryItems,
   formatGoalMinute,
   formatHalf,
+  parseReplayLibrary,
 } from "./replay-gallery";
 
 function clip(
@@ -38,6 +39,33 @@ describe("replay gallery", () => {
       score: "1 – 0",
       meta: "60' · 2nd half · 135 frames",
     });
+  });
+
+  it("rejects malformed persisted library payloads", () => {
+    expect(parseReplayLibrary(null)).toBeNull();
+    expect(parseReplayLibrary({ rooms: "bad" })).toBeNull();
+    expect(
+      parseReplayLibrary({
+        rooms: [
+          {
+            code: "ABCD",
+            updatedAtMs: 10,
+            clips: [{ ...clip("g1", 60, 1), half: 9 }],
+          },
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      parseReplayLibrary({
+        rooms: [
+          {
+            code: "ABCD",
+            updatedAtMs: 10,
+            clips: [clip("g1", 60, 1)],
+          },
+        ],
+      })?.rooms[0]?.clips,
+    ).toHaveLength(1);
   });
 
   it("formats match minutes and extra time", () => {

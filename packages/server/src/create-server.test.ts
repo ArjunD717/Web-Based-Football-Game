@@ -240,6 +240,40 @@ describe("game server", () => {
     expect(missing.status).toBe(404);
   });
 
+  it("serves the saved replay library", async () => {
+    const server = await startTestServer({
+      getReplayLibrary: () => ({
+        rooms: [
+          {
+            code: "ABCD",
+            updatedAtMs: 500,
+            clips: [
+              {
+                id: "g1",
+                kind: "goal",
+                scoreHome: 1,
+                scoreAway: 0,
+                clockSeconds: 1_440,
+                half: 1,
+                createdAtMs: 500,
+                frameCount: 135,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const response = await fetch(`${baseUrl(server)}/api/replays.json`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain(
+      "application/json",
+    );
+    expect(await response.json()).toMatchObject({
+      rooms: [{ code: "ABCD", clips: [{ id: "g1" }] }],
+    });
+  });
+
   it("broadcasts presence as clients join and leave", async () => {
     const server = await startTestServer();
 

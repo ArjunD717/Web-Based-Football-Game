@@ -17,6 +17,7 @@ describe("loadServerConfig", () => {
     expect(config.keyPath).toBe(path.join(config.certDir, "dev-key.pem"));
     expect(config.staticDir).toMatch(/packages[\\/]client[\\/]dist$/);
     expect(path.basename(config.dataDir)).toBe("data");
+    expect(path.basename(config.replayDir)).toBe("replays");
     expect(config.devNetwork).toEqual({
       latencyMs: 0,
       jitterMs: 0,
@@ -31,6 +32,7 @@ describe("loadServerConfig", () => {
       FB_CERT_DIR: "tmp/certs",
       FB_STATIC_DIR: "tmp/client",
       FB_DATA_DIR: "tmp/data",
+      FB_REPLAY_DIR: "tmp/replays",
       FB_DEV_LATENCY_MS: "120",
       FB_DEV_JITTER_MS: "25",
       FB_DEV_LOSS_PCT: "10",
@@ -40,6 +42,7 @@ describe("loadServerConfig", () => {
     expect(config.certDir).toBe(path.resolve("tmp/certs"));
     expect(config.staticDir).toBe(path.resolve("tmp/client"));
     expect(config.dataDir).toBe(path.resolve("tmp/data"));
+    expect(config.replayDir).toBe(path.resolve("tmp/replays"));
     expect(config.devNetwork).toEqual({
       latencyMs: 120,
       jitterMs: 25,

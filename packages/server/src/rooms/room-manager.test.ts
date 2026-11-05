@@ -1,4 +1,7 @@
 // packages/server/src/rooms/room-manager.test.ts
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -17,6 +20,7 @@ import {
 import type { ClientConnection } from "../client";
 import type { Logger } from "../create-server";
 import { loadTeamRegistry, type TeamRegistry } from "../data/registry";
+import { ReplayStore } from "../replays/replay-store";
 import { RoomManager } from "./room-manager";
 import type { MatchState } from "@fb/sim";
 
@@ -96,7 +100,12 @@ interface Fixture {
   readonly created: string[];
 }
 
-function setupRoom(options: { reconnectGraceMs?: number } = {}): Fixture {
+function setupRoom(
+  options: {
+    reconnectGraceMs?: number;
+    replayStore?: ReplayStore;
+  } = {},
+): Fixture {
   const created: string[] = [];
   const manager = new RoomManager({
     logger: silentLogger,
@@ -542,6 +551,44 @@ describe("server replay export", () => {
     expect(clip?.kind).toBe("goal");
     expect(clip?.frames.length).toBe(latest?.frameCount);
     expect(fixture.manager.exportReplayClip(fixture.code, "missing")).toBeNull();
+  });
+
+  it("writes captured clips into the durable replay library", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "fb-room-replays-"));
+    const store = new ReplayStore({ dir, logger: silentLogger });
+    await store.initialize();
+    try {
+      const fixture = setupRoom({ replayStore: store });
+      startReadyMatch(fixture);
+      const internal = fixture.manager as unknown as {
+        rooms: Map<
+          string,
+          {
+            match: {
+              state: MatchState;
+              finished: boolean;
+            } | null;
+          }
+        >;
+      };
+      const match = [...internal.rooms.values()][0]?.match;
+      if (match === null || match === undefined) {
+        throw new Error("Room has no match");
+      }
+      match.state.referee.scoreHome = 1;
+      for (let tick = 0; tick < 100; tick += 1) {
+        fixture.manager.tick(1 / 60);
+      }
+      await store.flush();
+
+      expect(store.listRooms()[0]?.code).toBe(fixture.code);
+      expect(store.getClip(fixture.code, "g1")).toMatchObject({
+        id: "g1",
+        scoreHome: 1,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("returns null for an unknown room", () => {
