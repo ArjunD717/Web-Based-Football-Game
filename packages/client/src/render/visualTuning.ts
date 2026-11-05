@@ -262,9 +262,9 @@ export const VISUAL_TUNING: VisualTuning = {
     opacity: 0.5,
   },
   playerLod: {
-    fullDetailDistanceM: 20,
-    reducedDetailDistanceM: 48,
-    shadowDistanceM: 30,
+    fullDetailDistanceM: 40,
+    reducedDetailDistanceM: 80,
+    shadowDistanceM: 70,
     maxShadowCasters: 4,
   },
   audio: {

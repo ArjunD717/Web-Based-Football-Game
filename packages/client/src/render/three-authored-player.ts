@@ -458,7 +458,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     this.switchRing.scale.setScalar(1 + Math.sin(tick * 0.1 + 1.3) * 0.05);
     this.marker.visible = player.controlled && this.detail !== "minimal";
     this.marker.position.y = 2.75 + Math.sin(tick * 0.12) * 0.09;
-    this.numberSprite.visible = this.detail === "full";
+    this.numberSprite.visible = this.detail !== "minimal";
     this.card.visible = player.yellowCards > 0 && this.detail === "full";
 
     const previousElapsed = this.lastElapsed;
@@ -643,7 +643,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       return;
     }
     this.detail = detail;
-    this.numberSprite.visible = detail === "full";
+    this.numberSprite.visible = detail !== "minimal";
     if (detail === "minimal") {
       this.marker.visible = false;
       this.switchRing.visible = false;
