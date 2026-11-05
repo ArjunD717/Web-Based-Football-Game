@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 21**:
+both devices are thin clients. This repository is at **Milestone 22**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -22,7 +22,8 @@ lobby. M18 bakes the tested pose model into fifteen glTF animation clips and
 plays them through a per-player mixer. M19 replaces root-only grounding with
 per-leg analytic IK and world-space foot anchors during stance. M20 scales
 authored clip playback to the speed the player actually covers. M21 adds
-stride-locked footstep events and procedural contact audio.
+stride-locked footstep events and procedural contact audio. M22 places those
+footsteps against the broadcast camera with stereo pan and distance gain.
 
 ## Requirements
 
@@ -157,6 +158,43 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 22 scope
+
+Implemented:
+
+- `FootstepEvent` now carries the world-space foot position at the stride
+  crossing. The authored rig reads the matching `foot_l`/`foot_r` bone position
+  before passing the event to the renderer
+- The Three.js renderer wraps the event sink with a camera listener. It
+  computes camera-right from the current view direction and passes the foot
+  position, listener position and basis to the pure `spatializeFootstep` mixer
+- Spatial tuning: full gain inside **4 m**, linear falloff to silence at
+  **60 m**, and maximum **0.7** pan at the sides. The mix is clamped and
+  invalid positions produce silence rather than NaNs
+- `MatchAudio` routes the footstep through a `StereoPannerNode` and multiplies
+  its envelope by the distance gain. Centre events remain centred; hard-left
+  and hard-right events use the full pan range
+- The spatial tests cover near/full-gain, left/right pan, linear attenuation,
+  opposite camera bases and invalid listener data. A headless browser smoke
+  instantiated `MatchAudio`, reached `running`, and played an event with
+  **pan -0.6** and **gain 0.5** without errors
+- `pnpm check` passes **652 tests**; `pnpm build` passes. No simulation,
+  protocol, input, camera or asset files changed
+
+Known M22 limitations (by design):
+
+- The listener is the broadcast camera. Both networked clients share that
+  camera-relative mix instead of hearing from their own player's perspective
+- The 2D renderer has no footstep sink, so its footsteps are absent rather than
+  spatialized
+- The mix is a panned mono noise burst. There is no HRTF, elevation, occlusion,
+  reflection or surface material
+- Distance gain is linear in the pitch plane and does not model stands, walls or
+  indoor acoustics
+- Footstep timing still comes from the gait phase rather than authoritative
+  contact events
+- The 22-player audio mix has not been load-tested
+
 ## Milestone 21 scope
 
 Implemented:
@@ -186,8 +224,8 @@ Known M21 limitations (by design):
 
 - Footstep timing comes from the gait phase, not from authoritative contact
   events or per-foot world positions
-- All footsteps use the same mono mix. There is no stereo panning, distance
-  attenuation, occlusion, surface material or player-size variation
+- At M21 all footsteps use the same mono mix. M22 adds stereo panning and
+  camera-distance gain; occlusion and surface material remain future work
 - One-shot states, idle, headers and set pieces do not produce footsteps
 - Replays intentionally mute live footsteps; they do not reconstruct them
   from recorded contact data
@@ -1547,6 +1585,10 @@ The two-minute match check:
     roughly the leg cadence, become quieter at walking pace, and be silent when
     idle or stationary. Disable audio, start a replay and switch renderers; no
     live footstep should leak into the replay or the 2D path.
+26. In a 3D match with sound, move a player from the centre of the broadcast
+    frame to the far touchline. Footfalls should move across the stereo field
+    and fade with camera distance. Pan the camera and confirm the mix follows
+    the new view. Repeat in 2D: no spatial footsteps should play there.
 
 ## Layout
 
