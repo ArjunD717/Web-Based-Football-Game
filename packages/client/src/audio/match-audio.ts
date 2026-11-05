@@ -96,7 +96,7 @@ export class MatchAudio {
     if (!this.enabled || !this.unlocked || this.context === null) {
       return;
     }
-    this.playFootstep(event.intensity);
+    this.playFootstep(event.intensity, event.pan ?? 0, event.gain ?? 1);
   }
 
   handleSnapshot(frame: SnapshotFrame): void {
@@ -165,15 +165,26 @@ export class MatchAudio {
     window.setTimeout(() => gain.disconnect(), (duration + 0.2) * 1_000);
   }
 
-  private playFootstep(intensity: number): void {
+  private playFootstep(
+    intensity: number,
+    pan: number,
+    distanceGain: number,
+  ): void {
     const context = this.context;
     const master = this.master;
     const buffer = this.noiseBuffer;
-    if (context === null || master === null || buffer === null) {
+    const spatialGain = Math.max(0, Math.min(1, distanceGain));
+    if (
+      context === null ||
+      master === null ||
+      buffer === null ||
+      spatialGain <= 0
+    ) {
       return;
     }
     const now = context.currentTime;
-    const level = 0.025 + Math.max(0, Math.min(1, intensity)) * 0.045;
+    const level =
+      (0.025 + Math.max(0, Math.min(1, intensity)) * 0.045) * spatialGain;
     const source = context.createBufferSource();
     source.buffer = buffer;
     const filter = context.createBiquadFilter();
@@ -184,15 +195,19 @@ export class MatchAudio {
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(level, now + 0.006);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.105);
+    const panner = context.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, pan));
     source.connect(filter);
     filter.connect(gain);
-    gain.connect(master);
+    gain.connect(panner);
+    panner.connect(master);
     const offset = Math.random() * Math.max(0, buffer.duration - 0.2);
     source.start(now, offset, 0.13);
     source.stop(now + 0.14);
     window.setTimeout(() => {
       gain.disconnect();
       filter.disconnect();
+      panner.disconnect();
     }, 220);
   }
 
