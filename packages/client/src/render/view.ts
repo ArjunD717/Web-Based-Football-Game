@@ -23,6 +23,8 @@ export interface RenderPlayer {
   readonly facing: number;
   readonly state: PlayerStateName;
   readonly stamina: number;
+  /** Authored 1..99 sprint-speed rating; omitted for legacy/test views. */
+  readonly sprintSpeed?: number;
   readonly sentOff: boolean;
   readonly yellowCards: number;
   /** True for the player currently selected by this client's control input. */
@@ -84,6 +86,7 @@ export function matchStateToView(state: MatchState): MatchView {
         facing: player.facing,
         state: player.state,
         stamina: player.stamina,
+        sprintSpeed: player.attributes.sprintSpeed,
         sentOff: player.sentOff,
         yellowCards: player.yellowCards,
         controlled: false,
@@ -103,6 +106,7 @@ export function matchStateToView(state: MatchState): MatchView {
         facing: player.facing,
         state: player.state,
         stamina: player.stamina,
+        sprintSpeed: player.attributes.sprintSpeed,
         sentOff: player.sentOff,
         yellowCards: player.yellowCards,
         controlled: false,

@@ -152,6 +152,7 @@ export class WireViewBuilder {
       facing: player.facing,
       state: player.state,
       stamina: player.stamina,
+      sprintSpeed: roster.sprintSpeed,
       sentOff: player.sentOff,
       yellowCards: player.yellowCards,
       controlled:
