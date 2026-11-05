@@ -853,6 +853,99 @@
   border-top: 1px solid var(--ui-line);
 }
 
+.replay-library-dialog {
+  width: min(48rem, calc(100vw - 2rem));
+}
+
+.replay-library-dialog .ui-dialog__actions {
+  padding: 0;
+  border: 0;
+}
+
+.replay-library__intro {
+  margin-bottom: var(--ui-space-4) !important;
+}
+
+.replay-library__list {
+  display: grid;
+  gap: var(--ui-space-3);
+  max-height: min(30rem, 55dvh);
+  overflow: auto;
+  padding-right: var(--ui-space-1);
+}
+
+.replay-library__room {
+  border: 1px solid var(--ui-line);
+  background: color-mix(in srgb, var(--ui-surface) 72%, transparent);
+}
+
+.replay-library__room > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  padding: var(--ui-space-3) var(--ui-space-4);
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.replay-library__room h3 {
+  margin: 0;
+  font-family: var(--ui-font-display);
+  font-size: var(--ui-text-lg);
+  font-weight: 600;
+}
+
+.replay-library__room header span {
+  color: var(--ui-muted);
+  font-size: var(--ui-text-2xs);
+}
+
+.replay-library__clips {
+  display: grid;
+}
+
+.replay-library__clip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  padding: var(--ui-space-3) var(--ui-space-4);
+  color: var(--ui-chalk);
+  text-decoration: none;
+}
+
+.replay-library__clip + .replay-library__clip {
+  border-top: 1px solid var(--ui-line);
+}
+
+.replay-library__clip:hover {
+  background: color-mix(in srgb, var(--ui-orange) 9%, transparent);
+}
+
+.replay-library__clip:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: -2px;
+}
+
+.replay-library__clip strong {
+  letter-spacing: 0.04em;
+}
+
+.replay-library__clip span {
+  color: var(--ui-muted);
+  font-size: var(--ui-text-2xs);
+  text-align: right;
+}
+
+.replay-library__notice {
+  margin: 0;
+  padding: var(--ui-space-6) var(--ui-space-4);
+  border: 1px dashed var(--ui-line-strong);
+  color: var(--ui-muted);
+  font-size: var(--ui-text-sm);
+  text-align: center;
+}
+
 /* --------------------------------------------------------------------------
  * Reduced motion
  * ------------------------------------------------------------------------ */

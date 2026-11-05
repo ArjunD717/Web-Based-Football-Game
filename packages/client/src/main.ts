@@ -9,6 +9,7 @@ import {
   type MatchSetupWire,
   type ServerLobbyStateMessage,
   type SnapshotFrame,
+  type WireReplayLibrary,
 } from "@fb/shared";
 import { WireViewBuilder } from "./match/view-from-wire";
 import {
@@ -68,7 +69,11 @@ import {
 } from "./camera/modes";
 import { describeMatchEvent, formatCardCounts } from "./match/event-label";
 import { SubstitutionPanel } from "./match/substitution-panel";
-import { buildReplayGalleryItems } from "./match/replay-gallery";
+import {
+  buildReplayGalleryItems,
+  formatLibraryTime,
+  parseReplayLibrary,
+} from "./match/replay-gallery";
 import { MatchAudio } from "./audio/match-audio";
 import { MatchHaptics } from "./input/haptics";
 import { MatchReplayBuffer } from "./presentation/replay";
@@ -240,6 +245,15 @@ const bindingsKeyboardTab =
   byId<HTMLButtonElement>("bindings-tab-keyboard");
 const bindingsGamepadTab =
   byId<HTMLButtonElement>("bindings-tab-gamepad");
+const openReplayLibraryButton =
+  byId<HTMLButtonElement>("open-replays-library");
+const replayLibraryDialog =
+  byId<HTMLDialogElement>("replay-library-dialog");
+const replayLibraryList = byId<HTMLElement>("replay-library-list");
+const refreshReplayLibraryButton =
+  byId<HTMLButtonElement>("refresh-replay-library");
+const closeReplayLibraryButton =
+  byId<HTMLButtonElement>("close-replay-library");
 const toast = byId<HTMLElement>("toast");
 
 let currentState: GameClientState | null = null;
@@ -1234,6 +1248,107 @@ function renderReplayGallery(
     ),
   );
 }
+
+let replayLibraryRequest = 0;
+
+function openReplayLibrary(): void {
+  if (!replayLibraryDialog.open) {
+    replayLibraryDialog.showModal();
+  }
+  void loadReplayLibrary();
+}
+
+async function loadReplayLibrary(): Promise<void> {
+  const request = ++replayLibraryRequest;
+  refreshReplayLibraryButton.disabled = true;
+  replayLibraryList.replaceChildren(createLibraryNotice("Loading saved clips…"));
+  try {
+    const response = await fetch("/api/replays.json", {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`Replay library returned ${response.status}`);
+    }
+    const library = parseReplayLibrary(await response.json());
+    if (library === null) {
+      throw new Error("Replay library payload is invalid");
+    }
+    if (request === replayLibraryRequest) {
+      renderReplayLibrary(library);
+    }
+  } catch {
+    if (request === replayLibraryRequest) {
+      replayLibraryList.replaceChildren(
+        createLibraryNotice(
+          "Saved replays are unavailable. Check that the host is online.",
+        ),
+      );
+    }
+  } finally {
+    if (request === replayLibraryRequest) {
+      refreshReplayLibraryButton.disabled = false;
+    }
+  }
+}
+
+function renderReplayLibrary(library: WireReplayLibrary): void {
+  if (library.rooms.length === 0) {
+    replayLibraryList.replaceChildren(
+      createLibraryNotice(
+        "No saved goal clips yet. Goals persist here after the room closes.",
+      ),
+    );
+    return;
+  }
+  replayLibraryList.replaceChildren(
+    ...library.rooms.map((room) => {
+      const section = document.createElement("section");
+      section.className = "replay-library__room";
+      const head = document.createElement("header");
+      const title = document.createElement("h3");
+      title.textContent = `Room ${room.code}`;
+      const stamp = document.createElement("span");
+      stamp.textContent = formatLibraryTime(room.updatedAtMs);
+      head.append(title, stamp);
+      const list = document.createElement("div");
+      list.className = "replay-library__clips";
+      list.append(
+        ...buildReplayGalleryItems(room.code, room.clips).map(
+          (item) => {
+            const link = document.createElement("a");
+            link.className = "replay-library__clip";
+            link.href = item.href;
+            link.download = item.download;
+            link.title = item.title;
+            const score = document.createElement("strong");
+            score.textContent = item.score;
+            const meta = document.createElement("span");
+            meta.textContent = item.meta;
+            link.append(score, meta);
+            return link;
+          },
+        ),
+      );
+      section.append(head, list);
+      return section;
+    }),
+  );
+}
+
+function createLibraryNotice(text: string): HTMLParagraphElement {
+  const notice = document.createElement("p");
+  notice.className = "replay-library__notice";
+  notice.textContent = text;
+  return notice;
+}
+
+openReplayLibraryButton.addEventListener("click", openReplayLibrary);
+refreshReplayLibraryButton.addEventListener("click", () => {
+  void loadReplayLibrary();
+});
+closeReplayLibraryButton.addEventListener("click", () => {
+  replayLibraryDialog.close();
+});
 
 function renderLobby(state: GameClientState): void {
   const room = state.lobby?.room ?? null;

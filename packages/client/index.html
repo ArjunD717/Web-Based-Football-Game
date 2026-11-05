@@ -47,6 +47,9 @@
           <button id="open-help" class="ui-topnav__link" type="button">
             How to connect
           </button>
+          <button id="open-replays-library" class="ui-topnav__link" type="button">
+            Replays
+          </button>
           <a href="/controller.html" class="ui-topnav__link">Phone controller</a>
         </nav>
       </header>
@@ -1227,6 +1230,29 @@
           <p class="match-footer__note">Host-authoritative · 60 Hz simulation</p>
         </footer>
       </main>
+
+      <dialog id="replay-library-dialog" class="ui-dialog replay-library-dialog">
+        <div class="ui-dialog__head">
+          <div>
+            <p class="ui-kicker">Saved clips</p>
+            <h2 class="ui-dialog__title">Replay library</h2>
+          </div>
+          <div class="ui-dialog__actions">
+            <button id="refresh-replay-library" class="ui-button ui-button--small" type="button">
+              Refresh
+            </button>
+            <button id="close-replay-library" class="ui-button ui-button--small" type="button">
+              Close
+            </button>
+          </div>
+        </div>
+        <div class="ui-dialog__body">
+          <p class="replay-library__intro">
+            Goal clips saved on this host, including rooms that have already closed.
+          </p>
+          <div id="replay-library-list" class="replay-library__list" aria-live="polite"></div>
+        </div>
+      </dialog>
 
       <dialog id="help-dialog" class="ui-dialog">
         <div class="ui-dialog__head">
