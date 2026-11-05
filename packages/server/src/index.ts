@@ -45,6 +45,7 @@ async function main(): Promise<void> {
     staticDir: config.staticDir,
     dataDir: config.dataDir,
     tls,
+    devNetwork: config.devNetwork,
     getRuntimeMetrics: () => tickMetrics.snapshot(),
     handlers: {
       onReady: (client) => {
@@ -104,6 +105,15 @@ async function main(): Promise<void> {
   );
   console.log(`Client dist:   ${config.staticDir}`);
   console.log(`Match data:    ${config.dataDir} (${registry.teams.length} teams)`);
+  if (
+    config.devNetwork.latencyMs > 0 ||
+    config.devNetwork.jitterMs > 0 ||
+    config.devNetwork.lossPct > 0
+  ) {
+    console.warn(
+      `Dev network:   ${config.devNetwork.latencyMs} ms +-${config.devNetwork.jitterMs} ms, ${config.devNetwork.lossPct}% snapshot loss`,
+    );
+  }
   console.log("If the client is missing, run pnpm dev (Vite :5173) or pnpm build.");
   console.log("");
   console.log("Scan to open the lobby:");

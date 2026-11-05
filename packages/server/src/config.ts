@@ -7,6 +7,15 @@ export const DEFAULT_HOST = "0.0.0.0";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
+export interface DevNetworkConfig {
+  /** One-way artificial latency in milliseconds. */
+  readonly latencyMs: number;
+  /** Symmetric random jitter around latency, milliseconds. */
+  readonly jitterMs: number;
+  /** Percentage of binary snapshots to drop. */
+  readonly lossPct: number;
+}
+
 export interface ServerConfig {
   readonly host: string;
   readonly port: number;
@@ -15,6 +24,7 @@ export interface ServerConfig {
   readonly keyPath: string;
   readonly staticDir: string;
   readonly dataDir: string;
+  readonly devNetwork: DevNetworkConfig;
 }
 
 /**
@@ -24,6 +34,8 @@ export interface ServerConfig {
  * - FB_CERT_DIR: directory containing dev-cert.pem + dev-key.pem.
  * - FB_STATIC_DIR: built client directory.
  * - FB_DATA_DIR: generated public football data (default repo/data).
+ * - FB_DEV_LATENCY_MS / FB_DEV_JITTER_MS / FB_DEV_LOSS_PCT: dev-only network
+ *   condition simulation; all default to zero.
  */
 export function loadServerConfig(
   env: NodeJS.ProcessEnv = process.env,
@@ -39,6 +51,11 @@ export function loadServerConfig(
   const dataDir = env.FB_DATA_DIR
     ? path.resolve(env.FB_DATA_DIR)
     : path.join(REPO_ROOT, "data");
+  const devNetwork = {
+    latencyMs: parseNonNegative(env.FB_DEV_LATENCY_MS, "FB_DEV_LATENCY_MS"),
+    jitterMs: parseNonNegative(env.FB_DEV_JITTER_MS, "FB_DEV_JITTER_MS"),
+    lossPct: parsePercent(env.FB_DEV_LOSS_PCT, "FB_DEV_LOSS_PCT"),
+  };
 
   return {
     host,
@@ -48,7 +65,30 @@ export function loadServerConfig(
     keyPath: path.join(certDir, "dev-key.pem"),
     staticDir,
     dataDir,
+    devNetwork,
   };
+}
+
+function parseNonNegative(raw: string | undefined, name: string): number {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return 0;
+  }
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0 || value > 5_000) {
+    throw new RangeError(
+      `${name} must be a number in [0, 5000], received "${trimmed}"`,
+    );
+  }
+  return value;
+}
+
+function parsePercent(raw: string | undefined, name: string): number {
+  const value = parseNonNegative(raw, name);
+  if (value > 100) {
+    throw new RangeError(`${name} must be in [0, 100], received "${raw}"`);
+  }
+  return value;
 }
 
 function parsePort(raw: string | undefined): number {

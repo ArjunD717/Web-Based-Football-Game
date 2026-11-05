@@ -29,6 +29,12 @@ import {
   type RequestHandler,
 } from "./http/request-handler";
 import type { TlsMaterial } from "./tls";
+import type { DevNetworkConfig } from "./config";
+import {
+  devNetworkDelayMs,
+  devNetworkDrops,
+  devNetworkEnabled,
+} from "./dev-network";
 
 export interface Logger {
   info(message: string): void;
@@ -55,6 +61,8 @@ export interface GameServerOptions {
   readonly heartbeatIntervalMs?: number;
   /** Exposes the server loop's rolling timing sample on /healthz. */
   readonly getRuntimeMetrics?: () => HealthSimulationMetrics;
+  /** Dev-only artificial one-way latency, jitter and binary snapshot loss. */
+  readonly devNetwork?: DevNetworkConfig;
 }
 
 export interface RunningGameServer {
@@ -71,6 +79,8 @@ interface Session {
   helloTimer: NodeJS.Timeout | null;
   replaced: boolean;
   client: ClientConnection | null;
+  lastOutgoingDueMs: number;
+  lastIncomingDueMs: number;
 }
 
 /**
@@ -86,6 +96,12 @@ export async function startGameServer(
   const helloTimeoutMs = options.helloTimeoutMs ?? TUNING.network.helloTimeoutMs;
   const heartbeatIntervalMs =
     options.heartbeatIntervalMs ?? TUNING.network.serverHeartbeatIntervalMs;
+  const devNetwork = options.devNetwork ?? {
+    latencyMs: 0,
+    jitterMs: 0,
+    lossPct: 0,
+  };
+  const devNetworkActive = devNetworkEnabled(devNetwork);
 
   const sessions = new Set<Session>();
   /** Token → current socket. A new hello with the same token replaces the old. */
@@ -161,6 +177,50 @@ export async function startGameServer(
     socket.close(closeCode, closeReason);
   };
 
+  const delayedSend = (
+    session: Session,
+    deliver: () => void,
+  ): void => {
+    if (!devNetworkActive) {
+      deliver();
+      return;
+    }
+    const now = Date.now();
+    const due = Math.max(
+      now + devNetworkDelayMs(devNetwork),
+      session.lastOutgoingDueMs,
+    );
+    session.lastOutgoingDueMs = due;
+    setTimeout(() => {
+      if (session.replaced) {
+        return;
+      }
+      deliver();
+    }, due - now);
+  };
+
+  const delayedInput = (
+    session: Session,
+    deliver: () => void,
+  ): void => {
+    if (!devNetworkActive) {
+      deliver();
+      return;
+    }
+    const now = Date.now();
+    const due = Math.max(
+      now + devNetworkDelayMs(devNetwork),
+      session.lastIncomingDueMs,
+    );
+    session.lastIncomingDueMs = due;
+    setTimeout(() => {
+      if (session.replaced || session.client === null) {
+        return;
+      }
+      deliver();
+    }, due - now);
+  };
+
   const broadcastPresence = (): void => {
     const message: ServerMessage = {
       t: "presence",
@@ -192,10 +252,17 @@ export async function startGameServer(
     const client: ClientConnection = {
       token,
       send: (message) => {
-        send(session.ws, message);
+        delayedSend(session, () => {
+          send(session.ws, message);
+        });
       },
       sendBinary: (data) => {
-        sendBinary(session.ws, data);
+        if (devNetworkDrops(devNetwork)) {
+          return;
+        }
+        delayedSend(session, () => {
+          sendBinary(session.ws, data);
+        });
       },
       close: (code, reason) => {
         session.ws.close(code, reason);
@@ -337,11 +404,14 @@ export async function startGameServer(
       handlers?.onBinaryMessage !== undefined &&
       session.client !== null
     ) {
-      try {
-        handlers.onBinaryMessage(session.client, bytes);
-      } catch (error) {
-        logger.error("Application binary handler failed", error);
-      }
+      const client = session.client;
+      delayedInput(session, () => {
+        try {
+          handlers.onBinaryMessage?.(client, bytes);
+        } catch (error) {
+          logger.error("Application binary handler failed", error);
+        }
+      });
       return;
     }
 
@@ -363,6 +433,8 @@ export async function startGameServer(
       helloTimer: null,
       replaced: false,
       client: null,
+      lastOutgoingDueMs: 0,
+      lastIncomingDueMs: 0,
     };
     sessions.add(session);
 

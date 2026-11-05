@@ -132,6 +132,9 @@ Useful environment overrides:
 | `FB_CERT_DIR` | `certs` | Certificate directory |
 | `FB_STATIC_DIR` | `packages/client/dist` | Built client directory |
 | `FB_DATA_DIR` | `data` | Generated public football data |
+| `FB_DEV_LATENCY_MS` | `0` | Dev-only one-way latency for app messages/input |
+| `FB_DEV_JITTER_MS` | `0` | Dev-only symmetric jitter around that latency |
+| `FB_DEV_LOSS_PCT` | `0` | Dev-only percentage of binary snapshots to drop |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
@@ -869,6 +872,11 @@ Not implemented yet (by milestone design):
   prediction** setting advances only the locally controlled body from the last
   sent input, then snaps or softly reconciles it against the interpolated
   authoritative position; replays always record the authoritative view.
+- Dev-only network conditions: `FB_DEV_LATENCY_MS` and `FB_DEV_JITTER_MS`
+  delay app messages and binary input in both directions, while
+  `FB_DEV_LOSS_PCT` drops binary snapshots. Text control messages stay reliable.
+  This is disabled by default and prints a startup warning when active, so the
+  prediction snap/correction path can be exercised without a WAN.
 - Disconnects pause the simulation; the seat is held for 60 s. Gameplay resumes
   only after both seats are connected again. There is no forfeit scoring yet.
 
@@ -982,7 +990,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 65 test files and 578 tests passing.
+13. `pnpm check`: expect 66 test files and 585 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -1013,7 +1021,10 @@ The two-minute match check:
     prediction**, reload and confirm the choice persists; with a high-latency
     link the controlled player's body should start moving before the
     interpolated snapshot catches up, and must snap back cleanly on switches,
-    restarts and large corrections. Append `?renderer=2d` to load the canvas
+    restarts and large corrections. Restart the dev server with
+    `FB_DEV_LATENCY_MS=150 FB_DEV_JITTER_MS=30 FB_DEV_LOSS_PCT=5 pnpm dev`
+    and repeat while watching `/healthz` and the HUD counters; reconnect/resync
+    must recover from dropped deltas. Append `?renderer=2d` to load the canvas
     renderer directly.
 15. Score a goal: watch the conceding net ripple and the crowd brighten before
     pressing **Replay goal** (or `R`). Verify the slow-motion replay banner,

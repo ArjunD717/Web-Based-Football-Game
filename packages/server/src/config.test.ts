@@ -17,6 +17,11 @@ describe("loadServerConfig", () => {
     expect(config.keyPath).toBe(path.join(config.certDir, "dev-key.pem"));
     expect(config.staticDir).toMatch(/packages[\\/]client[\\/]dist$/);
     expect(path.basename(config.dataDir)).toBe("data");
+    expect(config.devNetwork).toEqual({
+      latencyMs: 0,
+      jitterMs: 0,
+      lossPct: 0,
+    });
   });
 
   it("honours environment overrides", () => {
@@ -26,12 +31,20 @@ describe("loadServerConfig", () => {
       FB_CERT_DIR: "tmp/certs",
       FB_STATIC_DIR: "tmp/client",
       FB_DATA_DIR: "tmp/data",
+      FB_DEV_LATENCY_MS: "120",
+      FB_DEV_JITTER_MS: "25",
+      FB_DEV_LOSS_PCT: "10",
     });
     expect(config.host).toBe("127.0.0.1");
     expect(config.port).toBe(9443);
     expect(config.certDir).toBe(path.resolve("tmp/certs"));
     expect(config.staticDir).toBe(path.resolve("tmp/client"));
     expect(config.dataDir).toBe(path.resolve("tmp/data"));
+    expect(config.devNetwork).toEqual({
+      latencyMs: 120,
+      jitterMs: 25,
+      lossPct: 10,
+    });
   });
 
   it("defaults blank host and port values", () => {
@@ -46,4 +59,17 @@ describe("loadServerConfig", () => {
       expect(() => loadServerConfig({ FB_PORT: value })).toThrow(RangeError);
     },
   );
+
+  it.each(["FB_DEV_LATENCY_MS", "FB_DEV_JITTER_MS", "FB_DEV_LOSS_PCT"])(
+    "rejects negative %s",
+    (name) => {
+      expect(() => loadServerConfig({ [name]: "-1" })).toThrow(RangeError);
+    },
+  );
+
+  it("rejects snapshot loss above 100 percent", () => {
+    expect(() => loadServerConfig({ FB_DEV_LOSS_PCT: "101" })).toThrow(
+      RangeError,
+    );
+  });
 });
