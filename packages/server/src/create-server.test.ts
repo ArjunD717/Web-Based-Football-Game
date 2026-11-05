@@ -24,7 +24,10 @@ import {
   type Logger,
   type RunningGameServer,
 } from "./create-server";
-import type { HealthPayload } from "./http/request-handler";
+import type {
+  HealthPayload,
+  ReplayExport,
+} from "./http/request-handler";
 import { ServerTickMetrics } from "./performance";
 
 const silentLogger: Logger = {
@@ -187,6 +190,36 @@ describe("game server", () => {
       maxTickMs: 2.5,
       overBudgetTicks: 0,
     });
+  });
+
+  it("serves a downloadable server replay export", async () => {
+    const replay: ReplayExport = {
+      code: "ABCD",
+      generatedAtMs: 123,
+      setup: {} as ReplayExport["setup"],
+      frames: [],
+    };
+    const server = await startTestServer({
+      getReplayExport: (code) =>
+        code === "ABCD" ? replay : null,
+    });
+
+    const response = await fetch(
+      `${baseUrl(server)}/api/replay/abcd.json`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain(
+      "application/json",
+    );
+    expect(response.headers.get("content-disposition")).toContain(
+      "replay-ABCD.json",
+    );
+    expect(await response.json()).toEqual(replay);
+
+    const missing = await fetch(
+      `${baseUrl(server)}/api/replay/ZZZZ.json`,
+    );
+    expect(missing.status).toBe(404);
   });
 
   it("broadcasts presence as clients join and leave", async () => {

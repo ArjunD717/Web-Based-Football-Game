@@ -820,8 +820,9 @@ Not implemented yet (by milestone design):
 - Real CSV registry and further national-team competition modes; M9 ships the
   call-up pipeline and playable national teams, but the bundled dataset is
   still clearly marked fake sample data
-- Real animation assets (GLTF/skeletal), commentary audio, server-side replay
-  clips/export and a career/competition mode
+- Real animation assets (GLTF/skeletal), commentary audio and a
+  career/competition mode; server replay export is a rolling snapshot window,
+  not goal-triggered clip capture
 - Full rollback prediction of ball contact, dribble touches or remote players;
   the local predictor is visual-only and the ball still renders behind authority
 - Authentication. The server is intended for a trusted private LAN only.
@@ -867,6 +868,10 @@ Not implemented yet (by milestone design):
   controlled-player indices are included in each changed-player record.
 - If a client asks for `resync`, reconnects, or acks a sequence no longer in the
   history ring, the server sends the static setup plus a full snapshot.
+- The server retains the latest authoritative snapshot window per room and serves
+  `/api/replay/<CODE>.json` as a downloadable JSON clip (setup + ordered full
+  frames). The in-match **Export replay** link downloads that window; no auth is
+  applied beyond the private-LAN trust boundary.
 - The client renders 100 ms behind arrival to absorb 30 Hz spacing and LAN jitter.
   The ball and remote players are always server-driven. An opt-in **Local
   prediction** setting advances only the locally controlled body from the last
@@ -990,7 +995,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 66 test files and 585 tests passing.
+13. `pnpm check`: expect 66 test files and 588 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -1036,7 +1041,11 @@ The two-minute match check:
     **Sound** and confirm the whistle/kick/goal effects and crowd bed respect
     the setting. Disable WebGL in a test browser to verify the automatic 2D
     fallback toast.
-16. Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
+16. During a match, click **Export replay**; the downloaded
+    `replay-<CODE>.json` must contain the match setup and an ordered frame
+    window, and `/api/replay/<CODE>.json` must return it with
+    `Content-Disposition`. After the room closes, the same URL must 404.
+    Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
     16.67 ms and `p95TickMs` stays below the budget during a live match.
 17. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish
     without a target miss or unfinished match.

@@ -477,6 +477,30 @@ describe("disconnect and reconnect", () => {
   });
 });
 
+describe("server replay export", () => {
+  it("exports the retained authoritative snapshot window", () => {
+    const fixture = setupRoom();
+    startReadyMatch(fixture);
+    for (let tick = 0; tick < 30; tick += 1) {
+      fixture.manager.tick(1 / 60);
+    }
+
+    const replay = fixture.manager.exportReplay(fixture.code.toLowerCase());
+    expect(replay).not.toBeNull();
+    expect(replay?.code).toBe(fixture.code);
+    expect(replay?.setup.matchId).toBe(
+      fixture.host.lastMatchStart().setup.matchId,
+    );
+    expect(replay?.frames.length).toBeGreaterThan(0);
+    const sequences = replay?.frames.map((frame) => frame.seq) ?? [];
+    expect(sequences).toEqual([...sequences].sort((a, b) => a - b));
+  });
+
+  it("returns null for an unknown room", () => {
+    expect(setupRoom().manager.exportReplay("ZZZZ")).toBeNull();
+  });
+});
+
 describe("match management", () => {
   it("applies host settings and rejects guest changes", () => {
     const fixture = setupRoom();
