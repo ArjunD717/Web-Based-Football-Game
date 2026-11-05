@@ -76,6 +76,7 @@ describe("replay gallery", () => {
         name: `${side} ${index + 1}`,
         number: index + 1,
         goalkeeper: index === 0,
+        sprintSpeed: 65 + index,
       }));
     const setup = {
       matchId: "match-1",
