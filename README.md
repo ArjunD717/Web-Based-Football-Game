@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 18**:
+both devices are thin clients. This repository is at **Milestone 19**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -19,7 +19,8 @@ LOD, team palettes and a procedural bone-animation layer. M16 adds root-level
 foot planting and deterministic per-player skin and boot colours. M17 delivers
 the authored asset as WebP textures and warms the parsed template from the
 lobby. M18 bakes the tested pose model into fifteen glTF animation clips and
-plays them through a per-player mixer.
+plays them through a per-player mixer. M19 replaces root-only grounding with
+per-leg analytic IK and world-space foot anchors during stance.
 
 ## Requirements
 
@@ -154,6 +155,54 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 19 scope
+
+Implemented:
+
+- Each authored leg is an analytic **hip → knee → ankle** two-bone chain. The
+  solver respects the measured upper/lower segment lengths, clamps unreachable
+  targets, and uses the character's forward direction as the knee pole. It
+  returns joint positions; the rig converts those into bone rotations without
+  changing bone lengths
+- A stance foot acquires a **world-space anchor** when its animated ankle is
+  within **3.5 cm** of the pitch. While the hips travel over it, the anchor
+  stays fixed; the foot is released when it lifts more than **8 cm**, the hip
+  travels **1.25 m** from the plant, the leg can no longer reach, the state
+  changes, the replay rewinds, or the root jumps more than **1.5 m**
+- Released contacts blend back to the clip over the **24 s⁻¹** IK blend rate
+  instead of snapping. Only one foot receives a stance solve in jog, sprint,
+  dribble and one-shot states; idle allows both feet to remain planted
+- The existing root correction still runs first and provides the fallback
+  height. IK then fixes individual ankles and holds the stance anchor. This
+  keeps the existing foot-plant limits and handles shots, passes, tackles and
+  volleys without a second gait system
+- The debug smoke exercised three authored players (idle, jog and sprint) while
+  moving the jogger's hips over a fixed anchor. At full IK weight the solved
+  ankle matched its ground target within floating-point error, and no chain
+  length changed. The IK was also checked with the contact path disabled
+- `pnpm check` passes **636 tests**, including IK reach/plane and foot-lock
+  acquire/release tests. `pnpm build` passes. No simulation, protocol, input,
+  camera or asset files changed
+
+Known M19 limitations (by design):
+
+- Foot orientation is still clip-driven. The ankle reaches the ground target,
+  but there is no separate flat-foot or toe-strike solver, so the boot can
+  pitch with the animation
+- Contact is inferred from ankle height, not from explicit animation events or
+  authoritative simulation contact. It is intentionally a presentation
+  approximation
+- The gait remains the baked clip cadence; stride length is not matched to
+  movement speed, so a locked foot can reach its release limits during very
+  fast direction changes
+- Low visual quality still uses the procedural rig without this IK. The
+  authored high/medium path only
+- The root is corrected for the lowest ankle, but it is not re-solved for two
+  simultaneous foot targets. Idle can use both legs; moving states use one
+- There is no footstep audio, contact dust or toe bone roll
+- The IK pass was not benchmarked with 22 authored players at once; the smoke
+  used three. The solver runs only for authored high/medium players
+
 ## Milestone 18 scope
 
 Implemented:
@@ -191,8 +240,9 @@ Known M18 limitations (by design):
   contact poses or hand-keyed follow-through
 - The mixer preserves stamina through time scale, not stride amplitude; the
   baked poses use full-stamina amplitude
-- There is still no per-foot two-bone IK. Foot planting remains a root
-  correction, so foot sliding and extreme foot heights are still possible
+- M18 still uses root-only foot planting. M19 adds per-foot IK and stance
+  anchors, so the old root correction is now the fallback rather than the only
+  grounding path
 - Clip durations are rounded to 30 Hz samples, so a planned 0.9 s one-shot is
   approximately 0.933 s in the GLB
 - No distance LODs, real shadow pass, KTX2/Basis or meshopt/Draco compression
@@ -1407,6 +1457,11 @@ The two-minute match check:
     T-pose; transitions must cross-fade. Repeat at low stamina and confirm the
     cycles slow without losing their poses. Switch to low quality to confirm
     the procedural fallback, then back to high.
+23. Watch a jogging or sprinting authored player from a close side angle.
+    Confirm the stance foot stays at one world position while the hips pass
+    over it, then lifts cleanly. No knee should bend backward, no leg should
+    visibly stretch, and a state change or replay rewind must not leave a foot
+    anchored behind the player.
 
 ## Layout
 
