@@ -24,6 +24,7 @@ import { disposeObject } from "./three-dispose";
 import { pitchToWorld } from "./three-layout";
 import { createPitchVisual, type GoalNetVisual } from "./three-pitch";
 import type { StadiumVisual } from "./three-stadium";
+import { playerDetailFor, shadowCasterIds, type PlayerDistanceEntry } from "./player-lod";
 import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
@@ -92,6 +93,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly footstepListener = new THREE.Vector3();
   private readonly footstepForward = new THREE.Vector3();
   private readonly footstepRight = new THREE.Vector3();
+  private readonly lodCameraPosition = new THREE.Vector3();
+  private readonly lodPlayerPosition = new THREE.Vector3();
+  private readonly lodDistances: Array<PlayerDistanceEntry & { distanceM: number }> = [];
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -287,7 +291,34 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.cameraDebug.update(frame);
     }
 
+    this.applyPlayerLod();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * Apply camera-distance detail and a bounded real-shadow budget after the
+   * camera has settled for this frame. The LOD only changes presentation; the
+   * simulation and snapshot data remain untouched.
+   */
+  private applyPlayerLod(): void {
+    this.camera.getWorldPosition(this.lodCameraPosition);
+    this.lodDistances.length = 0;
+    for (const [id, rig] of this.players) {
+      const world = rig.root.getWorldPosition(this.lodPlayerPosition);
+      this.lodDistances.push({
+        id,
+        distanceM: this.lodCameraPosition.distanceTo(world),
+      });
+    }
+    const tuning = VISUAL_TUNING.playerLod;
+    const casters = VISUAL_QUALITY[this.visualQuality].shadows
+      ? shadowCasterIds(this.lodDistances, tuning)
+      : new Set<string>();
+    for (const entry of this.lodDistances) {
+      const rig = this.players.get(entry.id);
+      rig?.setDetail?.(playerDetailFor(entry.distanceM, tuning));
+      rig?.setShadowCasting?.(casters.has(entry.id));
+    }
   }
 
   setCameraMode(mode: CameraMode): void {
