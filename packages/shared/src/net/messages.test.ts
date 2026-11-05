@@ -494,15 +494,19 @@ describe("M10 match management messages", () => {
     ).toEqual(shootoutMessage);
 
     const replayMessage = {
-      t: "replayClip" as const,
-      clip: {
-        id: "g3",
-        kind: "goal" as const,
-        scoreHome: 2,
-        scoreAway: 1,
-        createdAtMs: 1234,
-        frameCount: 135,
-      },
+      t: "replayClips" as const,
+      clips: [
+        {
+          id: "g3",
+          kind: "goal" as const,
+          scoreHome: 2,
+          scoreAway: 1,
+          clockSeconds: 1_440,
+          half: 1 as const,
+          createdAtMs: 1234,
+          frameCount: 135,
+        },
+      ],
     };
     expect(
       parseServerMessage(encodeServerMessage(replayMessage)),
@@ -513,8 +517,8 @@ describe("M10 match management messages", () => {
     expect(
       parseServerMessage(
         JSON.stringify({
-          t: "replayClip",
-          clip: { id: "g1", kind: "save" },
+          t: "replayClips",
+          clips: [{ id: "g1", kind: "save" }],
         }),
       ),
     ).toBeNull();

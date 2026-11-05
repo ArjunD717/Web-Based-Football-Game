@@ -518,22 +518,29 @@ describe("server replay export", () => {
     for (let tick = 0; tick < 100; tick += 1) {
       fixture.manager.tick(1 / 60);
     }
+    match.state.referee.scoreHome = 2;
+    for (let tick = 0; tick < 100; tick += 1) {
+      fixture.manager.tick(1 / 60);
+    }
 
-    const message = fixture.host.lastMessageType("replayClip");
-    expect(message?.clip).toMatchObject({
+    const message = fixture.host.lastMessageType("replayClips");
+    expect(message?.clips).toHaveLength(2);
+    const latest = message?.clips.at(-1);
+    expect(latest).toMatchObject({
       kind: "goal",
-      scoreHome: 1,
+      scoreHome: 2,
       scoreAway: 0,
     });
-    expect(message?.clip.frameCount).toBeGreaterThan(0);
+    expect(latest?.clockSeconds).toBeGreaterThanOrEqual(0);
+    expect(latest?.frameCount).toBeGreaterThan(0);
 
     const clip = fixture.manager.exportReplayClip(
       fixture.code,
-      message?.clip.id ?? "",
+      latest?.id ?? "",
     );
-    expect(clip?.id).toBe(message?.clip.id);
+    expect(clip?.id).toBe(latest?.id);
     expect(clip?.kind).toBe("goal");
-    expect(clip?.frames.length).toBe(message?.clip.frameCount);
+    expect(clip?.frames.length).toBe(latest?.frameCount);
     expect(fixture.manager.exportReplayClip(fixture.code, "missing")).toBeNull();
   });
 

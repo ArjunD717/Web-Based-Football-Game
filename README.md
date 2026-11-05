@@ -829,10 +829,11 @@ Not implemented yet (by milestone design):
 
 ## Protocol and reconnect notes
 
-- `PROTOCOL_VERSION = 11`. Hello accepts an optional `sessionToken`; the welcome
+- `PROTOCOL_VERSION = 12`. Hello accepts an optional `sessionToken`; the welcome
   returns the stable token as `sessionId`. The browser keeps it in
-  `sessionStorage`. Protocol 11 adds the `replayClip` announcement; older
-  clients are rejected at the handshake.
+  `sessionStorage`. Protocol 12 replaces the single replay announcement with
+  the full retained `replayClips` gallery; older clients are rejected at the
+  handshake.
 - Lobby JSON carries each seat's selected club and full `TeamSheet`;
   `setTeam` and `updateSheet` are client commands, and `lobbyState` is
   re-broadcast to both seats after every accepted edit. `updateSettings`
@@ -871,10 +872,12 @@ Not implemented yet (by milestone design):
 - The server retains the latest authoritative snapshot window per room and serves
   `/api/replay/<CODE>.json` as a downloadable JSON window (setup + ordered full
   frames). It also captures goal-triggered clips: up to 3 s before the
-  score-changing snapshot plus 1.5 s after, announced to clients as
-  `replayClip` and served at `/api/replay/<CODE>/<CLIP>.json`. The match HUD
-  exposes **Export window** and **Goal replay** downloads; no auth is applied
-  beyond the private-LAN trust boundary.
+  score-changing snapshot plus 1.5 s after, announced as a `replayClips`
+  gallery and served at `/api/replay/<CODE>/<CLIP>.json`. The **Replays** HUD
+  button and full-time **Replay goals** button list every retained clip
+  (newest first) with score, match minute and frame count; **Export window**
+  downloads the rolling authoritative window. No auth is applied beyond the
+  private-LAN trust boundary.
 - The client renders 100 ms behind arrival to absorb 30 Hz spacing and LAN jitter.
   The ball and remote players are always server-driven. An opt-in **Local
   prediction** setting advances only the locally controlled body from the last
@@ -998,7 +1001,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 67 test files and 591 tests passing.
+13. `pnpm check`: expect 68 test files and 593 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -1047,10 +1050,11 @@ The two-minute match check:
 16. During a match, click **Export window**; the downloaded
     `replay-<CODE>.json` must contain the match setup and an ordered frame
     window, and `/api/replay/<CODE>.json` must return it with
-    `Content-Disposition`. After a goal, **Goal replay** must enable and
-    download `replay-<CODE>-<CLIP>.json` from
-    `/api/replay/<CODE>/<CLIP>.json`. After the room closes, both URLs must
-    404.
+    `Content-Disposition`. After a goal, **Replays** must show the retained
+    count; open it and download `replay-<CODE>-<CLIP>.json` from
+    `/api/replay/<CODE>/<CLIP>.json`. Finish the match and verify **Replay
+    goals** opens the same gallery over the statistics board. After the room
+    closes, both URLs must 404.
     Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
     16.67 ms and `p95TickMs` stays below the budget during a live match.
 17. Run `pnpm test:soak` (1,000 full matches) and `pnpm perf`; both must finish
