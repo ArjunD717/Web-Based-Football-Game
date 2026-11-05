@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 20**:
+both devices are thin clients. This repository is at **Milestone 21**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -21,7 +21,8 @@ the authored asset as WebP textures and warms the parsed template from the
 lobby. M18 bakes the tested pose model into fifteen glTF animation clips and
 plays them through a per-player mixer. M19 replaces root-only grounding with
 per-leg analytic IK and world-space foot anchors during stance. M20 scales
-authored clip playback to the speed the player actually covers.
+authored clip playback to the speed the player actually covers. M21 adds
+stride-locked footstep events and procedural contact audio.
 
 ## Requirements
 
@@ -156,6 +157,43 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 21 scope
+
+Implemented:
+
+- Authored rigs emit presentation-only `FootstepEvent` values with the step
+  side, player state and a **0.3–1.0** intensity. The event is carried through
+  the optional `MatchRenderer.setFootstepSink` contract to `main.ts`; the
+  renderers themselves never play audio
+- A stride clock advances one step at every **π radians** of the speed-scaled
+  gait phase. The side alternates by step index, so a jog at 4.2 m/s produces
+  **2.2 steps/second** rather than firing on noisy IK contact edges. The clock
+  requires at least **1.1 m/s**, ignores non-locomotion states, debounces
+  crossings at **0.26 s**, and resets on state changes, rewinds and root jumps
+- `MatchAudio` synthesizes a footstep from the existing self-made noise buffer:
+  a low-passed short burst with a 6 ms attack and 105 ms decay, level scaled by
+  the event intensity. No licensed samples or new assets are used
+- Live footsteps are muted while a replay is active because the replay path
+  already drives its own audio timeline. Switching between the 2D and 3D
+  renderers rebuilds the event sink for the new renderer
+- The smoke produced **11 alternating left/right events over 5 seconds** at a
+  jog, with intensity **≈1.00**; the browser `AudioContext` reached `running`
+  and the noise buffer was present. `pnpm check` passes **647 tests**;
+  `pnpm build` passes. No simulation, protocol, input, camera or asset files
+  changed
+
+Known M21 limitations (by design):
+
+- Footstep timing comes from the gait phase, not from authoritative contact
+  events or per-foot world positions
+- All footsteps use the same mono mix. There is no stereo panning, distance
+  attenuation, occlusion, surface material or player-size variation
+- One-shot states, idle, headers and set pieces do not produce footsteps
+- Replays intentionally mute live footsteps; they do not reconstruct them
+  from recorded contact data
+- Audio requires the existing user-enabled/unlocked `AudioContext`
+- The 22-player audio mix was not load-tested
+
 ## Milestone 20 scope
 
 Implemented:
@@ -193,7 +231,7 @@ Known M20 limitations (by design):
 - Very fast direction changes can still reach the foot-anchor release limits;
   the speed estimate does not model stride length or acceleration
 - One-shot clips intentionally ignore gait scaling
-- There is still no footstep audio or contact dust
+- At M20 there is no footstep audio or contact dust. M21 adds footstep audio
 
 ## Milestone 19 scope
 
@@ -1505,6 +1543,10 @@ The two-minute match check:
     at low speed and faster at sprint speed, while the torso does not change
     scale. A pass or shot must keep its authored one-shot timing. Pause/rewind
     and rejoin to confirm gait speed resets instead of spiking.
+25. Enable sound and jog in a 3D match. Footfalls must alternate left/right at
+    roughly the leg cadence, become quieter at walking pace, and be silent when
+    idle or stationary. Disable audio, start a replay and switch renderers; no
+    live footstep should leak into the replay or the 2D path.
 
 ## Layout
 
