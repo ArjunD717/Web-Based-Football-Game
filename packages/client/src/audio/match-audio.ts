@@ -1,6 +1,7 @@
 // packages/client/src/audio/match-audio.ts
 
 import type { SnapshotFrame, SnapshotMatchPhase } from "@fb/shared";
+import type { FootstepEvent } from "../render/footsteps";
 
 const STORAGE_KEY = "fb.audio";
 const MASTER_LEVEL = 0.55;
@@ -91,6 +92,13 @@ export class MatchAudio {
     this.eventSeq = frame.match.lastEvent?.seq ?? 0;
   }
 
+  handleFootstep(event: FootstepEvent): void {
+    if (!this.enabled || !this.unlocked || this.context === null) {
+      return;
+    }
+    this.playFootstep(event.intensity);
+  }
+
   handleSnapshot(frame: SnapshotFrame): void {
     if (!this.enabled || !this.unlocked || this.context === null) {
       return;
@@ -155,6 +163,37 @@ export class MatchAudio {
       oscillator.stop(now + duration + 0.02);
     }
     window.setTimeout(() => gain.disconnect(), (duration + 0.2) * 1_000);
+  }
+
+  private playFootstep(intensity: number): void {
+    const context = this.context;
+    const master = this.master;
+    const buffer = this.noiseBuffer;
+    if (context === null || master === null || buffer === null) {
+      return;
+    }
+    const now = context.currentTime;
+    const level = 0.025 + Math.max(0, Math.min(1, intensity)) * 0.045;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    const filter = context.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 780 + intensity * 620;
+    filter.Q.value = 0.7;
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(level, now + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.105);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    const offset = Math.random() * Math.max(0, buffer.duration - 0.2);
+    source.start(now, offset, 0.13);
+    source.stop(now + 0.14);
+    window.setTimeout(() => {
+      gain.disconnect();
+      filter.disconnect();
+    }, 220);
   }
 
   private playGoal(): void {

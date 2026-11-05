@@ -147,6 +147,20 @@ const replay = new MatchReplayBuffer();
 const audio = new MatchAudio();
 const haptics = new MatchHaptics();
 
+/**
+ * Renderer contact events are presentation-only. Replays drive their own
+ * audio timeline, so live footsteps are muted while a replay is active.
+ */
+function connectFootstepAudio(): void {
+  renderer.setFootstepSink?.((event) => {
+    if (!replay.active) {
+      audio.handleFootstep(event);
+    }
+  });
+}
+
+connectFootstepAudio();
+
 const connectionDot = byId<HTMLSpanElement>("connection-dot");
 const connectionLabel = byId<HTMLElement>("connection-label");
 const pingLabel = byId<HTMLElement>("ping-label");
@@ -3100,6 +3114,7 @@ function switchRenderer(next: RendererMode): void {
   mounted = mountMatchRenderer(pitchStage, next);
   renderer = mounted.renderer;
   rendererMode = mounted.mode;
+  connectFootstepAudio();
   rendererFellBack = mounted.fellBack;
   renderer.setCameraMode?.(cameraMode);
   renderer.setQuality?.(visualQuality);
