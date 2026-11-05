@@ -25,8 +25,9 @@ import {
   type FootLockState,
 } from "./foot-ik";
 import {
-  footstepIntensity,
-  shouldEmitFootstep,
+  createFootstepClock,
+  resetFootstepClock,
+  updateFootstepClock,
   type FootstepSink,
 } from "./footsteps";
 import { gaitPlaybackScale, updateGaitSpeed } from "./gait";
@@ -194,6 +195,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private gaitSpeedMps = 0;
   private lastFootIkState: RenderPlayer["state"] | null = null;
   private lastFootstepElapsed = Number.NEGATIVE_INFINITY;
+  private readonly footstepClock = createFootstepClock();
   private footstepSink: FootstepSink | null = null;
   private restAnkleY = Number.POSITIVE_INFINITY;
   private groundOffset = 0;
@@ -457,8 +459,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     ) {
       this.resetFootLocks();
     }
-    if (rewound || rootJumped) {
+    if (rewound || rootJumped || player.state !== this.lastFootIkState) {
       this.lastFootstepElapsed = Number.NEGATIVE_INFINITY;
+      resetFootstepClock(this.footstepClock);
     }
     this.lastFootIkState = player.state;
     this.lastRootPosition.copy(this.root.position);
@@ -501,6 +504,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     } else {
       this.stridePhase += deltaSeconds * cadence;
     }
+    this.updateFootsteps(player.state, elapsed);
 
     const target = computeCharacterPose(
       player.state,
@@ -596,7 +600,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     this.tilt.position.y = baseLift + this.groundOffset;
     if (groundLift !== null) {
       this.root.updateMatrixWorld(true);
-      this.updateFootIk(player.state, groundLift, deltaSeconds, elapsed);
+      this.updateFootIk(player.state, groundLift, deltaSeconds);
     } else {
       this.resetFootLocks();
     }
@@ -608,6 +612,28 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
 
   setFootstepSink(sink: FootstepSink | null): void {
     this.footstepSink = sink;
+  }
+
+  private updateFootsteps(
+    state: RenderPlayer["state"],
+    elapsedSeconds: number,
+  ): void {
+    const tuning = VISUAL_TUNING.authoredPlayer;
+    const event = updateFootstepClock(
+      this.footstepClock,
+      state,
+      this.stridePhase,
+      this.gaitSpeedMps,
+      elapsedSeconds,
+      this.lastFootstepElapsed,
+      tuning.footsteps,
+      tuning.gait,
+    );
+    if (event === null) {
+      return;
+    }
+    this.lastFootstepElapsed = elapsedSeconds;
+    this.footstepSink?.(event);
   }
 
   private resetFootLocks(): void {
@@ -627,7 +653,6 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     state: RenderPlayer["state"],
     groundLift: number,
     deltaSeconds: number,
-    elapsedSeconds: number,
   ): void {
     if (
       this.legs.length === 0 ||
@@ -648,7 +673,6 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       readonly leg: LegRig;
       readonly height: number;
       hasContact: boolean;
-      justLocked: boolean;
     }> = [];
     for (const leg of this.legs) {
       leg.thigh.getWorldPosition(this.ikHip);
@@ -671,7 +695,6 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         leg,
         height,
         hasContact: contact !== null && !contact.justReleased,
-        justLocked: contact?.justLocked === true,
       });
     }
 
@@ -708,28 +731,6 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
               tuning.blendRate,
               deltaSeconds,
             );
-      if (
-        entry.hasContact &&
-        entry.justLocked &&
-        shouldEmitFootstep(
-          state,
-          this.gaitSpeedMps,
-          elapsedSeconds,
-          this.lastFootstepElapsed,
-          VISUAL_TUNING.authoredPlayer.footsteps,
-        )
-      ) {
-        this.lastFootstepElapsed = elapsedSeconds;
-        this.footstepSink?.({
-          side: entry.leg.foot.name.endsWith("_l") ? "left" : "right",
-          state,
-          intensity: footstepIntensity(
-            state,
-            this.gaitSpeedMps,
-            VISUAL_TUNING.authoredPlayer.gait,
-          ),
-        });
-      }
       if (
         !entry.leg.hasTarget ||
         entry.leg.weight <= 1e-4

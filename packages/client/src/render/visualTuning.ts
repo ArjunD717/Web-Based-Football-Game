@@ -111,7 +111,7 @@ export interface VisualTuning {
     readonly footsteps: {
       /** Below this measured speed a contact should stay silent. */
       readonly minSpeedMps: number;
-      /** Debounce repeated contact acquisitions. */
+      /** Debounce repeated stride crossings. */
       readonly minIntervalSeconds: number;
     };
     readonly appearance: {
@@ -201,7 +201,7 @@ export const VISUAL_TUNING: VisualTuning = {
     },
     footsteps: {
       minSpeedMps: 1.1,
-      minIntervalSeconds: 0.14,
+      minIntervalSeconds: 0.26,
     },
     appearance: {
       skinTones: [
