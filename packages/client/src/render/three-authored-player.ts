@@ -6,6 +6,10 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import type { Pitch } from "@fb/sim";
 import { PLAYER_MATCH_ASSET_URL } from "../character/asset";
 import { computeCharacterPose } from "./character-animation";
+import {
+  footPlantOffset,
+  groundedLiftFor,
+} from "./character-grounding";
 import { disposeObject } from "./three-dispose";
 import {
   createControlledMarker,
@@ -188,6 +192,11 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly card: THREE.Mesh;
   private readonly bones = new Map<string, THREE.Bone>();
   private readonly boneRest = new Map<string, THREE.Quaternion>();
+  private readonly footBones: THREE.Bone[] = [];
+  private readonly rootWorld = new THREE.Vector3();
+  private readonly footWorld = new THREE.Vector3();
+  private restAnkleY = Number.POSITIVE_INFINITY;
+  private groundOffset = 0;
   private readonly workingQuaternion = new THREE.Quaternion();
   private readonly deltaQuaternion = new THREE.Quaternion();
   private readonly workingEuler = new THREE.Euler();
@@ -242,6 +251,22 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         this.boneRest.set(bone.name, bone.quaternion.clone());
       }
     });
+    for (const name of ["foot_l", "foot_r"]) {
+      const foot = this.bones.get(name);
+      if (foot !== undefined) {
+        this.footBones.push(foot);
+      }
+    }
+    if (this.footBones.length > 0) {
+      this.root.updateMatrixWorld(true);
+      const rootY = this.root.getWorldPosition(this.rootWorld).y;
+      this.restAnkleY = Math.min(
+        ...this.footBones.map((foot) => {
+          foot.updateWorldMatrix(true, false);
+          return foot.getWorldPosition(this.footWorld).y - rootY;
+        }),
+      );
+    }
 
     this.shadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.58, 20),
@@ -377,10 +402,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       bone.quaternion.slerp(this.workingQuaternion, blend);
     }
 
-    this.tilt.position.y =
-      deltaSeconds === 0
-        ? target.rootLift
-        : dampValue(this.tilt.position.y, target.rootLift, deltaSeconds);
+    const groundLift = groundedLiftFor(player.state);
+    const baseLift = groundLift ?? target.rootLift;
+    this.tilt.position.y = baseLift + this.groundOffset;
     this.tilt.rotation.x =
       deltaSeconds === 0
         ? target.bodyTilt
@@ -389,6 +413,50 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       deltaSeconds === 0
         ? target.bodyLean
         : dampValue(this.tilt.rotation.z, target.bodyLean, deltaSeconds);
+
+    if (
+      groundLift !== null &&
+      this.footBones.length > 0 &&
+      Number.isFinite(this.restAnkleY)
+    ) {
+      this.root.updateWorldMatrix(true, false);
+      const rootY = this.root.getWorldPosition(this.rootWorld).y;
+      let lowestAnkleY = Number.POSITIVE_INFINITY;
+      for (const foot of this.footBones) {
+        foot.updateWorldMatrix(true, false);
+        lowestAnkleY = Math.min(
+          lowestAnkleY,
+          foot.getWorldPosition(this.footWorld).y - rootY,
+        );
+      }
+      const goalOffset = footPlantOffset({
+        currentAnkleY: lowestAnkleY,
+        restAnkleY: this.restAnkleY,
+        desiredLiftM: baseLift,
+        currentOffsetM: this.groundOffset,
+        maxCorrectionM: VISUAL_TUNING.authoredPlayer.footPlant.maxCorrectionM,
+      });
+      this.groundOffset =
+        deltaSeconds === 0
+          ? goalOffset
+          : dampWithRate(
+              this.groundOffset,
+              goalOffset,
+              VISUAL_TUNING.authoredPlayer.footPlant.rate,
+              deltaSeconds,
+            );
+    } else {
+      this.groundOffset =
+        deltaSeconds === 0
+          ? 0
+          : dampWithRate(
+              this.groundOffset,
+              0,
+              VISUAL_TUNING.authoredPlayer.footPlant.rate,
+              deltaSeconds,
+            );
+    }
+    this.tilt.position.y = baseLift + this.groundOffset;
 
     this.shadow.scale.setScalar(
       1 - Math.min(0.18, player.state === "slide" ? 0.18 : 0),
@@ -401,12 +469,21 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
 }
 
 function dampValue(current: number, goal: number, deltaSeconds: number): number {
-  return THREE.MathUtils.damp(
+  return dampWithRate(
     current,
     goal,
     VISUAL_TUNING.authoredPlayer.poseBlendRate,
     deltaSeconds,
   );
+}
+
+function dampWithRate(
+  current: number,
+  goal: number,
+  rate: number,
+  deltaSeconds: number,
+): number {
+  return THREE.MathUtils.damp(current, goal, rate, deltaSeconds);
 }
 
 function cadenceFor(state: RenderPlayer["state"]): number {

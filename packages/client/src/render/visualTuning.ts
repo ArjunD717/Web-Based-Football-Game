@@ -6,6 +6,8 @@
  * physics or the network snapshot.
  */
 
+import type { PlayerStateName } from "@fb/sim";
+
 export type VisualQuality = "low" | "medium" | "high";
 
 export interface VisualQualityProfile {
@@ -68,6 +70,14 @@ export interface VisualTuning {
     readonly armDownRadians: number;
     /** Exponential quaternion blend rate between animation targets. */
     readonly poseBlendRate: number;
+    readonly footPlant: {
+      /** Highest root correction allowed for a single foot-plant pass. */
+      readonly maxCorrectionM: number;
+      /** Exponential rate at which the root approaches the planted height. */
+      readonly rate: number;
+      /** Intended ankle lift for states that keep a foot on the pitch. */
+      readonly groundLiftM: Partial<Record<PlayerStateName, number>>;
+    };
   };
   readonly crowd: {
     /** Stand distance outside the touchlines / goal lines. */
@@ -113,6 +123,20 @@ export const VISUAL_TUNING: VisualTuning = {
   authoredPlayer: {
     armDownRadians: -0.58,
     poseBlendRate: 20,
+    footPlant: {
+      maxCorrectionM: 0.12,
+      rate: 16,
+      groundLiftM: {
+        idle: 0,
+        jog: 0.008,
+        sprint: 0.018,
+        dribble: 0.004,
+        pass: 0.004,
+        shoot: 0.004,
+        volley: 0.008,
+        tackle: 0,
+      },
+    },
   },
   crowd: {
     sideInsetM: 5,
