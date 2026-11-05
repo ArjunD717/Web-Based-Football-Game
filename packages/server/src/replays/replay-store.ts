@@ -304,7 +304,7 @@ function parseClipMeta(value: unknown): WireReplayClip | null {
     clip.kind !== "goal" ||
     !isNonNegativeInteger(clip.scoreHome) ||
     !isNonNegativeInteger(clip.scoreAway) ||
-    !isNonNegativeInteger(clip.clockSeconds) ||
+    !isNonNegativeNumber(clip.clockSeconds) ||
     !isHalf(clip.half) ||
     typeof clip.createdAtMs !== "number" ||
     !Number.isFinite(clip.createdAtMs) ||
@@ -326,6 +326,10 @@ function parseClipMeta(value: unknown): WireReplayClip | null {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0;
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function isHalf(value: unknown): value is 1 | 2 | 3 | 4 {

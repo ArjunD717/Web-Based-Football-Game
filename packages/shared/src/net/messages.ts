@@ -1,5 +1,6 @@
 // packages/shared/src/net/messages.ts
 import type { TeamSheet } from "../domain/football-data";
+import type { SnapshotFrame } from "./binary";
 import { parseTeamSheet } from "../domain/team-sheet";
 import { PROTOCOL_VERSION } from "../version";
 
@@ -438,6 +439,14 @@ export interface WireReplayLibrary {
   readonly rooms: readonly WireReplayRoom[];
 }
 
+/** Downloaded replay payload served by `/api/replay/...`. */
+export interface WireReplayExport extends WireReplayClip {
+  readonly code: string;
+  readonly generatedAtMs: number;
+  readonly setup: MatchSetupWire;
+  readonly frames: readonly SnapshotFrame[];
+}
+
 export type ServerMessage =
   | ServerWelcomeMessage
   | ServerPresenceMessage
@@ -708,7 +717,7 @@ function parseWireReplayClip(value: unknown): WireReplayClip | null {
     clip.kind !== "goal" ||
     !isCount(clip.scoreHome) ||
     !isCount(clip.scoreAway) ||
-    !isCount(clip.clockSeconds) ||
+    !isTimestamp(clip.clockSeconds) ||
     !isCount(clip.half) ||
     clip.half < 1 ||
     clip.half > 4 ||
@@ -831,7 +840,7 @@ function parseLobbyYou(value: unknown): LobbyYouWire | null | undefined {
   };
 }
 
-function parseMatchSetup(value: unknown): MatchSetupWire | null {
+export function parseMatchSetup(value: unknown): MatchSetupWire | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
   }

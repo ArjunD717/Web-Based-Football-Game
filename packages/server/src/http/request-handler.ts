@@ -45,6 +45,8 @@ export interface ReplayExport {
   readonly scoreAway?: number;
   readonly clockSeconds?: number;
   readonly half?: 1 | 2 | 3 | 4;
+  readonly createdAtMs?: number;
+  readonly frameCount?: number;
 }
 
 export interface RequestHandlerOptions {

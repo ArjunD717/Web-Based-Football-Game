@@ -428,6 +428,8 @@ export class RoomManager {
       scoreAway: clip.scoreAway,
       clockSeconds: clip.clockSeconds,
       half: clip.half,
+      createdAtMs: clip.createdAtMs,
+      frameCount: clip.frames.length,
     };
   }
 
