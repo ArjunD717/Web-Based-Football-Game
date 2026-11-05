@@ -47,6 +47,7 @@ import {
 } from "./net/game-client";
 import { LocalPlayerPrediction } from "./net/local-prediction";
 import { TeamEditor } from "./lobby/team-editor";
+import { preloadAuthoredPlayer } from "./render/authored-asset";
 import {
   mountMatchRenderer,
   preferredRendererMode,
@@ -421,6 +422,7 @@ updatePredictionControl();
 let lastControlledPlayerId: string | null = null;
 let lastControlledMatchId: string | null = null;
 let bindings: KeyBindings = sanitizeBindings(loadKeyBindings());
+preloadAuthoredPlayer();
 let gamepadBindings: GamepadBindings = sanitizeGamepadBindings(
   loadGamepadBindings(),
 );

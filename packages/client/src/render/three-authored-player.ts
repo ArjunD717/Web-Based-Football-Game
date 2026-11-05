@@ -1,12 +1,14 @@
 // packages/client/src/render/three-authored-player.ts
 
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import type { Pitch } from "@fb/sim";
-import { PLAYER_MATCH_ASSET_URL } from "../character/asset";
 import { appearanceFor } from "./character-appearance";
 import { computeCharacterPose } from "./character-animation";
+import {
+  loadAuthoredTemplate,
+  type AuthoredTemplate,
+} from "./authored-asset";
 import {
   footPlantOffset,
   groundedLiftFor,
@@ -25,12 +27,6 @@ import { VISUAL_TUNING } from "./visualTuning";
 import type { RenderPlayer, RenderTeamColors } from "./view";
 
 const HIDDEN_DETAIL_MESH = /^(?:boot_sole|sock_trim|kit_cuff)/;
-
-interface AuthoredTemplate {
-  readonly scene: THREE.Group;
-  readonly materials: ReadonlyMap<string, THREE.Material>;
-  readonly modelBaseY: number;
-}
 
 interface AuthoredPalette {
   readonly materials: ReadonlyMap<string, THREE.Material>;
@@ -55,53 +51,13 @@ export class AuthoredPlayerLibrary {
     if (this.loadPromise !== null) {
       return this.loadPromise;
     }
-    this.loadPromise = new GLTFLoader()
-      .loadAsync(PLAYER_MATCH_ASSET_URL)
-      .then((gltf) => {
-        if (this.disposed) {
-          disposeObject(gltf.scene);
-          return false;
-        }
-        const scene = gltf.scene;
-        const materials = new Map<string, THREE.Material>();
-        scene.traverse((object) => {
-          if (!(object instanceof THREE.Mesh)) {
-            return;
-          }
-          const mesh = object as THREE.Mesh<
-            THREE.BufferGeometry,
-            THREE.Material | THREE.Material[]
-          >;
-          const source = Array.isArray(mesh.material)
-            ? mesh.material
-            : [mesh.material];
-          for (const entry of source) {
-            materials.set(entry.name, entry);
-            if (entry.name === "eye_decal") {
-              entry.transparent = true;
-              entry.depthWrite = false;
-              entry.alphaTest = 0.02;
-              entry.side = THREE.DoubleSide;
-              entry.polygonOffset = true;
-              entry.polygonOffsetFactor = -2;
-            }
-          }
-        });
-        const bounds = new THREE.Box3().setFromObject(scene);
-        this.template = {
-          scene,
-          materials,
-          modelBaseY: -bounds.min.y,
-        };
-        return true;
-      })
-      .catch((error: unknown) => {
-        console.warn(
-          "Authored player asset unavailable; keeping procedural match rigs.",
-          error,
-        );
+    this.loadPromise = loadAuthoredTemplate().then((template) => {
+      if (this.disposed) {
         return false;
-      });
+      }
+      this.template = template;
+      return template !== null;
+    });
     return this.loadPromise;
   }
 
@@ -123,10 +79,7 @@ export class AuthoredPlayerLibrary {
 
   dispose(): void {
     this.disposed = true;
-    if (this.template !== null) {
-      disposeObject(this.template.scene);
-      this.template = null;
-    }
+    this.template = null;
     for (const palette of this.palettes.values()) {
       for (const material of palette.materials.values()) {
         material.dispose();
