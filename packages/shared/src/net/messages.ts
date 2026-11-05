@@ -415,13 +415,16 @@ export interface WireReplayClip {
   readonly kind: "goal";
   readonly scoreHome: number;
   readonly scoreAway: number;
+  /** Match clock at the score-changing snapshot, seconds. */
+  readonly clockSeconds: number;
+  readonly half: 1 | 2 | 3 | 4;
   readonly createdAtMs: number;
   readonly frameCount: number;
 }
 
-export interface ServerReplayClipMessage {
-  readonly t: "replayClip";
-  readonly clip: WireReplayClip;
+export interface ServerReplayClipsMessage {
+  readonly t: "replayClips";
+  readonly clips: readonly WireReplayClip[];
 }
 
 export type ServerMessage =
@@ -440,7 +443,7 @@ export type ServerMessage =
   | ServerMatchEndedMessage
   | ServerVarReviewMessage
   | ServerShootoutMessage
-  | ServerReplayClipMessage;
+  | ServerReplayClipsMessage;
 
 export function encodeClientMessage(message: ClientMessage): string {
   return JSON.stringify(message);
@@ -651,33 +654,19 @@ export function parseServerMessage(text: string): ServerMessage | null {
       const review = parseVarReview(value.review);
       return review === null ? null : { t: "varReview", review };
     }
-    case "replayClip": {
-      const clip = value.clip;
-      if (
-        typeof clip !== "object" ||
-        clip === null ||
-        !isEntityId((clip as Record<string, unknown>).id) ||
-        (clip as Record<string, unknown>).kind !== "goal" ||
-        !isCount((clip as Record<string, unknown>).scoreHome) ||
-        !isCount((clip as Record<string, unknown>).scoreAway) ||
-        !isTimestamp((clip as Record<string, unknown>).createdAtMs) ||
-        !isCount((clip as Record<string, unknown>).frameCount)
-      ) {
+    case "replayClips": {
+      if (!Array.isArray(value.clips)) {
         return null;
       }
-      return {
-        t: "replayClip",
-        clip: {
-          id: (clip as Record<string, unknown>).id as string,
-          kind: "goal",
-          scoreHome: (clip as Record<string, unknown>).scoreHome as number,
-          scoreAway: (clip as Record<string, unknown>).scoreAway as number,
-          createdAtMs: (clip as Record<string, unknown>)
-            .createdAtMs as number,
-          frameCount: (clip as Record<string, unknown>)
-            .frameCount as number,
-        },
-      };
+      const clips: WireReplayClip[] = [];
+      for (const item of value.clips) {
+        const clip = parseWireReplayClip(item);
+        if (clip === null) {
+          return null;
+        }
+        clips.push(clip);
+      }
+      return { t: "replayClips", clips };
     }
     case "shootout": {
       if (value.shootout === null) {
@@ -696,6 +685,37 @@ export function parseServerMessage(text: string): ServerMessage | null {
 
 export function isCompatibleProtocol(version: number): boolean {
   return version === PROTOCOL_VERSION;
+}
+
+function parseWireReplayClip(value: unknown): WireReplayClip | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const clip = value as Record<string, unknown>;
+  if (
+    !isEntityId(clip.id) ||
+    clip.kind !== "goal" ||
+    !isCount(clip.scoreHome) ||
+    !isCount(clip.scoreAway) ||
+    !isCount(clip.clockSeconds) ||
+    !isCount(clip.half) ||
+    clip.half < 1 ||
+    clip.half > 4 ||
+    !isTimestamp(clip.createdAtMs) ||
+    !isCount(clip.frameCount)
+  ) {
+    return null;
+  }
+  return {
+    id: clip.id,
+    kind: "goal",
+    scoreHome: clip.scoreHome,
+    scoreAway: clip.scoreAway,
+    clockSeconds: clip.clockSeconds,
+    half: clip.half as WireReplayClip["half"],
+    createdAtMs: clip.createdAtMs,
+    frameCount: clip.frameCount,
+  };
 }
 
 function parseLobbyRoom(value: unknown): LobbyRoomWire | null | undefined {
