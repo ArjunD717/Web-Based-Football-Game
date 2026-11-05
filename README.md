@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 13**:
+both devices are thin clients. This repository is at **Milestone 15**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -11,7 +11,11 @@ Three.js match presentation, multi-angle local replays and procedural audio.
 M12 was the release pass: one-command packaging, full-match balance validation,
 server/client performance profiling, bug fixes and final documentation. M13
 adds host-owned referee/AI rules, a live rules readout and a manual pause
-available to either seat that survives reloads and reconnects.
+available to either seat that survives reloads and reconnects. M14 adds the
+first authored player-character asset pipeline: a rigged, textured glTF player
+built reproducibly in Blender and a presentation-only character lab. M15 wires
+that authored rig into the Three.js match renderer through a decimated match
+LOD, team palettes and a procedural bone-animation layer.
 
 ## Requirements
 
@@ -19,6 +23,8 @@ available to either seat that survives reloads and reconnects.
 - pnpm **10.18.3** (`packageManager` pins it)
 - `mkcert` for a locally trusted HTTPS certificate
 - Both devices on the same LAN, with the mkcert root CA trusted on the guest
+- Optional, for rebuilding the player asset only: Blender 4.5+ and Python 3.10+
+  with Pillow and NumPy. Normal install, build and play do not need either.
 
 Enable pnpm if needed:
 
@@ -87,6 +93,7 @@ pnpm dev
   available from the match top bar and persists in `localStorage`. Without a
   WebGL context the client falls back to canvas and explains why
 - Phone controller: **https://localhost:5173/controller.html**
+- Player character lab: **https://localhost:5173/character.html**
 - M1 local practice: **https://localhost:5173/practice.html**
 - M0 transport check: **https://localhost:5173/link.html**
 - Node HTTPS/WSS host: **https://localhost:8443/**
@@ -120,6 +127,8 @@ pnpm preview
 | `pnpm test` | Vitest unit/integration tests |
 | `pnpm test:soak` | 1,000 headless AI-vs-AI matches; fails if averages miss targets |
 | `pnpm perf` | 100-match deterministic simulation throughput benchmark |
+| `pnpm character:build` | Rebuild the player GLB and support textures with Blender |
+| `pnpm character:preview` | Rebuild and render the five character inspection frames |
 | `pnpm check` | Lint + typecheck + tests |
 
 Useful environment overrides:
@@ -140,6 +149,129 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 15 scope
+
+![Authored players in the Three.js match presentation](assets/previews/authored-match.webp)
+
+Implemented:
+
+- The Three.js match renderer now loads the authored player as a second,
+  decimated match LOD: `player-01-match.glb` is **7,385 triangles**, **10
+  meshes**, **53 joints** and **2.6 MB** with the same embedded materials and
+  textures as the lab asset. The high-detail 19,358-triangle version remains
+  the character-lab source
+- `AuthoredPlayerLibrary` loads the GLB once, clones players with
+  `SkeletonUtils`, shares geometry and textures, and builds team/keeper palettes
+  from the room's `RenderTeamColors`. Shirt, shorts, socks and collar
+  become solid team colours while the skin, hair, face decals, boots and
+  normal-mapped cloth remain
+- Authored players use the existing fixed 60 Hz `MatchView`: position, facing,
+  controlled ring, switch ring, yellow-card marker, number sprite, stamina and
+  every `PlayerStateName` drive a 53-bone procedural animation layer. Bone
+  quaternions blend exponentially between targets; stride phase accumulates
+  independently of cadence so a jog-to-sprint transition does not teleport the
+  feet. The animation maps `idle`, `jog`, `sprint`, `dribble`, `pass`, `shoot`,
+  `volley`, `header`, `tackle`, `slide`, `diveLeft`, `diveRight`, `fall`,
+  `injured` and `celebrate`
+- The glTF model faces `+Z`; a presentation-only wrapper rotates it to the
+  renderer's existing `+X` forward convention, so `facingToRotationY` and all
+  camera/input code are unchanged
+- Authored players use a blob shadow rather than casting thousands of skinned
+  vertices into the shadow map. This keeps the **22-player, 1440 x 900 headless
+  Chromium** stress frame at **313 draw calls**, **≈164,000 triangles** and an
+  average **18.4 ms** frame (about **54 fps**) with all players in the same
+  camera view. The high-quality procedural path remains available for
+  comparison and fallback
+- High and medium 3D quality use the authored rig. Low quality, a failed asset
+  load, or the first frames before the GLB resolves keep the existing
+  procedural rigs. The swap happens on the next render and does not clock the
+  simulation
+- Pure tests cover the authored pose adaptation: lowered A-pose arms, opposite
+  gait limbs, shot-leg extension, header lift, dive body tilt and fall ground
+  pose
+- The 2D renderer, simulation, netcode, snapshot protocol and player input are
+  untouched. There is no protocol version bump for this milestone
+
+Known M15 limitations (by design):
+
+- The match LOD is decimated and omits boot soles, sock trims and sleeve cuffs.
+  The painted shirt crest, sponsor, name and number are replaced by solid team
+  colour; only the floating number sprite identifies a player
+- Authored players have no authored animation clips, foot IK, cloth or facial
+  animation. The procedural bones are presentation-only; at some sprint phases
+  both feet can appear off the ground
+- The authored model is one body/face/hair mesh set. There is no per-player skin
+  tone, body shape, hair or boot variation yet
+- The authored rig does not cast a real shadow; the existing blob shadow is the
+  grounding cue. This is deliberate for the 22-player frame budget
+- Low quality falls back to the procedural rigs even though the authored LOD is
+  already loaded. There is no per-player distance LOD or streaming; all authored
+  players use the same match LOD
+- The match GLB is still PNG-textured at 2.6 MB. It is not KTX2/Basis, Draco or
+  meshopt compressed, and it is fetched after the match renderer mounts
+- The authored rig is not used by the Canvas 2D renderer, replays that switch to
+  2D, or the phone controller page
+
+## Milestone 14 scope
+
+![Avery Cole, the generated Northbridge Athletic player](assets/previews/front.png)
+
+Implemented:
+
+- A reproducible Blender pipeline builds a fictional 19,358-triangle,
+  53-joint player from a CC0 MakeHuman/MPFB anatomical base. The GLB is
+  self-contained with embedded PNG maps, metre scale, `+Y` up and `+Z` forward.
+  `pnpm character:build` regenerates the skin pores, fabric weave, eye decal,
+  hair normal, kit atlas and the binary; the tracked source outputs live under
+  `assets/characters/`, with Vite's served copy under
+  `packages/client/public/characters/`
+- **Avery Cole, Northbridge Athletic number 9**, wears a generated teal and
+  ivory kit with contrast panels, a printed crest/sponsor/name/number, cuff and
+  collar trim, shorts, turned-over socks and boots. Every printed mark is
+  fictional; player, club, sponsor and competition names do not reproduce a real
+  person or organisation
+- The face is the MakeHuman base with a painted almond eye decal, eyebrows, a
+  procedural hair cap and short-hair normal map. The eye decal is conformed to
+  the socket and pushed clear of the eyelid surface so it reads at both gameplay
+  and lab distance. Skin and cloth use regenerated procedural PBR normal maps
+- Garments are derived from the body surface, face-centre trimmed, vertically
+  normalised and given a solidified cloth shell. The shirt carries a clean
+  horizontal neckline hidden by a smooth collar band; the shorts and socks are
+  finished with hems and cuff bands rather than open raw edges
+- The **Player lab** (`character.html`) is a presentation-only Three.js page. It
+  loads the GLB, exposes six procedural poses (idle, jog, sprint, strike, leap,
+  celebrate), four camera presets with eased transitions, an auto-rotate toggle,
+  a skeleton overlay and a wireframe toggle. It reports live triangle and draw
+  counts and scales a metre ruler to the projected model height. Asset
+  provenance, the rig contract and rebuild requirements are documented in
+  [`assets/README.md`](assets/README.md)
+- The page is included in the Vite build, uses no simulation imports and is
+  responsive down to a 390 px phone width. M14 shipped the source asset and lab;
+  M15 connects the decimated match LOD to the Three.js match renderer
+- Tests cover the character pose module, including grounded locomotion, leap
+  root motion and the celebration arm targets
+
+Known M14 limitations (by design):
+
+- The player is a stylised anatomical base, not a photogrammetry scan or a
+  likeness of a real footballer. The face, hair, hands and boots are low-detail
+  polygonal proxies
+- There is no authored skeletal animation set, facial rig, blend shapes, IK foot
+  planting, cloth simulation or secondary motion. The lab poses are generated
+  joint targets for inspection
+- Garments are derived from the body and are tighter than real match kit,
+  especially across the shorts; the collar is a smooth band without a placket
+  or rib texture
+- The eye is a painted decal rather than modelled cornea/iris geometry. At
+  extreme close range its flatness is visible
+- Textures are embedded PNGs in a 3.0 MB GLB. They are not yet KTX2/Basis or
+  meshopt/Draco compressed. M15 adds a separate geometry match LOD, but both
+  LODs still embed the same PNG maps
+- The high-detail asset is not itself used by the match renderer; M15 uses the
+  decimated `player-01-match.glb` LOD and generates bone poses at runtime
+- Blender and Python are development-only requirements. Normal runs and CI use
+  the committed GLB and do not invoke the generator
 
 ## Milestone 13 scope
 
@@ -1106,6 +1238,16 @@ The two-minute match check:
     sheet while the rest of the XI is preserved. At the final whistle the board
     should name the aggregate winner or report a level tie. The HUD rule chip
     should include **Two legs** in both legs.
+19. Start a 3D match with **High** quality. If the asset is not cached, the
+    procedural rigs appear for the first frames while `player-01-match.glb`
+    loads, then authored players replace them. Check
+    both teams and the goalkeeper use the room's kit colours, the controlled
+    and switch rings still track the correct players, number sprites remain
+    readable and the players animate through idle, jog, sprint, pass, shot,
+    tackle, slide, dive, fall and celebrate. Switch quality to **Low**: the
+    procedural rigs return. Switch back to **High**: authored rigs return. Open
+    `character.html` and confirm the lab still uses the high-detail
+    `player-01.glb`. `pnpm character:build` must reproduce both GLBs.
 
 ## Layout
 
@@ -1116,8 +1258,11 @@ packages/data-tools  CSV ingest, normalise, validate, name mutation, sheets, ass
 packages/server      HTTPS/WSS, sessions, rooms, input routing, match runner, QR
 packages/client      LAN lobby, match client/interpolation, canvas + Three.js renderers
   ├── controller     phone controller page (virtual stick + action buttons)
+  ├── character.html player character lab (M14)
   ├── practice.html  offline M1 simulation
   └── link.html      M0 transport diagnostics
+assets               player source/output, PBR maps, previews, font licences
+tools                Blender build script, inspection renders, texture generators
 data                 generated JSON registry, placeholder assets and reports
   └── input/sample   clearly marked fake 3-club sample CSV
 scripts              one-command start and mkcert setup
