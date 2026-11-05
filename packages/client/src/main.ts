@@ -179,6 +179,7 @@ const statsNextLegButton =
 const statsNextLegWait = byId<HTMLElement>("stats-next-leg-wait");
 const matchEvent = byId<HTMLElement>("match-event");
 const leaveMatchButton = byId<HTMLButtonElement>("leave-match");
+const exportReplayLink = byId<HTMLAnchorElement>("export-replay");
 const pauseMatchButton = byId<HTMLButtonElement>("pause-match");
 const rendererToggleButton =
   byId<HTMLButtonElement>("renderer-toggle");
@@ -1133,6 +1134,13 @@ function renderConnection(state: GameClientState): void {
       state.lobby?.room?.phase !== "ready");
   leaveRoomButton.disabled = !canCommand;
   leaveMatchButton.disabled = !canCommand;
+  const replayCode =
+    state.setup !== null ? state.lobby?.room?.code ?? null : null;
+  exportReplayLink.hidden = replayCode === null;
+  if (replayCode !== null) {
+    exportReplayLink.href = `/api/replay/${replayCode}.json`;
+    exportReplayLink.download = `replay-${replayCode}.json`;
+  }
 }
 
 function renderLobby(state: GameClientState): void {
