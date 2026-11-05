@@ -27,7 +27,7 @@ import type { StadiumVisual } from "./three-stadium";
 import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
-import type { FootstepSink } from "./footsteps";
+import { spatializeFootstep, type FootstepSink } from "./footsteps";
 import {
   VISUAL_QUALITY,
   VISUAL_TUNING,
@@ -37,6 +37,7 @@ import type { MatchView } from "./view";
 
 const BALL_RADIUS_M = 0.16;
 const BALL_LANDING_WORLD_HEIGHT_M = 0.025;
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * Three.js presentation layer. It consumes the same immutable MatchView as the
@@ -88,6 +89,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private lastCameraState: CameraRenderState | null = null;
   private lastCameraPose: CameraPose | null = null;
   private replayActive = false;
+  private readonly footstepListener = new THREE.Vector3();
+  private readonly footstepForward = new THREE.Vector3();
+  private readonly footstepRight = new THREE.Vector3();
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -320,7 +324,33 @@ export class ThreeMatchRenderer implements MatchRenderer {
   }
 
   setFootstepSink(sink: FootstepSink | null): void {
-    this.authoredPlayers.setFootstepSink(sink);
+    this.authoredPlayers.setFootstepSink(
+      sink === null
+        ? null
+        : (event) => {
+            this.camera.getWorldDirection(this.footstepForward);
+            this.footstepRight
+              .crossVectors(this.footstepForward, WORLD_UP)
+              .normalize();
+            if (this.footstepRight.lengthSq() < 1e-6) {
+              this.footstepRight.set(1, 0, 0);
+            }
+            this.camera.getWorldPosition(this.footstepListener);
+            const mixed = spatializeFootstep({
+              x: event.x,
+              z: event.z,
+              listenerX: this.footstepListener.x,
+              listenerZ: this.footstepListener.z,
+              rightX: this.footstepRight.x,
+              rightZ: this.footstepRight.z,
+              referenceDistanceM:
+                VISUAL_TUNING.audio.footstepReferenceDistanceM,
+              maxDistanceM: VISUAL_TUNING.audio.footstepMaxDistanceM,
+              panStrength: VISUAL_TUNING.audio.footstepPanStrength,
+            });
+            sink({ ...event, ...mixed });
+          },
+    );
   }
 
   setQuality(quality: VisualQuality): void {
