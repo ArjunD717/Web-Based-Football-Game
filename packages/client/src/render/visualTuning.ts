@@ -135,6 +135,14 @@ export interface VisualTuning {
     readonly minSpeedMps: number;
     readonly opacity: number;
   };
+  readonly audio: {
+    /** Footsteps at or inside this listener distance play at full gain. */
+    readonly footstepReferenceDistanceM: number;
+    /** Footsteps at or beyond this distance are silent. */
+    readonly footstepMaxDistanceM: number;
+    /** Maximum hard-left/right pan applied at 90 degrees. */
+    readonly footstepPanStrength: number;
+  };
   readonly landing: {
     readonly minHeightM: number;
     readonly radiusM: number;
@@ -226,6 +234,11 @@ export const VISUAL_TUNING: VisualTuning = {
     maxPoints: 24,
     minSpeedMps: 13,
     opacity: 0.5,
+  },
+  audio: {
+    footstepReferenceDistanceM: 4,
+    footstepMaxDistanceM: 60,
+    footstepPanStrength: 0.7,
   },
   landing: {
     minHeightM: 1.2,

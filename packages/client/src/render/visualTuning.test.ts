@@ -53,6 +53,16 @@ describe("visual quality presets", () => {
     );
   });
 
+  it("keeps footstep attenuation ranges ordered", () => {
+    const audio = VISUAL_TUNING.audio;
+    expect(audio.footstepReferenceDistanceM).toBeGreaterThan(0);
+    expect(audio.footstepMaxDistanceM).toBeGreaterThan(
+      audio.footstepReferenceDistanceM,
+    );
+    expect(audio.footstepPanStrength).toBeGreaterThan(0);
+    expect(audio.footstepPanStrength).toBeLessThanOrEqual(1);
+  });
+
   it("keeps render-only scale values separate from physics", () => {
     expect(VISUAL_TUNING.playerScale).toBeGreaterThanOrEqual(1.1);
     expect(VISUAL_TUNING.playerScale).toBeLessThanOrEqual(1.25);

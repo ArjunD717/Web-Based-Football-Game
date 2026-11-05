@@ -27,6 +27,67 @@ export interface FootstepEvent extends FootstepClockEvent {
 
 export type FootstepSink = (event: FootstepEvent) => void;
 
+export interface FootstepSpatialInput {
+  readonly x: number;
+  readonly z: number;
+  readonly listenerX: number;
+  readonly listenerZ: number;
+  /** Unit camera-right vector in the pitch plane. */
+  readonly rightX: number;
+  readonly rightZ: number;
+  readonly referenceDistanceM: number;
+  readonly maxDistanceM: number;
+  readonly panStrength: number;
+}
+
+export interface FootstepMix {
+  /** -1 hard left, 0 centre, +1 hard right. */
+  readonly pan: number;
+  /** 0 silent .. 1 full distance gain. */
+  readonly gain: number;
+}
+
+/**
+ * Camera-relative stereo placement for a footstep. The renderer supplies the
+ * camera basis; audio only consumes the resulting pan and gain.
+ */
+export function spatializeFootstep(input: FootstepSpatialInput): FootstepMix {
+  const values = [
+    input.x,
+    input.z,
+    input.listenerX,
+    input.listenerZ,
+    input.rightX,
+    input.rightZ,
+    input.referenceDistanceM,
+    input.maxDistanceM,
+    input.panStrength,
+  ];
+  if (!values.every(Number.isFinite)) {
+    return { pan: 0, gain: 0 };
+  }
+  const dx = input.x - input.listenerX;
+  const dz = input.z - input.listenerZ;
+  const distance = Math.hypot(dx, dz);
+  const reference = Math.max(0.1, input.referenceDistanceM);
+  const maximum = Math.max(reference, input.maxDistanceM);
+  const gain =
+    distance <= reference
+      ? 1
+      : distance >= maximum
+        ? 0
+        : 1 - (distance - reference) / (maximum - reference);
+  const rightLength = Math.hypot(input.rightX, input.rightZ);
+  const rightDot =
+    rightLength > 1e-6
+      ? (dx * input.rightX + dz * input.rightZ) / rightLength
+      : 0;
+  const pan =
+    Math.max(-1, Math.min(1, rightDot / Math.max(0.75, distance))) *
+    Math.max(0, Math.min(1, input.panStrength));
+  return { pan, gain: Math.max(0, Math.min(1, gain)) };
+}
+
 export interface FootstepTuning {
   /** Do not emit while the player is practically stationary. */
   readonly minSpeedMps: number;
