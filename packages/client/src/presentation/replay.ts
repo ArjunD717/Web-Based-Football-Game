@@ -15,6 +15,8 @@ export interface ReplaySample {
   readonly elapsedMs: number;
   readonly durationMs: number;
   readonly paused: boolean;
+  /** True when this sample wrapped from the clip end back to the start. */
+  readonly wrapped: boolean;
 }
 
 export interface ReplayBufferOptions {
@@ -300,17 +302,26 @@ export class MatchReplayBuffer {
     return true;
   }
 
-  sample(nowMs: number): ReplaySample | null {
+  /**
+   * Samples playback. `loop` wraps at the end instead of stopping, which
+   * keeps a whole-clip study loop running without restarting the buffer.
+   */
+  sample(nowMs: number, loop = false): ReplaySample | null {
     if (this.playbackStartedAtMs === null || this.playbackFrames.length < 2) {
       return null;
     }
     this.advance(nowMs);
+    let wrapped = false;
     if (
       !this.playbackPaused &&
       this.playbackElapsedMs >= this.playbackDurationMs
     ) {
-      this.stop();
-      return null;
+      if (!loop) {
+        this.stop();
+        return null;
+      }
+      this.playbackElapsedMs %= this.playbackDurationMs;
+      wrapped = true;
     }
     const elapsedMs = Math.min(
       this.playbackElapsedMs,
@@ -328,6 +339,7 @@ export class MatchReplayBuffer {
       elapsedMs,
       durationMs: this.playbackDurationMs,
       paused: this.playbackPaused,
+      wrapped,
     };
   }
 

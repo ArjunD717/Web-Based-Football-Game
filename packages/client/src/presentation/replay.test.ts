@@ -140,6 +140,25 @@ describe("match replay buffer", () => {
     expect(replay.speed).toBe(1);
   });
 
+  it("loops the whole clip when requested", () => {
+    const replay = new MatchReplayBuffer({ speed: 1 });
+    replay.loadSaved([
+      { view: view(10), recordedAtMs: 0 },
+      { view: view(11), recordedAtMs: 1_000 },
+      { view: view(12), recordedAtMs: 2_000 },
+    ]);
+    expect(replay.startSaved(0)).toBe(true);
+    const looped = replay.sample(2_500, true);
+    expect(looped).toMatchObject({
+      progress: 0.25,
+      elapsedMs: 500,
+      wrapped: true,
+      view: { tick: 10 },
+    });
+    expect(replay.active).toBe(true);
+    expect(replay.sample(3_500, true)?.progress).toBeCloseTo(0.75, 5);
+  });
+
   it("keeps the shorter goal clip available after a full replay", () => {
     const replay = new MatchReplayBuffer({
       captureMs: 10_000,
