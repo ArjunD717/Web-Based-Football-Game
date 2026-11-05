@@ -11,6 +11,21 @@ export interface ReplayChapter {
   readonly label: string;
 }
 
+/** Index of the last chapter at or before `timeMs`; -1 before the first. */
+export function chapterIndexAt(
+  chapters: readonly ReplayChapter[],
+  timeMs: number,
+): number {
+  let index = -1;
+  for (let next = 0; next < chapters.length; next += 1) {
+    const chapter = chapters[next];
+    if (chapter !== undefined && chapter.timeMs <= timeMs + 1) {
+      index = next;
+    }
+  }
+  return index;
+}
+
 /**
  * Finds user-navigable moments in a saved clip. Cards persist in
  * `lastEvent`, so compare sequence numbers rather than event presence.
