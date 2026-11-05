@@ -46,6 +46,7 @@ import {
   pitchToWorld,
 } from "./three-layout";
 import { VISUAL_TUNING } from "./visualTuning";
+import type { PlayerDetail } from "./player-lod";
 import type { RenderPlayer, RenderTeamColors } from "./view";
 
 const HIDDEN_DETAIL_MESH = /^(?:boot_sole|sock_trim|kit_cuff)/;
@@ -181,10 +182,15 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly tilt = new THREE.Group();
   private readonly overlays = new THREE.Group();
   private readonly shadow: THREE.Mesh;
+  private readonly shadowMaterial: THREE.MeshBasicMaterial;
+  private readonly shadowMeshes: THREE.Mesh[] = [];
   private readonly ring: THREE.Mesh;
   private readonly switchRing: THREE.Mesh;
   private readonly marker: THREE.Sprite;
   private readonly card: THREE.Mesh;
+  private readonly numberSprite: THREE.Sprite;
+  private detail: PlayerDetail = "full";
+  private shadowCasting = false;
   private readonly ownedMaterials: THREE.Material[] = [];
   private readonly bones = new Map<string, THREE.Bone>();
   private readonly boneRest = new Map<string, THREE.Quaternion>();
@@ -289,6 +295,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       // skinned mesh into the 2K shadow map costs more than the main pass.
       mesh.castShadow = false;
       mesh.receiveShadow = false;
+      if (mesh.visible) {
+        this.shadowMeshes.push(mesh);
+      }
       if (mesh instanceof THREE.SkinnedMesh) {
         mesh.frustumCulled = false;
       }
@@ -363,14 +372,15 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       this.clipPhaseOffset = 0;
     }
 
+    this.shadowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+    });
     this.shadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.58, 20),
-      new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        transparent: true,
-        opacity: 0.28,
-        depthWrite: false,
-      }),
+      this.shadowMaterial,
     );
     this.shadow.rotation.x = -Math.PI / 2;
     this.shadow.position.y = 0.012;
@@ -410,9 +420,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     this.marker.scale.set(0.9, 0.9, 0.9);
     this.overlays.add(this.marker);
 
-    const number = createNumberSprite(player.number);
-    number.position.y = 2.22;
-    this.overlays.add(number);
+    this.numberSprite = createNumberSprite(player.number);
+    this.numberSprite.position.y = 2.22;
+    this.overlays.add(this.numberSprite);
 
     this.card = new THREE.Mesh(
       new THREE.BoxGeometry(0.14, 0.22, 0.035),
@@ -441,11 +451,15 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     this.root.rotation.y = facingToRotationY(player.facing);
     this.ring.visible = player.controlled;
     this.ring.scale.setScalar(1 + Math.sin(tick * 0.14) * 0.08);
-    this.switchRing.visible = player.switchTarget && !player.controlled;
+    this.switchRing.visible =
+      player.switchTarget &&
+      !player.controlled &&
+      this.detail !== "minimal";
     this.switchRing.scale.setScalar(1 + Math.sin(tick * 0.1 + 1.3) * 0.05);
-    this.marker.visible = player.controlled;
+    this.marker.visible = player.controlled && this.detail !== "minimal";
     this.marker.position.y = 2.75 + Math.sin(tick * 0.12) * 0.09;
-    this.card.visible = player.yellowCards > 0;
+    this.numberSprite.visible = this.detail === "full";
+    this.card.visible = player.yellowCards > 0 && this.detail === "full";
 
     const previousElapsed = this.lastElapsed;
     const rewound = previousElapsed !== null && elapsed < previousElapsed;
@@ -622,6 +636,30 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
 
   setFootstepSink(sink: FootstepSink | null): void {
     this.footstepSink = sink;
+  }
+
+  setDetail(detail: PlayerDetail): void {
+    if (detail === this.detail) {
+      return;
+    }
+    this.detail = detail;
+    this.numberSprite.visible = detail === "full";
+    if (detail === "minimal") {
+      this.marker.visible = false;
+      this.switchRing.visible = false;
+      this.card.visible = false;
+    }
+  }
+
+  setShadowCasting(enabled: boolean): void {
+    if (enabled === this.shadowCasting) {
+      return;
+    }
+    this.shadowCasting = enabled;
+    for (const mesh of this.shadowMeshes) {
+      mesh.castShadow = enabled;
+    }
+    this.shadowMaterial.opacity = enabled ? 0.14 : 0.28;
   }
 
   private updateFootsteps(

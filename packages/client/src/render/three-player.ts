@@ -7,6 +7,7 @@ import type { PlayerStateName } from "@fb/sim";
 import { disposeObject } from "./three-dispose";
 import { facingToRotationY, pitchToWorld } from "./three-layout";
 import { VISUAL_TUNING } from "./visualTuning";
+import type { PlayerDetail } from "./player-lod";
 import type { RenderPlayer, RenderTeamColors } from "./view";
 
 export interface PlayerPose {
@@ -346,6 +347,8 @@ export function blendPlayerPoses(
 export interface MatchPlayerRig {
   readonly root: THREE.Group;
   update(pitch: Pitch, player: RenderPlayer, elapsed: number, tick: number): void;
+  setDetail?(detail: PlayerDetail): void;
+  setShadowCasting?(enabled: boolean): void;
   dispose(): void;
 }
 
