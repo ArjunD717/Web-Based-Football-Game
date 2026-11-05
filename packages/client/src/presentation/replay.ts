@@ -1,5 +1,6 @@
 // packages/client/src/presentation/replay.ts
 
+import { TUNING } from "@fb/shared";
 import type { MatchView } from "../render/view";
 
 export interface ReplayFrame {
@@ -39,7 +40,8 @@ export interface ReplayBufferOptions {
 export class MatchReplayBuffer {
   private readonly captureMs: number;
   private readonly goalWindowMs: number;
-  private readonly speed: number;
+  private readonly defaultSpeed: number;
+  private playbackSpeed: number;
   private readonly captureIntervalMs: number;
   private readonly maxFrames: number;
   private readonly frames: ReplayFrame[] = [];
@@ -59,7 +61,11 @@ export class MatchReplayBuffer {
   constructor(options: ReplayBufferOptions = {}) {
     this.captureMs = Math.max(1_000, options.captureMs ?? 15_000);
     this.goalWindowMs = Math.max(500, options.goalWindowMs ?? 8_000);
-    this.speed = Math.max(0.1, options.speed ?? 0.55);
+    this.defaultSpeed = Math.max(
+      0.1,
+      options.speed ?? TUNING.presentation.replayDefaultSpeed,
+    );
+    this.playbackSpeed = this.defaultSpeed;
     const captureHz = Math.min(60, Math.max(15, options.captureHz ?? 60));
     this.captureIntervalMs = 1_000 / captureHz;
     this.maxFrames = Math.max(10, options.maxFrames ?? 1_200);
@@ -218,6 +224,21 @@ export class MatchReplayBuffer {
     return this.playbackPaused;
   }
 
+  get speed(): number {
+    return this.playbackSpeed;
+  }
+
+  /** Speed changes advance the old rate up to now, avoiding a time jump. */
+  setSpeed(multiplier: number, nowMs: number): void {
+    if (!Number.isFinite(multiplier) || multiplier <= 0) {
+      return;
+    }
+    if (this.active) {
+      this.advance(nowMs);
+    }
+    this.playbackSpeed = Math.min(4, Math.max(0.1, multiplier));
+  }
+
   pause(nowMs: number): boolean {
     if (!this.active) {
       return false;
@@ -331,7 +352,7 @@ export class MatchReplayBuffer {
       return;
     }
     this.playbackElapsedMs +=
-      Math.max(0, nowMs - this.playbackLastAtMs) * this.speed;
+      Math.max(0, nowMs - this.playbackLastAtMs) * this.playbackSpeed;
     this.playbackLastAtMs = nowMs;
   }
 

@@ -773,6 +773,10 @@ export const TUNING = {
     maxFrameDeltaSeconds: 0.25,
     /** HUD refresh cadence, Hz. */
     hudUpdateHz: 10,
+    /** Default replay playback speed multiplier. */
+    replayDefaultSpeed: 0.5,
+    /** Selectable replay playback speed multipliers. */
+    replaySpeeds: [0.25, 0.5, 1, 1.5, 2],
   },
   data: {
     /**
