@@ -61,6 +61,13 @@ describe("visual quality presets", () => {
     );
   });
 
+  it("keeps player detail and shadow budgets ordered", () => {
+    const lod = VISUAL_TUNING.playerLod;
+    expect(lod.fullDetailDistanceM).toBeLessThan(lod.reducedDetailDistanceM);
+    expect(lod.shadowDistanceM).toBeGreaterThan(lod.fullDetailDistanceM);
+    expect(lod.maxShadowCasters).toBeGreaterThan(0);
+  });
+
   it("keeps footstep attenuation ranges ordered", () => {
     const audio = VISUAL_TUNING.audio;
     expect(audio.footstepReferenceDistanceM).toBeGreaterThan(0);

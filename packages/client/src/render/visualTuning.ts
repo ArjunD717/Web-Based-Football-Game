@@ -144,6 +144,16 @@ export interface VisualTuning {
     readonly minSpeedMps: number;
     readonly opacity: number;
   };
+  readonly playerLod: {
+    /** Full shirt numbers and markers inside this camera distance. */
+    readonly fullDetailDistanceM: number;
+    /** Minimal overlays beyond this camera distance. */
+    readonly reducedDetailDistanceM: number;
+    /** Only players inside this distance may cast a real shadow. */
+    readonly shadowDistanceM: number;
+    /** Hard budget for simultaneous skinned shadow casters. */
+    readonly maxShadowCasters: number;
+  };
   readonly audio: {
     /** Footsteps at or inside this listener distance play at full gain. */
     readonly footstepReferenceDistanceM: number;
@@ -250,6 +260,12 @@ export const VISUAL_TUNING: VisualTuning = {
     maxPoints: 24,
     minSpeedMps: 13,
     opacity: 0.5,
+  },
+  playerLod: {
+    fullDetailDistanceM: 20,
+    reducedDetailDistanceM: 48,
+    shadowDistanceM: 30,
+    maxShadowCasters: 4,
   },
   audio: {
     footstepReferenceDistanceM: 4,
