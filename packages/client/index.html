@@ -1114,6 +1114,7 @@
               <strong>Replay</strong>
               <span id="replay-progress" class="ui-mono">0.0s</span>
               <input id="replay-seek" class="replay-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Replay timeline" disabled>
+              <select id="replay-speed" class="replay-speed" aria-label="Replay playback speed" disabled></select>
               <button id="replay-pause" class="ui-button ui-button--small" type="button" disabled>
                 Pause
               </button>
@@ -1123,6 +1124,7 @@
               <button id="replay-step-forward" class="ui-button ui-button--small" type="button" title="Step forward one frame" disabled>
                 +1f
               </button>
+              <div id="replay-chapters" class="replay-chapters" role="group" aria-label="Replay chapters" hidden></div>
               <div id="replay-angles" class="replay-angles" role="group" aria-label="Replay camera">
                 <button type="button" class="replay-angle" data-replay-camera="broadcast" aria-pressed="true" title="Television touchline view">TV</button>
                 <button type="button" class="replay-angle" data-replay-camera="endToEnd" aria-pressed="false" title="Behind the goal">Goal</button>

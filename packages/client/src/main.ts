@@ -85,6 +85,10 @@ import {
   type ReplaySample,
 } from "./presentation/replay";
 import {
+  buildReplayChapters,
+  type ReplayChapter,
+} from "./presentation/replay-chapters";
+import {
   renderMatchStatsScreen,
   type MatchStatsViewRow,
 } from "./match/stats-screen";
@@ -215,6 +219,9 @@ const replayStepBackButton =
   byId<HTMLButtonElement>("replay-step-back");
 const replayStepForwardButton =
   byId<HTMLButtonElement>("replay-step-forward");
+const replaySpeedSelect =
+  byId<HTMLSelectElement>("replay-speed");
+const replayChapters = byId<HTMLElement>("replay-chapters");
 const replayAngles = byId<HTMLElement>("replay-angles");
 const replayCameraButtons = [
   ...document.querySelectorAll<HTMLButtonElement>("[data-replay-camera]"),
@@ -275,6 +282,7 @@ const toast = byId<HTMLElement>("toast");
 
 let currentState: GameClientState | null = null;
 let replayGalleryKey = "";
+let replaySpeed: number = TUNING.presentation.replayDefaultSpeed;
 let toastTimer: number | null = null;
 let lastQrRoomCode: string | null = null;
 let cameraMode: CameraMode = loadCameraMode();
@@ -304,6 +312,14 @@ for (const option of CAMERA_MODES) {
   element.title = option.description;
   cameraModeSelect.append(element);
 }
+
+for (const speed of TUNING.presentation.replaySpeeds) {
+  const element = document.createElement("option");
+  element.value = String(speed);
+  element.textContent = `${speed}×`;
+  replaySpeedSelect.append(element);
+}
+replaySpeedSelect.value = String(replaySpeed);
 cameraModeSelect.addEventListener("change", () => {
   if (replay.active) {
     cameraModeSelect.value = cameraMode;
@@ -563,6 +579,35 @@ replaySeek.addEventListener("input", () => {
 
 replaySeek.addEventListener("change", () => {
   replayScrubbing = false;
+  updateReplayTransport();
+});
+
+replaySpeedSelect.addEventListener("change", () => {
+  const next = Number(replaySpeedSelect.value);
+  if (!Number.isFinite(next) || next <= 0) {
+    return;
+  }
+  replaySpeed = next;
+  replay.setSpeed(replaySpeed, performance.now());
+  updateReplayTransport();
+});
+
+replayChapters.addEventListener("click", (event) => {
+  const target = event.target;
+  if (
+    !(target instanceof HTMLButtonElement) ||
+    !replay.active
+  ) {
+    return;
+  }
+  const progress = Number(target.dataset.replayProgress);
+  if (!Number.isFinite(progress)) {
+    return;
+  }
+  replay.seek(progress, performance.now());
+  replay.pause(performance.now());
+  replayScrubbing = false;
+  savedAudioJumpPending = true;
   updateReplayTransport();
 });
 
@@ -1345,6 +1390,7 @@ let savedReplayFrames: readonly SnapshotFrame[] = [];
 let savedReplayIntervalMs = 1_000 / 30;
 let savedAudioIndex = -1;
 let savedAudioJumpPending = false;
+let savedChapters: readonly ReplayChapter[] = [];
 
 function openReplayLibrary(): void {
   if (!replayLibraryDialog.open) {
@@ -1501,10 +1547,13 @@ function playSavedReplay(replayExport: WireReplayExport): void {
     stopReplay();
   }
   replay.clear();
+  replay.setSpeed(replaySpeed, performance.now());
   if (!replay.loadSaved(frames) || !replay.startSaved(performance.now())) {
     showToast("Saved replay could not start");
     return;
   }
+  savedChapters = buildReplayChapters(replayExport.frames, intervalMs);
+  renderReplayChapters();
   savedReplayActive = true;
   savedReplayFrames = replayExport.frames;
   savedReplayIntervalMs = intervalMs;
@@ -2275,6 +2324,7 @@ function toggleReplay(source: ReplaySource = "goal"): void {
     return;
   }
   const now = performance.now();
+  replay.setSpeed(replaySpeed, now);
   const started =
     source === "capture" ? replay.startCapture(now) : replay.start(now);
   if (!started) {
@@ -2334,6 +2384,8 @@ function stopReplay(): void {
   savedReplayFrames = [];
   savedAudioIndex = -1;
   savedAudioJumpPending = false;
+  savedChapters = [];
+  renderReplayChapters();
   audio.reset();
   if (wasSaved) {
     showLobby();
@@ -2344,6 +2396,22 @@ function stopReplay(): void {
   updateReplayButtons();
   updateReplayCameraButtons();
   updateCameraControl();
+}
+
+function renderReplayChapters(): void {
+  replayChapters.replaceChildren(
+    ...savedChapters.map((chapter) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "replay-chapter";
+      button.dataset.replayProgress = String(chapter.progress);
+      button.textContent = chapter.label;
+      button.title = `Jump to ${chapter.label}`;
+      return button;
+    }),
+  );
+  replayChapters.hidden = savedChapters.length === 0;
+  updateReplayTransport();
 }
 
 function updateReplayButtons(): void {
@@ -2361,6 +2429,10 @@ function updateReplayTransport(sample?: ReplaySample | null): void {
   replayStepBackButton.disabled = !active;
   replayStepForwardButton.disabled = !active;
   replaySeek.disabled = !active;
+  replaySpeedSelect.disabled = !active;
+  for (const button of replayChapters.querySelectorAll("button")) {
+    button.disabled = !active;
+  }
   replayPauseButton.textContent = replay.paused ? "Resume" : "Pause";
   if (!active) {
     replaySeek.value = "0";

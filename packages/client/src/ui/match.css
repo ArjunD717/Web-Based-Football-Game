@@ -879,6 +879,59 @@ body[data-saved-replay] .replay-banner {
   cursor: default;
 }
 
+.replay-speed {
+  min-height: 1.9rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 0;
+  background: var(--ui-carbon-raised);
+  color: var(--ui-chalk);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-2xs);
+}
+
+.replay-speed:disabled {
+  opacity: 0.4;
+}
+
+.replay-chapters {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--ui-line);
+}
+
+.replay-chapter {
+  min-height: 1.65rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--ui-ice) 35%, var(--ui-line));
+  border-radius: 0;
+  background: transparent;
+  color: var(--ui-chalk-dim);
+  font-family: var(--ui-font-body);
+  font-size: var(--ui-text-2xs);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.replay-chapter:hover {
+  border-color: var(--ui-ice);
+  color: var(--ui-chalk);
+}
+
+.replay-chapter:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.replay-chapter:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .replay-angles {
   display: flex;
   align-items: center;
