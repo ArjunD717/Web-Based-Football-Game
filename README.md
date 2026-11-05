@@ -885,8 +885,10 @@ Not implemented yet (by milestone design):
   plays them back in the 3D/2D match viewer with the usual TV, goal, player and
   drone camera angles. Saved playback exposes a draggable timeline, pause,
   single-frame stepping, a 0.25×–2× speed selector and Space/arrow shortcuts.
-  A chapter strip jumps to goals, cards and the final whistle; match events
-  drive the procedural whistle and goal audio during playback. Playback works
+  A chapter storyboard renders a top-down pitch thumbnail for goals, cards and
+  the final whistle; clicking a card seeks there, and **Loop** repeats the
+  selected chapter up to the next one for coaching review. Match events drive
+  the procedural whistle and goal audio during playback. Playback works
   after the room has closed. No auth is applied beyond the private-LAN trust
   boundary.
 - The client renders 100 ms behind arrival to absorb 30 Hz spacing and LAN jitter.
@@ -1012,7 +1014,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 70 test files and 605 tests passing.
+13. `pnpm check`: expect 70 test files and 606 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -1070,8 +1072,10 @@ The two-minute match check:
     must still download. Click **Watch** and verify the saved clip enters the
     match viewer. Pause, drag the timeline, step one frame at a time, change
     playback speed, click a goal/card/full-time chapter and press Space/arrow
-    keys. Confirm the whistle/goal audio tracks the event sequence without
-    replaying missed events after a seek. **Back to library**
+    keys. Confirm each chapter card shows a top-down pitch thumbnail, then
+    enable **Loop** and resume: playback must return to the selected chapter
+    when it reaches the next one. Confirm the whistle/goal audio tracks the
+    event sequence without replaying missed events after a seek. **Back to library**
     must return to the saved-room list. The in-memory export-window URL must
     404 after room closure.
     Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is

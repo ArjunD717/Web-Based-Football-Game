@@ -1,7 +1,10 @@
 // packages/client/src/presentation/replay-chapters.test.ts
 import { describe, expect, it } from "vitest";
 import type { SnapshotEvent, SnapshotFrame } from "@fb/shared";
-import { buildReplayChapters } from "./replay-chapters";
+import {
+  buildReplayChapters,
+  chapterIndexAt,
+} from "./replay-chapters";
 
 function frame(
   options: {
@@ -55,6 +58,23 @@ describe("replay chapters", () => {
     expect(chapters[0]?.label).toBe("Goal 1–0");
     expect(chapters[1]?.label).toBe("Yellow · home #7");
     expect(chapters[3]?.progress).toBeCloseTo(6 / 7, 5);
+  });
+
+  it("finds the chapter covering a media time", () => {
+    const chapters = buildReplayChapters(
+      [
+        frame(),
+        frame(),
+        frame({ home: 1 }),
+        frame({ event: event(9, "yellowCard") }),
+      ],
+      1_000,
+    );
+    expect(chapterIndexAt(chapters, 0)).toBe(-1);
+    expect(chapterIndexAt(chapters, 1_999)).toBe(0);
+    expect(chapterIndexAt(chapters, 2_000)).toBe(0);
+    expect(chapterIndexAt(chapters, 3_000)).toBe(1);
+    expect(chapterIndexAt(chapters, 9_000)).toBe(1);
   });
 
   it("ignores an event already active at the start of the clip", () => {

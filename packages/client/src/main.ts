@@ -86,8 +86,10 @@ import {
 } from "./presentation/replay";
 import {
   buildReplayChapters,
+  chapterIndexAt,
   type ReplayChapter,
 } from "./presentation/replay-chapters";
+import { drawReplayThumbnail } from "./presentation/replay-thumbnail";
 import {
   renderMatchStatsScreen,
   type MatchStatsViewRow,
@@ -222,6 +224,7 @@ const replayStepForwardButton =
 const replaySpeedSelect =
   byId<HTMLSelectElement>("replay-speed");
 const replayChapters = byId<HTMLElement>("replay-chapters");
+const replayLoopButton = byId<HTMLButtonElement>("replay-loop");
 const replayAngles = byId<HTMLElement>("replay-angles");
 const replayCameraButtons = [
   ...document.querySelectorAll<HTMLButtonElement>("[data-replay-camera]"),
@@ -572,6 +575,7 @@ replaySeek.addEventListener("input", () => {
     return;
   }
   replayScrubbing = true;
+  replayLoopChapterIndex = null;
   replay.seek(Number(replaySeek.value) / 1_000, performance.now());
   savedAudioJumpPending = true;
   updateReplayTransport();
@@ -601,13 +605,24 @@ replayChapters.addEventListener("click", (event) => {
     return;
   }
   const progress = Number(target.dataset.replayProgress);
+  const index = Number(target.dataset.replayChapter);
   if (!Number.isFinite(progress)) {
     return;
   }
   replay.seek(progress, performance.now());
   replay.pause(performance.now());
+  replayLoopChapterIndex = Number.isInteger(index) ? index : null;
+  lastLoopElapsedMs = savedChapters[index]?.timeMs ?? 0;
   replayScrubbing = false;
   savedAudioJumpPending = true;
+  updateReplayTransport();
+});
+
+replayLoopButton.addEventListener("click", () => {
+  replayLoopEnabled = !replayLoopEnabled;
+  if (replayLoopEnabled) {
+    replayLoopChapterIndex = null;
+  }
   updateReplayTransport();
 });
 
@@ -1140,6 +1155,7 @@ function renderLoop(now: number): void {
       replayBanner.hidden = false;
       updateReplayTransport(sample);
       driveSavedReplayAudio(sample);
+      driveChapterLoop(sample);
     }
   } else if (builder !== null) {
     const frame = client.sampleSnapshot(now);
@@ -1391,6 +1407,10 @@ let savedReplayIntervalMs = 1_000 / 30;
 let savedAudioIndex = -1;
 let savedAudioJumpPending = false;
 let savedChapters: readonly ReplayChapter[] = [];
+let savedChapterViews: readonly (MatchView | null)[] = [];
+let replayLoopEnabled = false;
+let replayLoopChapterIndex: number | null = null;
+let lastLoopElapsedMs = 0;
 
 function openReplayLibrary(): void {
   if (!replayLibraryDialog.open) {
@@ -1532,12 +1552,14 @@ function playSavedReplay(replayExport: WireReplayExport): void {
   const viewBuilder = new WireViewBuilder(replayExport.setup, null);
   const intervalMs =
     1_000 / Math.max(1, replayExport.setup.snapshotHz);
-  const frames = replayExport.frames.flatMap((frame, index) => {
-    const view = viewBuilder.build(frame);
-    return view === null
+  const frameViews = replayExport.frames.map((frame) =>
+    viewBuilder.build(frame),
+  );
+  const frames = frameViews.flatMap((view, index) =>
+    view === null
       ? []
-      : [{ view, recordedAtMs: index * intervalMs }];
-  });
+      : [{ view, recordedAtMs: index * intervalMs }],
+  );
   if (frames.length < 2) {
     showToast("Saved replay has too few renderable frames");
     return;
@@ -1553,6 +1575,9 @@ function playSavedReplay(replayExport: WireReplayExport): void {
     return;
   }
   savedChapters = buildReplayChapters(replayExport.frames, intervalMs);
+  savedChapterViews = frameViews;
+  replayLoopChapterIndex = null;
+  lastLoopElapsedMs = 0;
   renderReplayChapters();
   savedReplayActive = true;
   savedReplayFrames = replayExport.frames;
@@ -2341,6 +2366,40 @@ function toggleReplay(source: ReplaySource = "goal"): void {
   updateCameraControl();
 }
 
+function driveChapterLoop(sample: ReplaySample): void {
+  if (
+    !savedReplayActive ||
+    !replayLoopEnabled ||
+    savedChapters.length < 2 ||
+    sample.paused
+  ) {
+    return;
+  }
+  const previousIndex = chapterIndexAt(savedChapters, lastLoopElapsedMs);
+  const sampleIndex = chapterIndexAt(savedChapters, sample.elapsedMs);
+  const currentIndex =
+    replayLoopChapterIndex ??
+    (sampleIndex > previousIndex && previousIndex >= 0
+      ? previousIndex
+      : sampleIndex);
+  lastLoopElapsedMs = sample.elapsedMs;
+  if (currentIndex < 0) {
+    return;
+  }
+  const current = savedChapters[currentIndex];
+  const next = savedChapters[currentIndex + 1];
+  if (
+    current === undefined ||
+    next === undefined ||
+    sample.elapsedMs < next.timeMs - 1
+  ) {
+    return;
+  }
+  replay.seek(current.progress, performance.now());
+  lastLoopElapsedMs = current.timeMs;
+  savedAudioJumpPending = true;
+}
+
 function driveSavedReplayAudio(sample: ReplaySample): void {
   if (!savedReplayActive || savedReplayFrames.length === 0) {
     return;
@@ -2385,6 +2444,10 @@ function stopReplay(): void {
   savedAudioIndex = -1;
   savedAudioJumpPending = false;
   savedChapters = [];
+  savedChapterViews = [];
+  replayLoopChapterIndex = null;
+  lastLoopElapsedMs = 0;
+  replayLoopEnabled = false;
   renderReplayChapters();
   audio.reset();
   if (wasSaved) {
@@ -2400,13 +2463,23 @@ function stopReplay(): void {
 
 function renderReplayChapters(): void {
   replayChapters.replaceChildren(
-    ...savedChapters.map((chapter) => {
+    ...savedChapters.map((chapter, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "replay-chapter";
       button.dataset.replayProgress = String(chapter.progress);
-      button.textContent = chapter.label;
+      button.dataset.replayChapter = String(index);
       button.title = `Jump to ${chapter.label}`;
+      const canvas = document.createElement("canvas");
+      canvas.className = "replay-chapter__thumb";
+      canvas.setAttribute("aria-hidden", "true");
+      const view = savedChapterViews[chapter.frameIndex];
+      if (view !== null && view !== undefined) {
+        drawReplayThumbnail(canvas, view);
+      }
+      const label = document.createElement("span");
+      label.textContent = chapter.label;
+      button.append(canvas, label);
       return button;
     }),
   );
@@ -2430,9 +2503,23 @@ function updateReplayTransport(sample?: ReplaySample | null): void {
   replayStepForwardButton.disabled = !active;
   replaySeek.disabled = !active;
   replaySpeedSelect.disabled = !active;
-  for (const button of replayChapters.querySelectorAll("button")) {
+  replayLoopButton.disabled = !active || savedChapters.length < 2;
+  replayLoopButton.setAttribute("aria-pressed", String(replayLoopEnabled));
+  replayLoopButton.textContent = replayLoopEnabled ? "Looping" : "Loop";
+  const chapterButtons = replayChapters.querySelectorAll("button");
+  chapterButtons.forEach((button, index) => {
     button.disabled = !active;
-  }
+    const current =
+      sample !== undefined &&
+      sample !== null &&
+      chapterIndexAt(savedChapters, sample.elapsedMs) === index;
+    button.toggleAttribute("data-current", current);
+    if (current) {
+      button.setAttribute("aria-current", "true");
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  });
   replayPauseButton.textContent = replay.paused ? "Resume" : "Pause";
   if (!active) {
     replaySeek.value = "0";
