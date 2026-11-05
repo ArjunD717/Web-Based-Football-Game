@@ -10,8 +10,10 @@ export interface ReplayFrame {
 export interface ReplaySample {
   readonly view: MatchView;
   readonly progress: number;
+  /** Media time inside the clip, milliseconds. */
   readonly elapsedMs: number;
   readonly durationMs: number;
+  readonly paused: boolean;
 }
 
 export interface ReplayBufferOptions {
@@ -46,6 +48,9 @@ export class MatchReplayBuffer {
   private savedClip: ReplayFrame[] = [];
   private previousScore: string | null = null;
   private playbackStartedAtMs: number | null = null;
+  private playbackLastAtMs = 0;
+  private playbackElapsedMs = 0;
+  private playbackPaused = false;
   private playbackStartMs = 0;
   private playbackDurationMs = 0;
   private goalStartMs = 0;
@@ -140,6 +145,9 @@ export class MatchReplayBuffer {
     this.savedClip = [];
     this.previousScore = null;
     this.playbackStartedAtMs = null;
+    this.playbackLastAtMs = 0;
+    this.playbackElapsedMs = 0;
+    this.playbackPaused = false;
     this.playbackStartMs = 0;
     this.playbackDurationMs = 0;
     this.goalStartMs = 0;
@@ -203,17 +211,90 @@ export class MatchReplayBuffer {
 
   stop(): void {
     this.playbackStartedAtMs = null;
+    this.playbackPaused = false;
+  }
+
+  get paused(): boolean {
+    return this.playbackPaused;
+  }
+
+  pause(nowMs: number): boolean {
+    if (!this.active) {
+      return false;
+    }
+    this.advance(nowMs);
+    this.playbackPaused = true;
+    this.playbackLastAtMs = nowMs;
+    return true;
+  }
+
+  resume(nowMs: number): boolean {
+    if (!this.active) {
+      return false;
+    }
+    this.playbackPaused = false;
+    this.playbackLastAtMs = nowMs;
+    return true;
+  }
+
+  togglePaused(nowMs: number): boolean {
+    return this.playbackPaused
+      ? this.resume(nowMs)
+      : this.pause(nowMs);
+  }
+
+  /** Seek by normalized progress; preserves the current pause state. */
+  seek(progress: number, nowMs: number): boolean {
+    if (!this.active) {
+      return false;
+    }
+    this.playbackElapsedMs =
+      Math.min(1, Math.max(0, progress)) * this.playbackDurationMs;
+    this.playbackLastAtMs = nowMs;
+    return true;
+  }
+
+  /** Pauses and moves one frame in the requested direction. */
+  stepFrame(direction: -1 | 1, nowMs: number): boolean {
+    if (!this.active || this.playbackFrames.length < 2) {
+      return false;
+    }
+    this.advance(nowMs);
+    this.playbackPaused = true;
+    this.playbackLastAtMs = nowMs;
+    const targetMs = this.playbackStartMs + this.playbackElapsedMs;
+    const index = this.frameIndexAt(targetMs);
+    const next = Math.min(
+      this.playbackFrames.length - 1,
+      Math.max(0, index + direction),
+    );
+    const frame = this.playbackFrames[next];
+    if (frame === undefined) {
+      return false;
+    }
+    this.playbackElapsedMs = Math.min(
+      this.playbackDurationMs,
+      Math.max(0, frame.recordedAtMs - this.playbackStartMs),
+    );
+    return true;
   }
 
   sample(nowMs: number): ReplaySample | null {
     if (this.playbackStartedAtMs === null || this.playbackFrames.length < 2) {
       return null;
     }
-    const elapsedMs = (nowMs - this.playbackStartedAtMs) * this.speed;
-    if (elapsedMs >= this.playbackDurationMs) {
+    this.advance(nowMs);
+    if (
+      !this.playbackPaused &&
+      this.playbackElapsedMs >= this.playbackDurationMs
+    ) {
       this.stop();
       return null;
     }
+    const elapsedMs = Math.min(
+      this.playbackElapsedMs,
+      this.playbackDurationMs,
+    );
     const targetMs = this.playbackStartMs + elapsedMs;
     const view = this.frameAt(targetMs);
     if (view === null) {
@@ -225,6 +306,7 @@ export class MatchReplayBuffer {
       progress: Math.min(1, elapsedMs / this.playbackDurationMs),
       elapsedMs,
       durationMs: this.playbackDurationMs,
+      paused: this.playbackPaused,
     };
   }
 
@@ -238,6 +320,36 @@ export class MatchReplayBuffer {
     this.playbackStartMs = startMs;
     this.playbackDurationMs = Math.max(1, durationMs);
     this.playbackStartedAtMs = nowMs;
+    this.playbackLastAtMs = nowMs;
+    this.playbackElapsedMs = 0;
+    this.playbackPaused = false;
+  }
+
+  private advance(nowMs: number): void {
+    if (this.playbackPaused || this.playbackStartedAtMs === null) {
+      this.playbackLastAtMs = nowMs;
+      return;
+    }
+    this.playbackElapsedMs +=
+      Math.max(0, nowMs - this.playbackLastAtMs) * this.speed;
+    this.playbackLastAtMs = nowMs;
+  }
+
+  private frameIndexAt(targetMs: number): number {
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    for (let index = 0; index < this.playbackFrames.length; index += 1) {
+      const frame = this.playbackFrames[index];
+      if (frame === undefined) {
+        continue;
+      }
+      const distance = Math.abs(frame.recordedAtMs - targetMs);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+      }
+    }
+    return bestIndex;
   }
 
   private frameAt(targetMs: number): MatchView | null {
