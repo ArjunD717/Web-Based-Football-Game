@@ -91,6 +91,11 @@ import {
 } from "./presentation/replay-chapters";
 import { drawReplayThumbnail } from "./presentation/replay-thumbnail";
 import {
+  loadReviewQueue,
+  saveReviewQueue,
+  type StoredReviewClip,
+} from "./presentation/review-queue-storage";
+import {
   renderMatchStatsScreen,
   type MatchStatsViewRow,
 } from "./match/stats-screen";
@@ -229,6 +234,10 @@ const replaySpeedSelect =
   byId<HTMLSelectElement>("replay-speed");
 const replayChapters = byId<HTMLElement>("replay-chapters");
 const replayLoopButton = byId<HTMLButtonElement>("replay-loop");
+const replayPrevClipButton =
+  byId<HTMLButtonElement>("replay-prev-clip");
+const replayNextClipButton =
+  byId<HTMLButtonElement>("replay-next-clip");
 const replayShareButton = byId<HTMLButtonElement>("replay-share");
 const replayAngles = byId<HTMLElement>("replay-angles");
 const replayCameraButtons = [
@@ -661,6 +670,28 @@ replayLoopButton.addEventListener("click", () => {
 
 replayShareButton.addEventListener("click", () => {
   void shareSavedReplayLink();
+});
+
+replayPrevClipButton.addEventListener("click", () => {
+  if (
+    !reviewQueueActive ||
+    reviewAdvancing ||
+    reviewQueueIndex <= 0
+  ) {
+    return;
+  }
+  void loadReviewQueueClip(reviewQueueIndex - 1);
+});
+
+replayNextClipButton.addEventListener("click", () => {
+  if (
+    !reviewQueueActive ||
+    reviewAdvancing ||
+    reviewQueueIndex + 1 >= reviewQueue.length
+  ) {
+    return;
+  }
+  void loadReviewQueueClip(reviewQueueIndex + 1);
 });
 
 document.addEventListener("keydown", (event) => {
@@ -1461,11 +1492,23 @@ let savedReplayRef: {
   readonly roomCode: string;
   readonly clipId: string;
 } | null = null;
-interface ReviewQueueItem {
-  readonly roomCode: string;
-  readonly clip: WireReplayClip;
+function initialReviewQueue(): StoredReviewClip[] {
+  try {
+    return loadReviewQueue(window.localStorage);
+  } catch {
+    return [];
+  }
 }
-let reviewQueue: ReviewQueueItem[] = [];
+
+function persistReviewQueue(): void {
+  try {
+    saveReviewQueue(window.localStorage, reviewQueue);
+  } catch {
+    // Storage is optional; the queue still works for this session.
+  }
+}
+
+let reviewQueue: StoredReviewClip[] = initialReviewQueue();
 let reviewQueueActive = false;
 let reviewQueueIndex = -1;
 let reviewQueueRequest = 0;
@@ -1513,6 +1556,7 @@ async function loadReplayLibrary(): Promise<void> {
 }
 
 function renderReplayLibrary(library: WireReplayLibrary): void {
+  pruneReviewQueue(library);
   if (library.rooms.length === 0) {
     replayLibraryList.replaceChildren(
       createLibraryNotice(
@@ -1618,6 +1662,7 @@ function toggleReviewQueueItem(
   } else {
     reviewQueue = [...reviewQueue, { roomCode, clip }];
   }
+  persistReviewQueue();
   updateReviewQueueBar();
 }
 
@@ -1632,6 +1677,23 @@ function updateReviewQueueButtons(): void {
     button.textContent = queued ? "Queued" : "Queue";
     button.setAttribute("aria-pressed", String(queued));
   }
+}
+
+function pruneReviewQueue(library: WireReplayLibrary): void {
+  const available = new Set(
+    library.rooms.flatMap((room) =>
+      room.clips.map((clip) => `${room.code}/${clip.id}`),
+    ),
+  );
+  const next = reviewQueue.filter((item) =>
+    available.has(`${item.roomCode}/${item.clip.id}`),
+  );
+  if (next.length === reviewQueue.length) {
+    return;
+  }
+  reviewQueue = next;
+  persistReviewQueue();
+  updateReviewQueueBar();
 }
 
 function updateReviewQueueBar(): void {
@@ -1997,9 +2059,11 @@ closeReplayLibraryButton.addEventListener("click", () => {
 });
 clearReviewQueueButton.addEventListener("click", () => {
   reviewQueue = [];
+  persistReviewQueue();
   updateReviewQueueBar();
 });
 startReviewQueueButton.addEventListener("click", startReviewQueue);
+updateReviewQueueBar();
 closeSavedReplayButton.addEventListener("click", stopReplay);
 
 function renderLobby(state: GameClientState): void {
@@ -2951,6 +3015,17 @@ function updateReplayTransport(sample?: ReplaySample | null): void {
         : "Loop";
   replayLoopButton.title =
     "Cycle loop: off, chapter range, whole clip";
+  const queueTransport = savedReplayActive && reviewQueueActive;
+  replayPrevClipButton.hidden = !queueTransport;
+  replayNextClipButton.hidden = !queueTransport;
+  replayPrevClipButton.disabled =
+    !queueTransport ||
+    reviewAdvancing ||
+    reviewQueueIndex <= 0;
+  replayNextClipButton.disabled =
+    !queueTransport ||
+    reviewAdvancing ||
+    reviewQueueIndex + 1 >= reviewQueue.length;
   replayShareButton.hidden = !savedReplayActive;
   replayShareButton.disabled = !savedReplayActive;
   replayShareButton.title = "Copy a link to this clip at the current chapter";
