@@ -231,6 +231,8 @@ export interface WireRosterPlayer {
   readonly name: string;
   readonly number: number;
   readonly goalkeeper: boolean;
+  /** Authored 1..99 sprint-speed rating used for presentation cadence. */
+  readonly sprintSpeed: number;
 }
 
 export interface WireTeam {
@@ -983,7 +985,8 @@ function parseRosterPlayer(value: unknown): WireRosterPlayer | null {
     typeof record.id !== "string" ||
     typeof record.name !== "string" ||
     !isPositiveInteger(record.number) ||
-    typeof record.goalkeeper !== "boolean"
+    typeof record.goalkeeper !== "boolean" ||
+    !isRating(record.sprintSpeed)
   ) {
     return null;
   }
@@ -992,6 +995,7 @@ function parseRosterPlayer(value: unknown): WireRosterPlayer | null {
     name: record.name,
     number: record.number,
     goalkeeper: record.goalkeeper,
+    sprintSpeed: record.sprintSpeed,
   };
 }
 
@@ -1226,6 +1230,15 @@ function isCount(value: unknown): value is number {
 
 function isUint32(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 0xffffffff;
+}
+
+function isRating(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 1 &&
+    value <= 99
+  );
 }
 
 function isPositiveInteger(value: unknown): value is number {

@@ -195,12 +195,14 @@ export function buildWireRoster(team: TeamState): {
       name: player.name,
       number: player.number,
       goalkeeper: player.role === "GK",
+      sprintSpeed: player.attributes.sprintSpeed,
     })),
     bench: team.bench.map<WireRosterPlayer>((substitute) => ({
       id: substitute.player.id,
       name: substitute.player.name,
       number: substitute.player.number,
       goalkeeper: substitute.player.role === "GK",
+      sprintSpeed: substitute.player.attributes.sprintSpeed,
     })),
   };
 }

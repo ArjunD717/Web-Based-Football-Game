@@ -401,9 +401,23 @@ describe("M10 match management messages", () => {
       t: "roster" as const,
       side: "home" as const,
       players: [
-        { id: "home:p1", name: "Keeper", number: 1, goalkeeper: true },
+        {
+          id: "home:p1",
+          name: "Keeper",
+          number: 1,
+          goalkeeper: true,
+          sprintSpeed: 72,
+        },
       ],
-      bench: [{ id: "home:p12", name: "Sub", number: 12, goalkeeper: false }],
+      bench: [
+        {
+          id: "home:p12",
+          name: "Sub",
+          number: 12,
+          goalkeeper: false,
+          sprintSpeed: 81,
+        },
+      ],
     };
     expect(parseServerMessage(encodeServerMessage(roster))).toEqual(roster);
 
@@ -596,6 +610,7 @@ function makeSetup() {
       name: `${side} ${index + 1}`,
       number: index + 1,
       goalkeeper: index === 0,
+      sprintSpeed: 60 + index,
     }));
   return {
     matchId: "match-1",
