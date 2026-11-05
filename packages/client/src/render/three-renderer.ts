@@ -20,11 +20,13 @@ import type {
   CameraShot,
 } from "../camera/types";
 import { predictLandingPoint } from "./ball-effects";
+import { disposeObject } from "./three-dispose";
 import { pitchToWorld } from "./three-layout";
 import { createPitchVisual, type GoalNetVisual } from "./three-pitch";
 import type { StadiumVisual } from "./three-stadium";
 import { projectScreenIndicator } from "./screen-indicators";
-import { PlayerRig } from "./three-player";
+import { PlayerRig, type MatchPlayerRig } from "./three-player";
+import { AuthoredPlayerLibrary } from "./three-authored-player";
 import {
   VISUAL_QUALITY,
   VISUAL_TUNING,
@@ -48,8 +50,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly onWindowResize = (): void => {
     this.resize();
   };
-  private readonly players = new Map<string, PlayerRig>();
+  private readonly players = new Map<string, MatchPlayerRig>();
   private readonly seenPlayers = new Set<string>();
+  private readonly authoredPlayers = new AuthoredPlayerLibrary();
+  private usingAuthoredPlayers = false;
   private readonly ball: THREE.Mesh;
   private readonly ballShadow: THREE.Mesh;
   private readonly ballShadowMaterial: THREE.MeshBasicMaterial;
@@ -203,6 +207,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.contextController = new ContextCameraController(this.cameraDirector);
     this.cameraDebug = new CameraDebugOverlay();
     this.applyQuality();
+    void this.authoredPlayers.load();
   }
 
   resize(): void {
@@ -371,8 +376,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
     window.removeEventListener("resize", this.onWindowResize);
     this.contextController.destroy();
     this.cameraDebug.destroy();
+    this.clearPlayers();
+    this.authoredPlayers.dispose();
     disposeObject(this.scene);
-    this.players.clear();
     this.backdrop.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
@@ -536,6 +542,13 @@ export class ThreeMatchRenderer implements MatchRenderer {
   }
 
   private syncPlayers(view: MatchView): void {
+    const authored =
+      this.authoredPlayers.ready && this.visualQuality !== "low";
+    if (authored !== this.usingAuthoredPlayers) {
+      this.clearPlayers();
+      this.usingAuthoredPlayers = authored;
+    }
+
     const seen = this.seenPlayers;
     seen.clear();
     for (const team of [view.away, view.home]) {
@@ -543,7 +556,11 @@ export class ThreeMatchRenderer implements MatchRenderer {
         seen.add(player.id);
         let rig = this.players.get(player.id);
         if (rig === undefined) {
-          rig = new PlayerRig(player, team.colors);
+          if (authored) {
+            rig =
+              this.authoredPlayers.create(player, team.colors) ?? undefined;
+          }
+          rig ??= new PlayerRig(player, team.colors);
           this.players.set(player.id, rig);
           this.scene.add(rig.root);
         }
@@ -555,9 +572,18 @@ export class ThreeMatchRenderer implements MatchRenderer {
         continue;
       }
       this.scene.remove(rig.root);
-      disposeObject(rig.root);
+      rig.dispose();
       this.players.delete(id);
     }
+  }
+
+  private clearPlayers(): void {
+    for (const rig of this.players.values()) {
+      this.scene.remove(rig.root);
+      rig.dispose();
+    }
+    this.players.clear();
+    this.seenPlayers.clear();
   }
 
   private updateBall(view: MatchView): void {
@@ -680,30 +706,3 @@ function createBallTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-function disposeObject(root: THREE.Object3D): void {
-  const textures = new Set<{ dispose(): void }>();
-  root.traverse((object) => {
-    const mesh = object as THREE.Mesh & { material?: unknown };
-    if (mesh.geometry !== undefined) {
-      mesh.geometry.dispose();
-    }
-    const materials = Array.isArray(mesh.material)
-      ? mesh.material
-      : mesh.material === undefined
-        ? []
-        : [mesh.material];
-    for (const material of materials) {
-      if (material instanceof THREE.Material) {
-        for (const value of Object.values(material)) {
-          if (value instanceof THREE.Texture) {
-            textures.add(value);
-          }
-        }
-        material.dispose();
-      }
-    }
-  });
-  for (const texture of textures) {
-    texture.dispose();
-  }
-}

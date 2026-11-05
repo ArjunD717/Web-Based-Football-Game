@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { clamp } from "@fb/shared";
 import type { Pitch } from "@fb/sim";
 import type { PlayerStateName } from "@fb/sim";
+import { disposeObject } from "./three-dispose";
 import { facingToRotationY, pitchToWorld } from "./three-layout";
 import { VISUAL_TUNING } from "./visualTuning";
 import type { RenderPlayer, RenderTeamColors } from "./view";
@@ -341,7 +342,14 @@ export function blendPlayerPoses(
   };
 }
 
-export class PlayerRig {
+/** Common surface used by the procedural and authored match-player rigs. */
+export interface MatchPlayerRig {
+  readonly root: THREE.Group;
+  update(pitch: Pitch, player: RenderPlayer, elapsed: number, tick: number): void;
+  dispose(): void;
+}
+
+export class PlayerRig implements MatchPlayerRig {
   readonly root = new THREE.Group();
   private readonly body = new THREE.Group();
   private readonly upperBody = new THREE.Group();
@@ -640,9 +648,13 @@ export class PlayerRig {
       1 - clamp(player.state === "slide" ? 0.18 : 0, 0, 0.3),
     );
   }
+
+  dispose(): void {
+    disposeObject(this.root);
+  }
 }
 
-function createControlledMarker(): THREE.Sprite {
+export function createControlledMarker(): THREE.Sprite {
   const canvas = document.createElement("canvas");
   canvas.width = 128;
   canvas.height = 128;
@@ -681,7 +693,7 @@ function createControlledMarker(): THREE.Sprite {
   return sprite;
 }
 
-function createNumberSprite(number: number): THREE.Sprite {
+export function createNumberSprite(number: number): THREE.Sprite {
   const canvas = document.createElement("canvas");
   canvas.width = 128;
   canvas.height = 128;
