@@ -892,8 +892,9 @@ Not implemented yet (by milestone design):
   chapter after the lobby has closed. The library's **Queue** buttons build a
   review queue; **Start review** plays the selected clips in order and
   auto-advances at each clip end while carrying speed, loop mode and the chosen
-  chapter index. Match events drive the procedural whistle and goal audio during
-  playback. Playback works
+  chapter index. **Prev** and **Next** step manually, and the queue selection is
+  restored from `localStorage` after reload. Match events drive the procedural
+  whistle and goal audio during playback. Playback works
   after the room has closed. No auth is applied beyond the private-LAN trust
   boundary.
 - The client renders 100 ms behind arrival to absorb 30 Hz spacing and LAN jitter.
@@ -1019,7 +1020,7 @@ The two-minute match check:
 11. Close the guest tab: host shows **Match paused** with a reconnect countdown.
     Reopen with the same token (or reload the guest) to resume.
 12. Guest **Leave**: host returns to the room lobby with the code intact.
-13. `pnpm check`: expect 70 test files and 607 tests passing.
+13. `pnpm check`: expect 71 test files and 610 tests passing.
 14. Verify the 3D presentation: the match opens in 3D with a wide kick-off
     establishing shot that settles into the selected camera. The controlled
     player and ball stay in frame during a run, short touches do not shake the
@@ -1086,8 +1087,11 @@ The two-minute match check:
     clips, then **Start review**. Confirm the title shows `Clip 1/2`, each clip
     advances automatically, the chosen chapter index and loop button state carry
     into the next clip, and the library returns with **Review complete** after
-    the last clip. Confirm the whistle/goal audio tracks the event sequence
-    without replaying missed events after a seek. **Back to library**
+    the last clip. Use **Next** and **Prev** to step manually; the first Prev and
+    last Next must be disabled. Reload the page, reopen the library and confirm
+    both clips are still queued. **Clear** and verify the queue does not return
+    after another reload. Confirm the whistle/goal audio tracks the event
+    sequence without replaying missed events after a seek. **Back to library**
     must return to the saved-room list. The in-memory export-window URL must
     404 after room closure.
     Open `/healthz` and verify `simulation.loopHz` is 60, the tick budget is
