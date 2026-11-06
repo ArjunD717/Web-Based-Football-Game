@@ -1,7 +1,11 @@
 // packages/client/src/performance.ts
 
 import { createPitch } from "@fb/sim";
+import {
+  meetsFrameBudget,
+} from "./render/frame-budget";
 import { createThreeRenderer } from "./render/three-renderer";
+import { VISUAL_TUNING } from "./render/visualTuning";
 import type { MatchView, RenderPlayer, RenderTeam } from "./render/view";
 
 const WARMUP_MS = 2_500;
@@ -126,10 +130,14 @@ function showResults(): void {
   const p95Ms = percentile(renderMs, 0.95);
   const intervalAvg = average(frameIntervalsMs);
   const intervalP95 = percentile(frameIntervalsMs, 0.95);
+  const budget = VISUAL_TUNING.frameBudget;
+  const passes = meetsFrameBudget(p95Ms, budget);
   const rows: ReadonlyArray<readonly [string, string]> = [
     ["samples", String(renderMs.length)],
     ["render avg", `${avgMs.toFixed(2)} ms`],
     ["render p95", `${p95Ms.toFixed(2)} ms`],
+    ["budget", `${budget.targetFrameMs.toFixed(2)} ms`],
+    ["gate", passes ? "PASS" : "FAIL"],
     ["implied fps", String(Math.round(1000 / Math.max(avgMs, 0.001)))],
     ["frame avg", `${intervalAvg.toFixed(2)} ms`],
     ["frame p95", `${intervalP95.toFixed(2)} ms`],
@@ -143,7 +151,7 @@ function showResults(): void {
       return [key, reading];
     }),
   );
-  setStatus("Measurement complete");
+  setStatus(passes ? "Measurement complete — PASS" : "Measurement complete — FAIL");
 }
 
 function frame(now: number): void {
