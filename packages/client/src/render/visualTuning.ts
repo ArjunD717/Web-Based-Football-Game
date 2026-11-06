@@ -166,6 +166,8 @@ export interface VisualTuning {
       readonly reducedStride: number;
       /** Update every fourth frame at minimal detail. */
       readonly minimalStride: number;
+      /** Even slower cadence while outside the camera frustum. */
+      readonly hiddenStride: number;
     };
   };
   readonly audio: {
@@ -287,6 +289,7 @@ export const VISUAL_TUNING: VisualTuning = {
       fullStride: 1,
       reducedStride: 2,
       minimalStride: 4,
+      hiddenStride: 8,
     },
   },
   audio: {

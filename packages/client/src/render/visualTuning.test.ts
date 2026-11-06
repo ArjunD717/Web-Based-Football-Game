@@ -76,6 +76,9 @@ describe("visual quality presets", () => {
     expect(lod.animation.minimalStride).toBeGreaterThan(
       lod.animation.reducedStride,
     );
+    expect(lod.animation.hiddenStride).toBeGreaterThan(
+      lod.animation.minimalStride,
+    );
   });
 
   it("keeps footstep attenuation ranges ordered", () => {

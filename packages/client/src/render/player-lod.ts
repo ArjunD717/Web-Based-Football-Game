@@ -9,6 +9,8 @@ export interface PlayerAnimationLodTuning {
   readonly reducedStride: number;
   /** Update every fourth frame at minimal detail. */
   readonly minimalStride: number;
+  /** Slowest cadence while the player is outside the camera frustum. */
+  readonly hiddenStride: number;
 }
 
 export interface PlayerLodTuning {
@@ -141,13 +143,15 @@ export function shadowCasterIds(
 export function animationStrideFor(
   detail: PlayerDetail,
   tuning: PlayerAnimationLodTuning,
+  onScreen = true,
 ): number {
-  const stride =
-    detail === "full"
+  const stride = onScreen
+    ? detail === "full"
       ? tuning.fullStride
       : detail === "reduced"
         ? tuning.reducedStride
-        : tuning.minimalStride;
+        : tuning.minimalStride
+    : tuning.hiddenStride;
   return Number.isFinite(stride)
     ? Math.max(1, Math.floor(stride))
     : 1;

@@ -357,7 +357,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       );
       rig?.setDetail?.(detail);
       rig?.setAnimationStride?.(
-        animationStrideFor(detail, tuning.animation),
+        animationStrideFor(detail, tuning.animation, entry.onScreen),
       );
       rig?.setShadowCasting?.(casters.has(entry.id));
     }

@@ -24,6 +24,7 @@ const tuning: PlayerLodTuning = {
     fullStride: 1,
     reducedStride: 2,
     minimalStride: 4,
+    hiddenStride: 8,
   },
 };
 
@@ -114,6 +115,7 @@ describe("player animation cadence", () => {
     expect(animationStrideFor("full", tuning.animation)).toBe(1);
     expect(animationStrideFor("reduced", tuning.animation)).toBe(2);
     expect(animationStrideFor("minimal", tuning.animation)).toBe(4);
+    expect(animationStrideFor("minimal", tuning.animation, false)).toBe(8);
   });
 
   it("clamps invalid strides to the safe every-frame fallback", () => {
