@@ -68,6 +68,13 @@ describe("visual quality presets", () => {
     expect(lod.shadowDistanceM).toBeGreaterThan(0);
     expect(lod.maxShadowCasters).toBeGreaterThan(0);
     expect(lod.referenceHeightM).toBeGreaterThan(1);
+    expect(lod.animation.fullStride).toBe(1);
+    expect(lod.animation.reducedStride).toBeGreaterThan(
+      lod.animation.fullStride,
+    );
+    expect(lod.animation.minimalStride).toBeGreaterThan(
+      lod.animation.reducedStride,
+    );
   });
 
   it("keeps footstep attenuation ranges ordered", () => {

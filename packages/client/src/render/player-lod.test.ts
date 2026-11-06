@@ -2,9 +2,11 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  animationStrideFor,
   playerDetailForScreenHeight,
   projectedHeightPx,
   shadowCasterIds,
+  shouldAnimateAtTick,
   type PlayerLodEntry,
   type PlayerLodTuning,
 } from "./player-lod";
@@ -16,6 +18,11 @@ const tuning: PlayerLodTuning = {
   shadowMinScreenPx: 8,
   shadowDistanceM: 80,
   maxShadowCasters: 2,
+  animation: {
+    fullStride: 1,
+    reducedStride: 2,
+    minimalStride: 4,
+  },
 };
 
 describe("player screen-space LOD", () => {
@@ -83,5 +90,42 @@ describe("player screen-space LOD", () => {
       ).size,
     ).toBe(0);
     expect(shadowCasterIds([], tuning).size).toBe(0);
+  });
+});
+
+describe("player animation cadence", () => {
+  it("maps detail levels to the configured frame stride", () => {
+    expect(animationStrideFor("full", tuning.animation)).toBe(1);
+    expect(animationStrideFor("reduced", tuning.animation)).toBe(2);
+    expect(animationStrideFor("minimal", tuning.animation)).toBe(4);
+  });
+
+  it("clamps invalid strides to the safe every-frame fallback", () => {
+    expect(
+      animationStrideFor("minimal", {
+        ...tuning.animation,
+        minimalStride: 0,
+      }),
+    ).toBe(1);
+    expect(
+      animationStrideFor("minimal", {
+        ...tuning.animation,
+        minimalStride: Number.NaN,
+      }),
+    ).toBe(1);
+  });
+
+  it("updates on the player's phase and every stride", () => {
+    expect(shouldAnimateAtTick(0, 4, 0)).toBe(true);
+    expect(shouldAnimateAtTick(1, 4, 0)).toBe(false);
+    expect(shouldAnimateAtTick(4, 4, 0)).toBe(true);
+    expect(shouldAnimateAtTick(5, 4, 1)).toBe(true);
+    expect(shouldAnimateAtTick(4, 1, 3)).toBe(true);
+  });
+
+  it("normalizes negative ticks and phases", () => {
+    expect(shouldAnimateAtTick(-1, 4, 3)).toBe(true);
+    expect(shouldAnimateAtTick(3, 4, -5)).toBe(true);
+    expect(shouldAnimateAtTick(Number.NaN, 4, 0)).toBe(true);
   });
 });

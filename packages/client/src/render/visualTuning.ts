@@ -157,6 +157,14 @@ export interface VisualTuning {
     readonly shadowDistanceM: number;
     /** Hard budget for simultaneous skinned shadow casters. */
     readonly maxShadowCasters: number;
+    readonly animation: {
+      /** Update every frame while at full detail. */
+      readonly fullStride: number;
+      /** Update every second frame at reduced detail. */
+      readonly reducedStride: number;
+      /** Update every fourth frame at minimal detail. */
+      readonly minimalStride: number;
+    };
   };
   readonly audio: {
     /** Footsteps at or inside this listener distance play at full gain. */
@@ -272,6 +280,11 @@ export const VISUAL_TUNING: VisualTuning = {
     shadowMinScreenPx: 8,
     shadowDistanceM: 80,
     maxShadowCasters: 4,
+    animation: {
+      fullStride: 1,
+      reducedStride: 2,
+      minimalStride: 4,
+    },
   },
   audio: {
     footstepReferenceDistanceM: 4,
