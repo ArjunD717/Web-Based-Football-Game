@@ -24,6 +24,8 @@ export interface PlayerLodTuning {
   readonly shadowDistanceM: number;
   /** Hard budget for simultaneous skinned shadow casters. */
   readonly maxShadowCasters: number;
+  /** NDC margin used before culling overlays, shadows and animation. */
+  readonly screenMarginNdc: number;
   readonly animation: PlayerAnimationLodTuning;
 }
 
@@ -32,6 +34,32 @@ export interface PlayerLodEntry {
   readonly distanceM: number;
   /** Estimated vertical screen size; zero means off-screen or behind camera. */
   readonly screenHeightPx: number;
+  /** False for roots outside the camera's NDC box and margin. */
+  readonly onScreen: boolean;
+}
+
+/** NDC visibility with a margin so players do not pop at the screen edge. */
+export function isNdcPointOnScreen(
+  xNdc: number,
+  yNdc: number,
+  zNdc: number,
+  margin: number,
+): boolean {
+  if (
+    !Number.isFinite(xNdc) ||
+    !Number.isFinite(yNdc) ||
+    !Number.isFinite(zNdc) ||
+    !Number.isFinite(margin)
+  ) {
+    return false;
+  }
+  const edge = 1 + Math.max(0, margin);
+  return (
+    zNdc >= -1 &&
+    zNdc <= 1 &&
+    Math.abs(xNdc) <= edge &&
+    Math.abs(yNdc) <= edge
+  );
 }
 
 /**
@@ -96,6 +124,7 @@ export function shadowCasterIds(
       (entry) =>
         Number.isFinite(entry.distanceM) &&
         Number.isFinite(entry.screenHeightPx) &&
+        entry.onScreen &&
         entry.distanceM <= tuning.shadowDistanceM &&
         entry.screenHeightPx >= tuning.shadowMinScreenPx,
     )

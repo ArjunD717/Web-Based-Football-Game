@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   animationStrideFor,
+  isNdcPointOnScreen,
   playerDetailForScreenHeight,
   projectedHeightPx,
   shadowCasterIds,
@@ -18,6 +19,7 @@ const tuning: PlayerLodTuning = {
   shadowMinScreenPx: 8,
   shadowDistanceM: 80,
   maxShadowCasters: 2,
+  screenMarginNdc: 0.08,
   animation: {
     fullStride: 1,
     reducedStride: 2,
@@ -26,6 +28,14 @@ const tuning: PlayerLodTuning = {
 };
 
 describe("player screen-space LOD", () => {
+  it("rejects points outside the NDC box or behind the camera", () => {
+    expect(isNdcPointOnScreen(0, 0, 0, 0.08)).toBe(true);
+    expect(isNdcPointOnScreen(1.08, -1.08, 1, 0.08)).toBe(true);
+    expect(isNdcPointOnScreen(1.09, 0, 0, 0.08)).toBe(false);
+    expect(isNdcPointOnScreen(0, 0, 1.01, 0.08)).toBe(false);
+    expect(isNdcPointOnScreen(0, 0, -1.01, 0.08)).toBe(false);
+    expect(isNdcPointOnScreen(Number.NaN, 0, 0, 0.08)).toBe(false);
+  });
   it("projects height with the pinhole camera model", () => {
     const height = projectedHeightPx(
       1.8,
@@ -60,11 +70,11 @@ describe("player screen-space LOD", () => {
 
   it("selects only the nearest shadow casters inside both budgets", () => {
     const players: PlayerLodEntry[] = [
-      { id: "far", distanceM: 45, screenHeightPx: 30 },
-      { id: "near", distanceM: 8, screenHeightPx: 200 },
-      { id: "middle", distanceM: 18, screenHeightPx: 30 },
-      { id: "tiny", distanceM: 2, screenHeightPx: 2 },
-      { id: "edge", distanceM: 80, screenHeightPx: 20 },
+      { id: "far", distanceM: 45, screenHeightPx: 30, onScreen: true },
+      { id: "near", distanceM: 8, screenHeightPx: 200, onScreen: true },
+      { id: "middle", distanceM: 18, screenHeightPx: 30, onScreen: true },
+      { id: "tiny", distanceM: 2, screenHeightPx: 2, onScreen: true },
+      { id: "edge", distanceM: 80, screenHeightPx: 20, onScreen: true },
     ];
     expect([...shadowCasterIds(players, tuning)]).toEqual(["near", "middle"]);
   });
@@ -72,7 +82,7 @@ describe("player screen-space LOD", () => {
   it("returns no shadows when the budget is zero", () => {
     expect(
       shadowCasterIds(
-        [{ id: "near", distanceM: 1, screenHeightPx: 200 }],
+        [{ id: "near", distanceM: 1, screenHeightPx: 200, onScreen: true }],
         { ...tuning, maxShadowCasters: 0 },
       ).size,
     ).toBe(0);
@@ -82,14 +92,20 @@ describe("player screen-space LOD", () => {
     expect(
       shadowCasterIds(
         [
-          { id: "bad", distanceM: Number.NaN, screenHeightPx: 200 },
-          { id: "inf", distanceM: Number.POSITIVE_INFINITY, screenHeightPx: 200 },
-          { id: "hidden", distanceM: 5, screenHeightPx: Number.NaN },
+          { id: "bad", distanceM: Number.NaN, screenHeightPx: 200, onScreen: true },
+          { id: "inf", distanceM: Number.POSITIVE_INFINITY, screenHeightPx: 200, onScreen: true },
+          { id: "hidden", distanceM: 5, screenHeightPx: Number.NaN, onScreen: true },
         ],
         tuning,
       ).size,
     ).toBe(0);
     expect(shadowCasterIds([], tuning).size).toBe(0);
+    expect(
+      shadowCasterIds(
+        [{ id: "outside", distanceM: 5, screenHeightPx: 200, onScreen: false }],
+        tuning,
+      ).size,
+    ).toBe(0);
   });
 });
 

@@ -26,6 +26,7 @@ import { createPitchVisual, type GoalNetVisual } from "./three-pitch";
 import type { StadiumVisual } from "./three-stadium";
 import {
   animationStrideFor,
+  isNdcPointOnScreen,
   playerDetailForScreenHeight,
   projectedHeightPx,
   shadowCasterIds,
@@ -103,6 +104,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly lodPlayerPosition = new THREE.Vector3();
   private readonly lodForward = new THREE.Vector3();
   private readonly lodToPlayer = new THREE.Vector3();
+  private readonly lodProjected = new THREE.Vector3();
   private readonly lodEntries: PlayerLodEntry[] = [];
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
@@ -309,6 +311,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
    * simulation and snapshot data remain untouched.
    */
   private applyPlayerLod(): void {
+    this.camera.updateMatrixWorld();
     this.camera.getWorldPosition(this.lodCameraPosition);
     this.camera.getWorldDirection(this.lodForward);
     const tuning = VISUAL_TUNING.playerLod;
@@ -318,9 +321,17 @@ export class ThreeMatchRenderer implements MatchRenderer {
       const world = rig.root.getWorldPosition(this.lodPlayerPosition);
       this.lodToPlayer.subVectors(world, this.lodCameraPosition);
       const distanceM = this.lodToPlayer.length();
-      // Behind-camera roots must not become "close" through perspective wrap.
+      this.lodProjected.copy(world).project(this.camera);
+      const onScreen = isNdcPointOnScreen(
+        this.lodProjected.x,
+        this.lodProjected.y,
+        this.lodProjected.z,
+        tuning.screenMarginNdc,
+      );
+      // Behind or outside the frustum must not become "close" through
+      // perspective wrap.
       const screenHeightPx =
-        this.lodToPlayer.dot(this.lodForward) > 0
+        onScreen && this.lodToPlayer.dot(this.lodForward) > 0
           ? projectedHeightPx(
               tuning.referenceHeightM,
               distanceM,
@@ -328,7 +339,12 @@ export class ThreeMatchRenderer implements MatchRenderer {
               verticalFovRadians,
             )
           : 0;
-      this.lodEntries.push({ id, distanceM, screenHeightPx });
+      this.lodEntries.push({
+        id,
+        distanceM,
+        screenHeightPx,
+        onScreen,
+      });
     }
     const casters = VISUAL_QUALITY[this.visualQuality].shadows
       ? shadowCasterIds(this.lodEntries, tuning)

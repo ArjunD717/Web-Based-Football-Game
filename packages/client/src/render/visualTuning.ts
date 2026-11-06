@@ -157,6 +157,8 @@ export interface VisualTuning {
     readonly shadowDistanceM: number;
     /** Hard budget for simultaneous skinned shadow casters. */
     readonly maxShadowCasters: number;
+    /** NDC margin before off-screen players lose detail and shadows. */
+    readonly screenMarginNdc: number;
     readonly animation: {
       /** Update every frame while at full detail. */
       readonly fullStride: number;
@@ -280,6 +282,7 @@ export const VISUAL_TUNING: VisualTuning = {
     shadowMinScreenPx: 8,
     shadowDistanceM: 80,
     maxShadowCasters: 4,
+    screenMarginNdc: 0.08,
     animation: {
       fullStride: 1,
       reducedStride: 2,
