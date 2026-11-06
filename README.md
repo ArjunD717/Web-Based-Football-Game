@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 29**:
+both devices are thin clients. This repository is at **Milestone 30**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -34,6 +34,7 @@ template and a Lambert material fallback for minimal-detail players. M28 swaps
 that geometry on the existing skeleton so animation and foot locks survive the
 transition. M29 delivers meshopt-compressed match and low templates with an
 uncompressed fallback and explicit compressed-byte, triangle and bone budgets.
+M30 adds KTX2/Basis textures with a WebP/meshopt fallback chain.
 
 ## Requirements
 
@@ -43,6 +44,9 @@ uncompressed fallback and explicit compressed-byte, triangle and bone budgets.
 - Both devices on the same LAN, with the mkcert root CA trusted on the guest
 - Optional, for rebuilding the player asset only: Blender 4.5+ and Python 3.10+
   with Pillow and NumPy. Normal install, build and play do not need either.
+- Optional, for regenerating KTX2 textures: native **gltfpack 1.3** (the
+  Windows release is a standalone `gltfpack.exe`). The committed KTX2 assets
+  do not require it at install, build or play time.
 
 Enable pnpm if needed:
 
@@ -164,9 +168,84 @@ Useful environment overrides:
 | `FB_DEV_JITTER_MS` | `0` | Dev-only symmetric jitter around that latency |
 | `FB_DEV_LOSS_PCT` | `0` | Dev-only percentage of binary snapshots to drop |
 | `MKCERT_BIN` | `mkcert` | mkcert executable |
+| `GLTFPACK_BIN` | unset | Native gltfpack 1.3 executable for KTX2 asset regeneration |
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 30 scope
+
+> The M29 limitation that KTX2/Basis textures were not implemented is
+> superseded by M30.
+
+Implemented:
+
+- `tools/character/pack_ktx2.py` converts the authored GLB's embedded WebP
+  images to temporary PNGs, runs native gltfpack 1.3 with `-tc -noq -kn -km
+  -ke`, and repairs the result:
+  - every texture points at `KHR_texture_basisu`
+  - `EXT_texture_webp` is removed from the required extensions
+  - the source mesh names are restored after gltfpack strips the mesh-array
+    names
+- Two KTX2 templates ship:
+  - `player-01-match.ktx2.glb`: **795,852 bytes**, **28.4%** smaller than the
+    original **1,111,124-byte** WebP match template and 13.3% smaller than the
+    meshopt variant
+  - `player-01-low.ktx2.glb`: **650,260 bytes**, **29.6%** smaller than the
+    original **923,976-byte** low template and 19.2% smaller than the meshopt
+    variant
+- The match KTX2 file contains **5 KTX2 images**, the low file **4 KTX2
+  images**, both with 15 animation clips. Triangle counts remain **7,385** and
+  **3,491**
+- The client loads KTX2 first, then the existing meshopt WebP template, then
+  the original WebP template. A meshopt or plain load is used when the KTX2
+  decoder, WebAssembly, workers, transcoding or the file itself fails
+- `KTX2Loader` is initialised once and points at the vendored
+  `public/basis/basis_transcoder.{js,wasm}`. Because the lobby preloads assets
+  before a match renderer exists, support detection probes a throwaway WebGL
+  context and immediately releases it. The shared KTX2 loader is retained for
+  the app lifetime
+- `tools/character/build.mjs` regenerates KTX2 files when `GLTFPACK_BIN` points
+  at a native gltfpack binary. Without it, the build reuses the committed KTX2
+  files and fails only when they are missing or over budget:
+  - match KTX2: **900,000 bytes**
+  - low KTX2: **700,000 bytes**
+- Browser smoke:
+  - KTX2 lab: `delivery=ktx2`, 15 clips, **7,385 triangles**, **1.80 m**
+    bounds; the authored kit, crest prints and skin rendered correctly
+  - With both KTX2 files removed, the same lab loaded `delivery=meshopt` with
+    the same clip and triangle counts
+  - With `basis_transcoder.wasm` temporarily missing, the decoder preflight
+    rejected KTX2 and the loader selected meshopt without hanging
+  - The 22-player benchmark measured render average **4.77 ms**, p95 **6.30
+    ms**, budget **16.70 ms**, gate **PASS**; frame interval average **7.67
+    ms**, p95 **18.20 ms**
+  - The benchmark reported no page errors
+- `pnpm check` passes **687 tests**, including three new KTX2 integrity tests
+  for required extensions, image signatures, mesh names, animation count and
+  byte ceilings; `pnpm build` succeeds
+
+Known M30 limitations (by design):
+
+- KTX2 regeneration requires native **gltfpack 1.3**, which is not vendored.
+  The committed assets are used as-is when `GLTFPACK_BIN` is unset; the build
+  does not compare them with a freshly regenerated source GLB
+- gltfpack uses ETC1S texture encoding. It is lossy and normal maps are not
+  separately promoted to UASTC, so close inspection may show compression
+  artifacts
+- gltfpack still optimises vertices and resamples animation clips at its
+  default 30 Hz, even with `-noq`. The resulting clips are presentation-only
+  and are not used by the simulation
+- The KTX2 chain increases shipped files: original WebP, meshopt and KTX2
+  variants all remain in `dist/characters/`, plus a **585 KB** Basis transcoder
+- Support detection uses a throwaway context and a conservative fallback; a
+  browser with a working KTX2 path may still fall back if the transient
+  context cannot be created
+- The KTX2 and meshopt byte budgets are build checks; runtime budget violations
+  remain warnings, and `HEAD`/`Content-Length` availability is not guaranteed
+- There is still no opacity cross-fade between geometry LODs
+- KTX2Loader and the decoded template cache live for the whole app lifetime;
+  there is no eviction or disposal on returning to the lobby
 
 ## Milestone 29 scope
 
