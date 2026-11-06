@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 28**:
+both devices are thin clients. This repository is at **Milestone 29**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -32,7 +32,8 @@ transforms at 60 Hz. M26 adds frustum-aware animation culling, adaptive shadow
 pressure and a pass/fail render-budget gate. M27 adds a low-poly authored
 template and a Lambert material fallback for minimal-detail players. M28 swaps
 that geometry on the existing skeleton so animation and foot locks survive the
-transition.
+transition. M29 delivers meshopt-compressed match and low templates with an
+uncompressed fallback and explicit compressed-byte, triangle and bone budgets.
 
 ## Requirements
 
@@ -166,6 +167,67 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 29 scope
+
+> The M28 limitation that Draco/meshopt/KTX2 were not implemented is
+> superseded for geometry by M29. Textures remain WebP; KTX2 is still not
+> implemented.
+
+Implemented:
+
+- Blender now writes meshopt-compressed variants alongside the uncompressed
+  templates:
+  - `player-01-match.meshopt.glb`: **917,640 bytes**, down from **1,111,124**
+    bytes (17.4% smaller), using `EXT_meshopt_compression`
+  - `player-01-low.meshopt.glb`: **804,312 bytes**, down from **923,976**
+    bytes (13.0% smaller)
+- The client attaches `MeshoptDecoder` to the `GLTFLoader` and requests the
+  compressed files first. If the compressed file is missing, the decoder is
+  unavailable, or parsing fails, `authored-asset.ts` logs the reason and
+  retries the same template from the uncompressed URL. The procedural rig
+  remains the final fallback
+- The HTTP budget probe records the compressed byte size with a `HEAD` request.
+  `asset-budget.ts` checks each parsed template against explicit ceilings:
+  - compressed bytes: match **1,000,000**, low **900,000**
+  - decoded triangles: match **8,000**, low **4,000**
+  - skeleton bones: **64**
+- Budget violations are warnings, not silent failures. The loaded template is
+  still rendered, and the warning names every exceeded dimension. A missing
+  `Content-Length` skips only the byte check
+- `tools/character/build.mjs` fails the asset build when either compressed
+  variant is missing or exceeds its byte ceiling, then copies both variants
+  into `packages/client/public/characters/`. `pnpm character:build` reproduced
+  the assets and passed both checks
+- Fallback smoke: with both `.meshopt.glb` files temporarily removed, the
+  client logged meshopt load failures, fetched the **1,111,124-byte** match
+  template and **923,976-byte** low template, and rendered the 22-player
+  benchmark without page errors
+- `pnpm check` passes **684 tests** (the three new budget tests cover accepted
+  values, every exceeded dimension, and an unknown byte size); `pnpm build`
+  succeeds
+- The compressed-template benchmark measured render average **5.15 ms**, p95
+  **7.20 ms**, budget **16.70 ms**, gate **PASS**, frame interval average
+  **9.01 ms** and p95 **24.20 ms**. The p95 frame interval is above the target
+  and varies between runs; the CPU render-budget gate still passes
+
+Known M29 limitations (by design):
+
+- Meshopt compresses geometry and animation buffer views only. Embedded WebP
+  textures dominate both files, so the byte reduction is modest. KTX2/Basis
+  texture compression is still not implemented
+- The decoder is a bundled WebAssembly module. Browsers without WebAssembly or
+  with a blocked decoder fall back to the uncompressed downloads
+- Both compressed and uncompressed files are shipped in `dist/characters/`.
+  Only one variant is downloaded per page load, but the deployment contains
+  both copies
+- The byte budget relies on a successful `HEAD` response and `Content-Length`;
+  the triangle and bone budgets are computed after parsing. These are runtime
+  warnings, not hard upload rejections
+- There is no service-worker integer-byte cache or streaming progress UI for
+  the compressed downloads
+- This milestone does not add an opacity cross-fade between geometry LODs or a
+  KTX2 texture pipeline
 
 ## Milestone 28 scope
 
