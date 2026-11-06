@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 27**:
+both devices are thin clients. This repository is at **Milestone 28**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -30,7 +30,9 @@ players. M25 selects detail from projected screen size and throttles
 skeletal animation for distant authored players while keeping their root
 transforms at 60 Hz. M26 adds frustum-aware animation culling, adaptive shadow
 pressure and a pass/fail render-budget gate. M27 adds a low-poly authored
-template and a Lambert material fallback for minimal-detail players.
+template and a Lambert material fallback for minimal-detail players. M28 swaps
+that geometry on the existing skeleton so animation and foot locks survive the
+transition.
 
 ## Requirements
 
@@ -165,7 +167,66 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 28 scope
+
+Implemented:
+
+- Minimal-detail geometry now swaps **in place** on the existing high-template
+  skinned meshes. The low template provides replacement `BufferGeometry`
+  objects keyed by mesh name; the rig assigns them to the same `SkinnedMesh`
+  objects instead of disposing and recreating the rig
+- The shared skeleton, animation mixer, active clip, gait phase, foot-IK locks
+  and footstep clock all survive a high↔low transition. High-only meshes such
+  as eye decals and eyebrows are hidden while low geometry is active and
+  restored afterward
+- Low geometry can attach after a rig already exists. The renderer calls
+  `attachLowTemplate` when the low asset finishes loading, and the rig applies
+  the current geometry level immediately. No per-rig low-template copy is
+  created; all rigs share the template geometries
+- The existing **10-frame geometry hysteresis** remains. It prevents threshold
+  flicker from swapping geometry repeatedly, but no longer causes an animation
+  reset when it does change
+- The low template is independent geometry but not an independent skeleton at
+  runtime: the high-template rig, bones, mixer and materials remain the single
+  source of truth
+- Manual player-camera smoke:
+  - full/high: **7,561 triangles** including overlays, `MeshStandardMaterial`,
+    animation running
+  - forced low: **4,395 triangles** including overlays, correct posed
+    silhouette, the same active `jog` action still running
+  - restored high: **7,561 triangles**, same rig, geometry back to high
+  - no page errors
+- A 22-player benchmark after the swap refactor measured render average
+  **5.15 ms**, p95 **7.40 ms**, budget **16.70 ms**, gate **PASS**, frame
+  interval average **8.10 ms** and p95 **18.20 ms**. The p95 frame interval
+  exceeds the target while the CPU render gate still passes
+- `pnpm check` passes **681 tests**; `pnpm build` succeeds. No simulation,
+  protocol, replay or collision behaviour changed
+
+Known M28 limitations (by design):
+
+- This is a hysteresis-gated geometry **swap**, not an opacity/vertex
+  cross-fade. The silhouette changes at the swap frame
+- Low and high geometries must share the same skeleton bind order and rest
+  pose. The shipped templates do; a future asset rebuild must keep that
+  contract or the swap can deform
+- High-only meshes disappear immediately when low geometry activates; there is
+  no per-mesh fade
+- The low asset is still **903 KB**, uncompressed, with embedded WebP textures
+  and animation clips. Draco/meshopt/KTX2 are not implemented
+- The 10-frame hysteresis still permits a visible change for a player hovering
+  near the minimal-size threshold
+- Material LOD remains Lambert-only at minimal detail. Full and reduced detail
+  stay PBR
+- Automatic low-template attachment runs once per rig when the template becomes
+  available; a later low-template failure cannot be repaired at runtime
+- The benchmark gate is manual and measures CPU `renderer.render()` p95, not
+  GPU completion or CI timing
+
 ## Milestone 27 scope
+
+> The M27 limitation about rig recreation was superseded by M28's shared-skeleton
+> geometry swap.
 
 Implemented:
 
