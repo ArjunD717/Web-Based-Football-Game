@@ -19,6 +19,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SOURCE = os.path.join(REPO, "assets", "source", "makehuman", "makehuman-base.glb")
 OUT = os.path.join(REPO, "assets", "characters", "player-01.glb")
 MATCH_OUT = os.path.join(REPO, "assets", "characters", "player-01-match.glb")
+LOW_OUT = os.path.join(REPO, "assets", "characters", "player-01-low.glb")
 TEXTURES = os.path.join(REPO, "assets", "textures")
 ANIMATIONS = os.path.join(REPO, ".tmp-assets", "player-animations.json")
 
@@ -822,7 +823,68 @@ def build() -> None:
     print("EXPORTED", OUT)
 
     export_match_lod()
+    export_low_lod()
 
+
+def export_low_lod() -> None:
+    """Export the lowest authored LOD from the already decimated match mesh.
+
+    Face decals and eyebrows are removed entirely; at this distance the eye
+    sockets are painted by the body texture and the extra draw calls cost more
+    than they contribute. Geometry is reduced again while keeping the same
+    skeleton, clip names and palette material names.
+    """
+    for obj in list(bpy.data.objects):
+        if obj.type == "MESH" and (
+            obj.name.startswith("eye_decal") or obj.name.startswith("eyebrow")
+        ):
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    ratios = {
+        "player-01-body": 0.48,
+        "kit_shirt": 0.52,
+        "kit_shorts": 0.55,
+        "kit_socks": 0.60,
+        "kit_boots": 0.65,
+        "kit_collar": 0.60,
+        "hair": 0.50,
+    }
+    for obj in list(bpy.data.objects):
+        if obj.type != "MESH":
+            continue
+        ratio = ratios.get(obj.name, 0.55)
+        if ratio >= 0.999:
+            continue
+        decimate_mesh(obj, ratio)
+
+    bpy.ops.export_scene.gltf(
+        filepath=LOW_OUT,
+        export_format="GLB",
+        use_selection=False,
+        export_apply=False,
+        export_yup=True,
+        export_texcoords=True,
+        export_normals=True,
+        export_materials="EXPORT",
+        export_extras=True,
+        export_image_format="WEBP",
+        export_image_quality=90,
+        export_animations=True,
+        export_animation_mode="ACTIONS",
+        export_nla_strips=False,
+        export_anim_slide_to_zero=True,
+        export_frame_range=False,
+        export_bake_animation=False,
+        export_force_sampling=False,
+        export_optimize_animation_size=True,
+        export_anim_single_armature=True,
+    )
+    low_tris = 0
+    for obj in bpy.data.objects:
+        if obj.type == "MESH":
+            low_tris += sum(len(p.vertices) - 2 for p in obj.data.polygons)
+    print("LOW_TRIS", low_tris)
+    print("EXPORTED", LOW_OUT)
 
 
 def export_match_lod() -> None:

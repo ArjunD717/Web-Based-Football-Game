@@ -44,7 +44,14 @@ if (!existsSync(matchSource) || statSync(matchSource).size < 500_000) {
   fail(`Blender did not produce a usable match LOD at ${matchSource}`);
 }
 copyFileSync(matchSource, path.join(publicDir, "player-01-match.glb"));
-console.log(`copied ${path.relative(repoRoot, source)} and player-01-match.glb -> packages/client/public/characters/`);
+const lowSource = path.join(repoRoot, "assets", "characters", "player-01-low.glb");
+if (!existsSync(lowSource) || statSync(lowSource).size < 250_000) {
+  fail(`Blender did not produce a usable low LOD at ${lowSource}`);
+}
+copyFileSync(lowSource, path.join(publicDir, "player-01-low.glb"));
+console.log(
+  `copied ${path.relative(repoRoot, source)}, player-01-match.glb and player-01-low.glb -> packages/client/public/characters/`,
+);
 
 if (preview) {
   run(blender, [

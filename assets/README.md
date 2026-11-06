@@ -5,26 +5,31 @@
 `characters/player-01.glb` is **Avery Cole**, a fictional Northbridge Athletic
 number 9. It is a self-contained glTF 2.0 binary with embedded WebP textures.
 `characters/player-01-match.glb` is the match-only LOD derived from it.
+`characters/player-01-low.glb` is the minimal-detail LOD used when a player is
+far from the camera or outside the frustum.
 
-| Item | High-detail lab asset | Match LOD |
-| --- | ---: | ---: |
-| File | `characters/player-01.glb` | `characters/player-01-match.glb` |
-| Triangles | 19,358 | 7,385 |
-| Meshes | 16 | 10 |
-| Bones | 53 | 53 |
-| Animation clips | 15 | 15 |
-| Animated bones per clip | 14 | 14 |
-| Size | 1.6 MB | 1.11 MB |
-| Unit scale | metres | metres |
-| Forward / up | `+Z` / `+Y` | `+Z` / `+Y` |
-| Skin influences | 4 per vertex | 4 per vertex |
-| Licence | CC0 1.0 | CC0 1.0 |
+| Item | High-detail lab asset | Match LOD | Low LOD |
+| --- | ---: | ---: | ---: |
+| File | `characters/player-01.glb` | `characters/player-01-match.glb` | `characters/player-01-low.glb` |
+| Triangles | 19,358 | 7,385 | 3,491 |
+| Meshes | 16 | 10 | 6 |
+| Bones | 53 | 53 | 53 |
+| Animation clips | 15 | 15 | 15 |
+| Animated bones per clip | 14 | 14 | 14 |
+| Size | 1.6 MB | 1.11 MB | 903 KB |
+| Unit scale | metres | metres | metres |
+| Forward / up | `+Z` / `+Y` | `+Z` / `+Y` | `+Z` / `+Y` |
+| Skin influences | 4 per vertex | 4 per vertex | 4 per vertex |
+| Licence | CC0 1.0 | CC0 1.0 | CC0 1.0 |
 
 The high-detail asset keeps eye decals, eyebrows, cuffs, sock trims and boot
 soles for the lab. The match LOD preserves the face decals, removes cuffs, sock
-trims and boot soles, and decimates the body and garments; its material names
-stay identical so the runtime team palette can replace shirt, shorts, socks and
-collar without touching skin, hair, face or boots.
+trims and boot soles, and decimates the body and garments. The low LOD removes
+the eye decals and eyebrows entirely and reduces the remaining six meshes
+again; at its camera distance the painted face reads correctly without the
+extra draw calls. All three assets keep identical material names so the runtime
+team palette can replace shirt, shorts, socks and collar without touching skin,
+hair, face or boots.
 
 The lab page is `packages/client/character.html`. It loads
 `packages/client/public/characters/player-01.glb`, exposes six procedural poses,
@@ -39,9 +44,9 @@ Requirements: Blender **4.5+**, Python **3.10+** with Pillow and NumPy.
 pnpm character:build
 ```
 
-The command regenerates the support textures, rebuilds both the high-detail GLB
-and the decimated match LOD from the MakeHuman base, and copies both into the
-Vite public directory. Both GLBs embed WebP images at quality 90 and carry the
+The command regenerates the support textures, rebuilds the high-detail GLB,
+the decimated match LOD and the low LOD from the MakeHuman base, and copies all
+three into the Vite public directory. Both GLBs embed WebP images at quality 90 and carry the
 fifteen M18 animation clips. It looks for Blender on `PATH` and in the Windows
 Program Files locations. Override the
 executables when needed:
