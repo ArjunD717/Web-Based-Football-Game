@@ -24,7 +24,12 @@ import { disposeObject } from "./three-dispose";
 import { pitchToWorld } from "./three-layout";
 import { createPitchVisual, type GoalNetVisual } from "./three-pitch";
 import type { StadiumVisual } from "./three-stadium";
-import { playerDetailFor, shadowCasterIds, type PlayerDistanceEntry } from "./player-lod";
+import {
+  playerDetailForScreenHeight,
+  projectedHeightPx,
+  shadowCasterIds,
+  type PlayerLodEntry,
+} from "./player-lod";
 import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
@@ -95,7 +100,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly footstepRight = new THREE.Vector3();
   private readonly lodCameraPosition = new THREE.Vector3();
   private readonly lodPlayerPosition = new THREE.Vector3();
-  private readonly lodDistances: Array<PlayerDistanceEntry & { distanceM: number }> = [];
+  private readonly lodForward = new THREE.Vector3();
+  private readonly lodToPlayer = new THREE.Vector3();
+  private readonly lodEntries: PlayerLodEntry[] = [];
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -296,27 +303,40 @@ export class ThreeMatchRenderer implements MatchRenderer {
   }
 
   /**
-   * Apply camera-distance detail and a bounded real-shadow budget after the
+   * Apply screen-space detail and a bounded real-shadow budget after the
    * camera has settled for this frame. The LOD only changes presentation; the
    * simulation and snapshot data remain untouched.
    */
   private applyPlayerLod(): void {
     this.camera.getWorldPosition(this.lodCameraPosition);
-    this.lodDistances.length = 0;
+    this.camera.getWorldDirection(this.lodForward);
+    const tuning = VISUAL_TUNING.playerLod;
+    const verticalFovRadians = THREE.MathUtils.degToRad(this.camera.fov);
+    this.lodEntries.length = 0;
     for (const [id, rig] of this.players) {
       const world = rig.root.getWorldPosition(this.lodPlayerPosition);
-      this.lodDistances.push({
-        id,
-        distanceM: this.lodCameraPosition.distanceTo(world),
-      });
+      this.lodToPlayer.subVectors(world, this.lodCameraPosition);
+      const distanceM = this.lodToPlayer.length();
+      // Behind-camera roots must not become "close" through perspective wrap.
+      const screenHeightPx =
+        this.lodToPlayer.dot(this.lodForward) > 0
+          ? projectedHeightPx(
+              tuning.referenceHeightM,
+              distanceM,
+              this.height,
+              verticalFovRadians,
+            )
+          : 0;
+      this.lodEntries.push({ id, distanceM, screenHeightPx });
     }
-    const tuning = VISUAL_TUNING.playerLod;
     const casters = VISUAL_QUALITY[this.visualQuality].shadows
-      ? shadowCasterIds(this.lodDistances, tuning)
+      ? shadowCasterIds(this.lodEntries, tuning)
       : new Set<string>();
-    for (const entry of this.lodDistances) {
+    for (const entry of this.lodEntries) {
       const rig = this.players.get(entry.id);
-      rig?.setDetail?.(playerDetailFor(entry.distanceM, tuning));
+      rig?.setDetail?.(
+        playerDetailForScreenHeight(entry.screenHeightPx, tuning),
+      );
       rig?.setShadowCasting?.(casters.has(entry.id));
     }
   }

@@ -145,10 +145,14 @@ export interface VisualTuning {
     readonly opacity: number;
   };
   readonly playerLod: {
-    /** Full shirt numbers and markers inside this camera distance. */
-    readonly fullDetailDistanceM: number;
-    /** Minimal overlays beyond this camera distance. */
-    readonly reducedDetailDistanceM: number;
+    /** Reference standing height used for the screen-size estimate. */
+    readonly referenceHeightM: number;
+    /** Full overlays above this vertical projected height. */
+    readonly fullDetailScreenPx: number;
+    /** Reduced overlays above this vertical projected height. */
+    readonly reducedDetailScreenPx: number;
+    /** Players shorter than this do not cast real shadows. */
+    readonly shadowMinScreenPx: number;
     /** Only players inside this distance may cast a real shadow. */
     readonly shadowDistanceM: number;
     /** Hard budget for simultaneous skinned shadow casters. */
@@ -262,8 +266,10 @@ export const VISUAL_TUNING: VisualTuning = {
     opacity: 0.5,
   },
   playerLod: {
-    fullDetailDistanceM: 40,
-    reducedDetailDistanceM: 80,
+    referenceHeightM: 1.8,
+    fullDetailScreenPx: 42,
+    reducedDetailScreenPx: 14,
+    shadowMinScreenPx: 8,
     shadowDistanceM: 80,
     maxShadowCasters: 4,
   },

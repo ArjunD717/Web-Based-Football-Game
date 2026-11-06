@@ -61,11 +61,13 @@ describe("visual quality presets", () => {
     );
   });
 
-  it("keeps player detail and shadow budgets ordered", () => {
+  it("keeps screen detail and shadow budgets ordered", () => {
     const lod = VISUAL_TUNING.playerLod;
-    expect(lod.fullDetailDistanceM).toBeLessThan(lod.reducedDetailDistanceM);
-    expect(lod.shadowDistanceM).toBeGreaterThan(lod.fullDetailDistanceM);
+    expect(lod.fullDetailScreenPx).toBeGreaterThan(lod.reducedDetailScreenPx);
+    expect(lod.reducedDetailScreenPx).toBeGreaterThan(lod.shadowMinScreenPx);
+    expect(lod.shadowDistanceM).toBeGreaterThan(0);
     expect(lod.maxShadowCasters).toBeGreaterThan(0);
+    expect(lod.referenceHeightM).toBeGreaterThan(1);
   });
 
   it("keeps footstep attenuation ranges ordered", () => {
