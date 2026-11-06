@@ -350,6 +350,8 @@ export interface MatchPlayerRig {
   setDetail?(detail: PlayerDetail): void;
   setShadowCasting?(enabled: boolean): void;
   setAnimationStride?(stride: number): void;
+  setMaterialLod?(active: boolean): void;
+  readonly geometry?: "high" | "low";
   dispose(): void;
 }
 

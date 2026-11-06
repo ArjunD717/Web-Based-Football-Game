@@ -69,6 +69,7 @@ describe("visual quality presets", () => {
     expect(lod.maxShadowCasters).toBeGreaterThan(0);
     expect(lod.referenceHeightM).toBeGreaterThan(1);
     expect(lod.screenMarginNdc).toBeGreaterThanOrEqual(0);
+    expect(lod.geometrySwitchFrames).toBeGreaterThan(1);
     expect(lod.animation.fullStride).toBe(1);
     expect(lod.animation.reducedStride).toBeGreaterThan(
       lod.animation.fullStride,

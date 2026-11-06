@@ -10,9 +10,11 @@ import {
   clipSpecFor,
 } from "./character-clip-plan";
 import {
-  loadAuthoredTemplate,
+  loadAuthoredTemplates,
   type AuthoredTemplate,
 } from "./authored-asset";
+import { cheapMaterialFor } from "./authored-material-lod";
+import type { PlayerGeometry } from "./player-geometry";
 import {
   footPlantOffset,
   groundedLiftFor,
@@ -74,6 +76,7 @@ interface AuthoredPalette {
  */
 export class AuthoredPlayerLibrary {
   private template: AuthoredTemplate | null = null;
+  private lowTemplate: AuthoredTemplate | null = null;
   private loadPromise: Promise<boolean> | null = null;
   private readonly palettes = new Map<string, AuthoredPalette>();
   private footstepSink: FootstepSink | null = null;
@@ -83,16 +86,21 @@ export class AuthoredPlayerLibrary {
     return this.template !== null;
   }
 
+  get lowReady(): boolean {
+    return this.lowTemplate !== null;
+  }
+
   load(): Promise<boolean> {
     if (this.loadPromise !== null) {
       return this.loadPromise;
     }
-    this.loadPromise = loadAuthoredTemplate().then((template) => {
+    this.loadPromise = loadAuthoredTemplates().then((templates) => {
       if (this.disposed) {
         return false;
       }
-      this.template = template;
-      return template !== null;
+      this.template = templates.match;
+      this.lowTemplate = templates.low;
+      return templates.match !== null;
     });
     return this.loadPromise;
   }
@@ -100,8 +108,10 @@ export class AuthoredPlayerLibrary {
   create(
     player: RenderPlayer,
     colors: RenderTeamColors,
+    geometry: PlayerGeometry = "high",
   ): AuthoredPlayerRig | null {
-    const template = this.template;
+    const useLow = geometry === "low" && this.lowTemplate !== null;
+    const template = useLow ? this.lowTemplate : this.template;
     if (template === null) {
       return null;
     }
@@ -110,7 +120,12 @@ export class AuthoredPlayerLibrary {
       colors,
       player.goalkeeper,
     );
-    const rig = new AuthoredPlayerRig(template, palette, player);
+    const rig = new AuthoredPlayerRig(
+      template,
+      palette,
+      player,
+      useLow ? "low" : "high",
+    );
     rig.setFootstepSink(this.footstepSink);
     return rig;
   }
@@ -122,6 +137,7 @@ export class AuthoredPlayerLibrary {
   dispose(): void {
     this.disposed = true;
     this.template = null;
+    this.lowTemplate = null;
     for (const palette of this.palettes.values()) {
       for (const material of palette.materials.values()) {
         material.dispose();
@@ -136,6 +152,7 @@ export class AuthoredPlayerLibrary {
     goalkeeper: boolean,
   ): AuthoredPalette {
     const key = [
+      template === this.lowTemplate ? "low" : "high",
       colors.primary,
       colors.secondary,
       colors.keeper,
@@ -177,6 +194,7 @@ export class AuthoredPlayerLibrary {
 
 export class AuthoredPlayerRig implements MatchPlayerRig {
   readonly root = new THREE.Group();
+  readonly geometry: PlayerGeometry;
 
   private readonly visual = new THREE.Group();
   private readonly tilt = new THREE.Group();
@@ -191,6 +209,12 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly numberSprite: THREE.Sprite;
   private detail: PlayerDetail = "full";
   private shadowCasting = false;
+  private materialLod = false;
+  private readonly materialSlots: Array<{
+    readonly mesh: THREE.Mesh;
+    readonly original: THREE.Material | THREE.Material[];
+    readonly cheap: THREE.Material | THREE.Material[];
+  }> = [];
   private animationStride = 1;
   private readonly animationPhase: number;
   private forceAnimation = true;
@@ -246,7 +270,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     template: AuthoredTemplate,
     palette: AuthoredPalette,
     player: RenderPlayer,
+    geometry: PlayerGeometry = "high",
   ) {
+    this.geometry = geometry;
     this.root.name = `authored-player-${player.id}`;
     this.root.scale.setScalar(VISUAL_TUNING.playerScale);
     this.animationPhase = player.number % 4;
@@ -295,6 +321,30 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
           )
         : materials.get(mesh.material.name) ?? mesh.material;
       mesh.visible = !HIDDEN_DETAIL_MESH.test(mesh.name);
+      if (mesh.visible) {
+        const original = mesh.material;
+        const cheap = Array.isArray(original)
+          ? original.map((entry) => cheapMaterialFor(entry))
+          : cheapMaterialFor(original);
+        const changed = Array.isArray(original)
+          ? (cheap as THREE.Material[]).some(
+              (entry, index) => entry !== original[index],
+            )
+          : cheap !== original;
+        if (changed) {
+          this.materialSlots.push({
+            mesh,
+            original,
+            cheap,
+          });
+          const cheapMaterials = Array.isArray(cheap) ? cheap : [cheap];
+          for (const cheapMaterial of cheapMaterials) {
+            if (!this.ownedMaterials.includes(cheapMaterial)) {
+              this.ownedMaterials.push(cheapMaterial);
+            }
+          }
+        }
+      }
       // The blob shadow is the authored player's shadow. Casting the full
       // skinned mesh into the 2K shadow map costs more than the main pass.
       mesh.castShadow = false;
@@ -694,6 +744,16 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     }
     this.animationStride = next;
     this.forceAnimation = true;
+  }
+
+  setMaterialLod(active: boolean): void {
+    if (active === this.materialLod) {
+      return;
+    }
+    this.materialLod = active;
+    for (const slot of this.materialSlots) {
+      slot.mesh.material = active ? slot.cheap : slot.original;
+    }
   }
 
   private updateFootsteps(

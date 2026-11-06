@@ -159,6 +159,8 @@ export interface VisualTuning {
     readonly maxShadowCasters: number;
     /** NDC margin before off-screen players lose detail and shadows. */
     readonly screenMarginNdc: number;
+    /** Stable frames before swapping the high and low meshes. */
+    readonly geometrySwitchFrames: number;
     readonly animation: {
       /** Update every frame while at full detail. */
       readonly fullStride: number;
@@ -299,6 +301,7 @@ export const VISUAL_TUNING: VisualTuning = {
     shadowDistanceM: 80,
     maxShadowCasters: 4,
     screenMarginNdc: 0.08,
+    geometrySwitchFrames: 10,
     animation: {
       fullStride: 1,
       reducedStride: 2,

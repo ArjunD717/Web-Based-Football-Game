@@ -33,6 +33,12 @@ import {
   type PlayerLodEntry,
 } from "./player-lod";
 import {
+  geometryForDetail,
+  nextGeometryRequest,
+  type PlayerGeometry,
+  type PlayerGeometryRequest,
+} from "./player-geometry";
+import {
   INITIAL_FRAME_BUDGET_STATE,
   updateFrameBudget,
   type FrameBudgetState,
@@ -111,6 +117,11 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly lodToPlayer = new THREE.Vector3();
   private readonly lodProjected = new THREE.Vector3();
   private readonly lodEntries: PlayerLodEntry[] = [];
+  private readonly requestedGeometry = new Map<string, PlayerGeometry>();
+  private readonly geometryRequests = new Map<
+    string,
+    PlayerGeometryRequest
+  >();
   private frameBudget: FrameBudgetState = INITIAL_FRAME_BUDGET_STATE;
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
@@ -378,7 +389,15 @@ export class ThreeMatchRenderer implements MatchRenderer {
       rig?.setAnimationStride?.(
         animationStrideFor(detail, tuning.animation, entry.onScreen),
       );
+      rig?.setMaterialLod?.(detail === "minimal");
       rig?.setShadowCasting?.(casters.has(entry.id));
+      const geometryRequest = nextGeometryRequest(
+        this.geometryRequests.get(entry.id),
+        geometryForDetail(detail),
+        tuning.geometrySwitchFrames,
+      );
+      this.geometryRequests.set(entry.id, geometryRequest);
+      this.requestedGeometry.set(entry.id, geometryRequest.committed);
     }
   }
 
@@ -681,11 +700,28 @@ export class ThreeMatchRenderer implements MatchRenderer {
     for (const team of [view.away, view.home]) {
       for (const player of team.players) {
         seen.add(player.id);
+        const requested = this.requestedGeometry.get(player.id) ?? "high";
         let rig = this.players.get(player.id);
+        const canSwapGeometry =
+          authored &&
+          rig !== undefined &&
+          rig.geometry !== undefined &&
+          rig.geometry !== requested &&
+          (requested === "high" || this.authoredPlayers.lowReady);
+        if (canSwapGeometry && rig !== undefined) {
+          this.scene.remove(rig.root);
+          rig.dispose();
+          this.players.delete(player.id);
+          rig = undefined;
+        }
         if (rig === undefined) {
           if (authored) {
             rig =
-              this.authoredPlayers.create(player, team.colors) ?? undefined;
+              this.authoredPlayers.create(
+                player,
+                team.colors,
+                requested,
+              ) ?? undefined;
           }
           rig ??= new PlayerRig(player, team.colors);
           this.players.set(player.id, rig);
@@ -701,6 +737,8 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.scene.remove(rig.root);
       rig.dispose();
       this.players.delete(id);
+      this.requestedGeometry.delete(id);
+      this.geometryRequests.delete(id);
     }
   }
 
@@ -711,6 +749,8 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
     this.players.clear();
     this.seenPlayers.clear();
+    this.requestedGeometry.clear();
+    this.geometryRequests.clear();
   }
 
   private updateBall(view: MatchView): void {
