@@ -81,6 +81,7 @@ export default defineConfig(({ command, isPreview = false }) => {
           practice: path.resolve(packageDir, "practice.html"),
           controller: path.resolve(packageDir, "controller.html"),
           character: path.resolve(packageDir, "character.html"),
+          performance: path.resolve(packageDir, "performance.html"),
         },
       },
     },
