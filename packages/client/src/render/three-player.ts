@@ -349,6 +349,7 @@ export interface MatchPlayerRig {
   update(pitch: Pitch, player: RenderPlayer, elapsed: number, tick: number): void;
   setDetail?(detail: PlayerDetail): void;
   setShadowCasting?(enabled: boolean): void;
+  setAnimationStride?(stride: number): void;
   dispose(): void;
 }
 

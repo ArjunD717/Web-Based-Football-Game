@@ -46,7 +46,7 @@ import {
   pitchToWorld,
 } from "./three-layout";
 import { VISUAL_TUNING } from "./visualTuning";
-import type { PlayerDetail } from "./player-lod";
+import { shouldAnimateAtTick, type PlayerDetail } from "./player-lod";
 import type { RenderPlayer, RenderTeamColors } from "./view";
 
 const HIDDEN_DETAIL_MESH = /^(?:boot_sole|sock_trim|kit_cuff)/;
@@ -191,6 +191,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private readonly numberSprite: THREE.Sprite;
   private detail: PlayerDetail = "full";
   private shadowCasting = false;
+  private animationStride = 1;
+  private readonly animationPhase: number;
+  private forceAnimation = true;
   private readonly ownedMaterials: THREE.Material[] = [];
   private readonly bones = new Map<string, THREE.Bone>();
   private readonly boneRest = new Map<string, THREE.Quaternion>();
@@ -246,6 +249,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   ) {
     this.root.name = `authored-player-${player.id}`;
     this.root.scale.setScalar(VISUAL_TUNING.playerScale);
+    this.animationPhase = player.number % 4;
     this.strideScale = strideReferenceScale(
       player.sprintSpeed ?? VISUAL_TUNING.authoredPlayer.stride.neutralRating,
       VISUAL_TUNING.authoredPlayer.stride,
@@ -463,18 +467,37 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
 
     const previousElapsed = this.lastElapsed;
     const rewound = previousElapsed !== null && elapsed < previousElapsed;
-    if (rewound) {
-      this.lastState = null;
-      this.lastElapsed = null;
-    }
-    if (player.state !== this.lastState) {
-      this.lastState = player.state;
-      this.stateStartedElapsed = elapsed;
-    }
+    const stateChanged = player.state !== this.lastState;
     const rootJumped =
       this.hasLastRootPosition &&
       this.root.position.distanceTo(this.lastRootPosition) >
         VISUAL_TUNING.authoredPlayer.footIk.teleportResetM;
+    const animationDue = shouldAnimateAtTick(
+      tick,
+      this.animationStride,
+      this.animationPhase,
+    );
+    // The root still follows every snapshot frame above. Only the expensive
+    // skeleton, IK and audio clock can skip; state changes and teleports force
+    // an immediate update so a one-shot never starts several frames late.
+    if (
+      !this.forceAnimation &&
+      !rewound &&
+      !stateChanged &&
+      !rootJumped &&
+      !animationDue
+    ) {
+      return;
+    }
+    this.forceAnimation = false;
+    if (rewound) {
+      this.lastState = null;
+      this.lastElapsed = null;
+    }
+    if (stateChanged) {
+      this.lastState = player.state;
+      this.stateStartedElapsed = elapsed;
+    }
     if (
       rewound ||
       rootJumped ||
@@ -660,6 +683,17 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       mesh.castShadow = enabled;
     }
     this.shadowMaterial.opacity = enabled ? 0.14 : 0.28;
+  }
+
+  setAnimationStride(stride: number): void {
+    const next = Number.isFinite(stride)
+      ? Math.max(1, Math.floor(stride))
+      : 1;
+    if (next === this.animationStride) {
+      return;
+    }
+    this.animationStride = next;
+    this.forceAnimation = true;
   }
 
   private updateFootsteps(

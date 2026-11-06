@@ -25,6 +25,7 @@ import { pitchToWorld } from "./three-layout";
 import { createPitchVisual, type GoalNetVisual } from "./three-pitch";
 import type { StadiumVisual } from "./three-stadium";
 import {
+  animationStrideFor,
   playerDetailForScreenHeight,
   projectedHeightPx,
   shadowCasterIds,
@@ -334,8 +335,13 @@ export class ThreeMatchRenderer implements MatchRenderer {
       : new Set<string>();
     for (const entry of this.lodEntries) {
       const rig = this.players.get(entry.id);
-      rig?.setDetail?.(
-        playerDetailForScreenHeight(entry.screenHeightPx, tuning),
+      const detail = playerDetailForScreenHeight(
+        entry.screenHeightPx,
+        tuning,
+      );
+      rig?.setDetail?.(detail);
+      rig?.setAnimationStride?.(
+        animationStrideFor(detail, tuning.animation),
       );
       rig?.setShadowCasting?.(casters.has(entry.id));
     }
