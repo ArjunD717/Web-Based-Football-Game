@@ -351,6 +351,8 @@ export interface MatchPlayerRig {
   setShadowCasting?(enabled: boolean): void;
   setAnimationStride?(stride: number): void;
   setMaterialLod?(active: boolean): void;
+  setGeometryDetail?(detail: "high" | "low"): void;
+  attachLowTemplate?(template: { readonly scene: THREE.Object3D } | null): void;
   readonly geometry?: "high" | "low";
   dispose(): void;
 }

@@ -35,7 +35,6 @@ import {
 import {
   geometryForDetail,
   nextGeometryRequest,
-  type PlayerGeometry,
   type PlayerGeometryRequest,
 } from "./player-geometry";
 import {
@@ -117,7 +116,6 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly lodToPlayer = new THREE.Vector3();
   private readonly lodProjected = new THREE.Vector3();
   private readonly lodEntries: PlayerLodEntry[] = [];
-  private readonly requestedGeometry = new Map<string, PlayerGeometry>();
   private readonly geometryRequests = new Map<
     string,
     PlayerGeometryRequest
@@ -397,7 +395,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
         tuning.geometrySwitchFrames,
       );
       this.geometryRequests.set(entry.id, geometryRequest);
-      this.requestedGeometry.set(entry.id, geometryRequest.committed);
+      rig?.setGeometryDetail?.(geometryRequest.committed);
     }
   }
 
@@ -695,33 +693,22 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.usingAuthoredPlayers = authored;
     }
 
+    if (authored && this.authoredPlayers.lowReady) {
+      const lowTemplate = this.authoredPlayers.lowTemplateAsset;
+      for (const rig of this.players.values()) {
+        rig.attachLowTemplate?.(lowTemplate);
+      }
+    }
+
     const seen = this.seenPlayers;
     seen.clear();
     for (const team of [view.away, view.home]) {
       for (const player of team.players) {
         seen.add(player.id);
-        const requested = this.requestedGeometry.get(player.id) ?? "high";
         let rig = this.players.get(player.id);
-        const canSwapGeometry =
-          authored &&
-          rig !== undefined &&
-          rig.geometry !== undefined &&
-          rig.geometry !== requested &&
-          (requested === "high" || this.authoredPlayers.lowReady);
-        if (canSwapGeometry && rig !== undefined) {
-          this.scene.remove(rig.root);
-          rig.dispose();
-          this.players.delete(player.id);
-          rig = undefined;
-        }
         if (rig === undefined) {
           if (authored) {
-            rig =
-              this.authoredPlayers.create(
-                player,
-                team.colors,
-                requested,
-              ) ?? undefined;
+            rig = this.authoredPlayers.create(player, team.colors) ?? undefined;
           }
           rig ??= new PlayerRig(player, team.colors);
           this.players.set(player.id, rig);
@@ -737,7 +724,6 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.scene.remove(rig.root);
       rig.dispose();
       this.players.delete(id);
-      this.requestedGeometry.delete(id);
       this.geometryRequests.delete(id);
     }
   }
@@ -749,7 +735,6 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
     this.players.clear();
     this.seenPlayers.clear();
-    this.requestedGeometry.clear();
     this.geometryRequests.clear();
   }
 

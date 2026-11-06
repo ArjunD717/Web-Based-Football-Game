@@ -90,6 +90,10 @@ export class AuthoredPlayerLibrary {
     return this.lowTemplate !== null;
   }
 
+  get lowTemplateAsset(): AuthoredTemplate | null {
+    return this.lowTemplate;
+  }
+
   load(): Promise<boolean> {
     if (this.loadPromise !== null) {
       return this.loadPromise;
@@ -108,10 +112,8 @@ export class AuthoredPlayerLibrary {
   create(
     player: RenderPlayer,
     colors: RenderTeamColors,
-    geometry: PlayerGeometry = "high",
   ): AuthoredPlayerRig | null {
-    const useLow = geometry === "low" && this.lowTemplate !== null;
-    const template = useLow ? this.lowTemplate : this.template;
+    const template = this.template;
     if (template === null) {
       return null;
     }
@@ -122,9 +124,9 @@ export class AuthoredPlayerLibrary {
     );
     const rig = new AuthoredPlayerRig(
       template,
+      this.lowTemplate,
       palette,
       player,
-      useLow ? "low" : "high",
     );
     rig.setFootstepSink(this.footstepSink);
     return rig;
@@ -194,7 +196,12 @@ export class AuthoredPlayerLibrary {
 
 export class AuthoredPlayerRig implements MatchPlayerRig {
   readonly root = new THREE.Group();
-  readonly geometry: PlayerGeometry;
+
+  get geometry(): PlayerGeometry {
+    return this.lowAttached && this.geometryLevel === "low"
+      ? "low"
+      : "high";
+  }
 
   private readonly visual = new THREE.Group();
   private readonly tilt = new THREE.Group();
@@ -210,6 +217,14 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private detail: PlayerDetail = "full";
   private shadowCasting = false;
   private materialLod = false;
+  private geometryLevel: PlayerGeometry = "high";
+  private lowAttached = false;
+  private readonly geometrySlots: Array<{
+    readonly mesh: THREE.Mesh;
+    readonly highGeometry: THREE.BufferGeometry;
+    readonly highVisible: boolean;
+    lowGeometry: THREE.BufferGeometry | null;
+  }> = [];
   private readonly materialSlots: Array<{
     readonly mesh: THREE.Mesh;
     readonly original: THREE.Material | THREE.Material[];
@@ -268,11 +283,10 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
 
   constructor(
     template: AuthoredTemplate,
+    lowTemplate: AuthoredTemplate | null,
     palette: AuthoredPalette,
     player: RenderPlayer,
-    geometry: PlayerGeometry = "high",
   ) {
-    this.geometry = geometry;
     this.root.name = `authored-player-${player.id}`;
     this.root.scale.setScalar(VISUAL_TUNING.playerScale);
     this.animationPhase = player.number % 4;
@@ -322,6 +336,12 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         : materials.get(mesh.material.name) ?? mesh.material;
       mesh.visible = !HIDDEN_DETAIL_MESH.test(mesh.name);
       if (mesh.visible) {
+        this.geometrySlots.push({
+          mesh,
+          highGeometry: mesh.geometry,
+          highVisible: mesh.visible,
+          lowGeometry: null,
+        });
         const original = mesh.material;
         const cheap = Array.isArray(original)
           ? original.map((entry) => cheapMaterialFor(entry))
@@ -356,6 +376,9 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         mesh.frustumCulled = false;
       }
     });
+    if (lowTemplate !== null) {
+      this.attachLowTemplate(lowTemplate);
+    }
     model.traverse((object) => {
       if (object instanceof THREE.Bone) {
         const bone = object as THREE.Bone<THREE.Object3DEventMap>;
@@ -705,6 +728,54 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     this.shadow.scale.setScalar(
       1 - Math.min(0.18, player.state === "slide" ? 0.18 : 0),
     );
+  }
+
+  /**
+   * Late binding keeps already-created rigs useful if the low template
+   * finishes loading after the first match frame. Geometry objects are shared
+   * from the template and are never disposed by an individual rig.
+   */
+  attachLowTemplate(template: {
+    readonly scene: THREE.Object3D;
+  } | null): void {
+    if (this.lowAttached || template === null) {
+      return;
+    }
+    const lowGeometries = new Map<string, THREE.BufferGeometry>();
+    template.scene.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        const mesh = object as THREE.Mesh<
+          THREE.BufferGeometry,
+          THREE.Material | THREE.Material[]
+        >;
+        lowGeometries.set(object.name, mesh.geometry);
+      }
+    });
+    for (const slot of this.geometrySlots) {
+      slot.lowGeometry = lowGeometries.get(slot.mesh.name) ?? null;
+    }
+    this.lowAttached = true;
+    this.applyGeometry();
+  }
+
+  setGeometryDetail(detail: PlayerGeometry): void {
+    if (detail === this.geometryLevel) {
+      return;
+    }
+    this.geometryLevel = detail;
+    this.applyGeometry();
+  }
+
+  private applyGeometry(): void {
+    const useLow = this.lowAttached && this.geometryLevel === "low";
+    for (const slot of this.geometrySlots) {
+      slot.mesh.geometry =
+        useLow && slot.lowGeometry !== null
+          ? slot.lowGeometry
+          : slot.highGeometry;
+      slot.mesh.visible =
+        useLow && slot.lowGeometry === null ? false : slot.highVisible;
+    }
   }
 
   setFootstepSink(sink: FootstepSink | null): void {
