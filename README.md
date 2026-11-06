@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 25**:
+both devices are thin clients. This repository is at **Milestone 26**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -28,7 +28,8 @@ calibrates stride cadence from each player's authored sprint speed. M24 adds
 camera-distance player LOD and a bounded real-shadow budget for authored
 players. M25 selects detail from projected screen size and throttles
 skeletal animation for distant authored players while keeping their root
-transforms at 60 Hz.
+transforms at 60 Hz. M26 adds frustum-aware animation culling, adaptive shadow
+pressure and a pass/fail render-budget gate.
 
 ## Requirements
 
@@ -163,13 +164,71 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 26 scope
+
+Implemented:
+
+- Player LOD now carries an explicit NDC visibility result. Roots outside the
+  camera box plus an **8% margin** lose overlays, real shadows and normal
+  animation cadence. The margin avoids edge popping when the camera pans
+- Off-screen authored players still receive their **60 Hz root position,
+  facing and overlay transform**, but their skeletal animation/IK/footstep
+  clock runs at one update every **8 frames** (7.5 Hz). State changes, rewinds,
+  teleports beyond the foot-IK reset threshold and stride changes force an
+  immediate update, so a player entering the frame does not start an old pose
+- Real-shadow eligibility now requires the player to be on screen as well as
+  inside the existing 80 m radius, projected-size floor and four-caster budget
+- A pure frame-budget controller tracks sustained wall-frame pressure. The
+  target is **16.7 ms**, slow frames are above **1.2×** target, recovery is
+  below **0.9×**, and pressure requires **30 slow frames** in a row; recovery
+  requires **60 fast frames**. Pressure caps real shadow casters at **2**
+  instead of 4 until the recovery streak completes
+- Intervals above 250 ms (suspended tab, debugger break) and invalid values
+  are ignored rather than interpreted as pressure. The controller is pure and
+  unit-tested for hysteresis, neutral-band resets and invalid input
+- `performance.html` now reports the **budget** and a **PASS/FAIL** gate using
+  the same `16.7 ms` target. The gate compares the render p95, not the frame
+  interval, so GPU completion is explicitly out of scope
+- A player-camera smoke placed three players behind/outside the view:
+  - the visible controlled player: **full**, animation stride **1**, shadow
+    casting **true**
+  - all three off-screen players: **minimal**, animation stride **8**, shadow
+    casting **false**
+- Forcing the pressured state in a high-quality on-screen smoke reduced real
+  shadow casters from **4 to 2**; clearing pressure restored all 4. All eight
+  visible players remained reduced detail with animation stride 2
+- A headless Chromium run at 1280 × 720 reported render average **8.75 ms**,
+  render p95 **11.70 ms**, budget **16.70 ms**, gate **PASS**, frame interval
+  average **16.64 ms** and p95 **17.00 ms**. No page errors occurred
+- `pnpm check` passes **674 tests**; `pnpm build` succeeds. No simulation,
+  protocol, replay or collision behaviour changed
+
+Known M26 limitations (by design):
+
+- Frustum visibility tests the root point, not the player's bounding volume. A
+  tall player can be partially visible while the root sits outside the margin;
+  the 8% margin reduces this but does not eliminate edge cases
+- Off-screen animation is slowed, not suspended. A player whose state changes
+  every few frames while off screen still pays for immediate updates
+- Animation pressure uses the observed wall-frame interval, not the render
+  call itself. A slow GPU, browser jank and a background download all look the
+  same to the controller
+- Pressure only reduces the real-shadow caster count. Geometry, materials,
+  texture resolution and animation detail do not adapt automatically
+- Geometric/material LOD is not implemented. Distant authored players keep the
+  same mesh and material set
+- The benchmark gate is manual: it runs in a browser and compares CPU render
+  p95. The frame interval p95 can exceed 16.7 ms while the render gate passes;
+  GPU completion and CI browser timing are not enforced
+- Low-quality procedural players have no authored frustum/animation path
+
 ## Milestone 25 scope
 
 Implemented:
 
 - Authored player detail is now selected from **projected vertical screen
-  height**, replacing M24's raw-distance classification. The renderer uses the camera's vertical
-  FOV, viewport height and a fixed 1.8 m reference height. Players behind the
+  height**, replacing M24's raw-distance classification. The renderer uses the
+  camera's vertical FOV, viewport height and a fixed 1.8 m reference height. Players behind the
   camera project to zero and therefore minimal detail
 - Detail thresholds are **42 px** for full overlays and **14 px** for reduced
   overlays. Below 14 px the rig uses minimal overlays. The vertical projection
