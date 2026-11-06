@@ -20,6 +20,8 @@ SOURCE = os.path.join(REPO, "assets", "source", "makehuman", "makehuman-base.glb
 OUT = os.path.join(REPO, "assets", "characters", "player-01.glb")
 MATCH_OUT = os.path.join(REPO, "assets", "characters", "player-01-match.glb")
 LOW_OUT = os.path.join(REPO, "assets", "characters", "player-01-low.glb")
+MATCH_MESHOPT_OUT = os.path.join(REPO, "assets", "characters", "player-01-match.meshopt.glb")
+LOW_MESHOPT_OUT = os.path.join(REPO, "assets", "characters", "player-01-low.meshopt.glb")
 TEXTURES = os.path.join(REPO, "assets", "textures")
 ANIMATIONS = os.path.join(REPO, ".tmp-assets", "player-animations.json")
 
@@ -879,6 +881,30 @@ def export_low_lod() -> None:
         export_optimize_animation_size=True,
         export_anim_single_armature=True,
     )
+    bpy.ops.export_scene.gltf(
+        filepath=LOW_MESHOPT_OUT,
+        export_format="GLB",
+        use_selection=False,
+        export_apply=False,
+        export_yup=True,
+        export_texcoords=True,
+        export_normals=True,
+        export_materials="EXPORT",
+        export_extras=True,
+        export_image_format="WEBP",
+        export_image_quality=90,
+        export_animations=True,
+        export_animation_mode="ACTIONS",
+        export_nla_strips=False,
+        export_anim_slide_to_zero=True,
+        export_frame_range=False,
+        export_bake_animation=False,
+        export_force_sampling=False,
+        export_optimize_animation_size=True,
+        export_anim_single_armature=True,
+        export_meshopt_compression_enable=True,
+        export_meshopt_extension="EXT_meshopt_compression",
+    )
     low_tris = 0
     for obj in bpy.data.objects:
         if obj.type == "MESH":
@@ -957,6 +983,30 @@ def export_match_lod() -> None:
         export_force_sampling=False,
         export_optimize_animation_size=True,
         export_anim_single_armature=True,
+    )
+    bpy.ops.export_scene.gltf(
+        filepath=MATCH_MESHOPT_OUT,
+        export_format="GLB",
+        use_selection=False,
+        export_apply=False,
+        export_yup=True,
+        export_texcoords=True,
+        export_normals=True,
+        export_materials="EXPORT",
+        export_extras=True,
+        export_image_format="WEBP",
+        export_image_quality=90,
+        export_animations=True,
+        export_animation_mode="ACTIONS",
+        export_nla_strips=False,
+        export_anim_slide_to_zero=True,
+        export_frame_range=False,
+        export_bake_animation=False,
+        export_force_sampling=False,
+        export_optimize_animation_size=True,
+        export_anim_single_armature=True,
+        export_meshopt_compression_enable=True,
+        export_meshopt_extension="EXT_meshopt_compression",
     )
     match_tris = 0
     for obj in bpy.data.objects:

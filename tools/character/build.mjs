@@ -49,8 +49,19 @@ if (!existsSync(lowSource) || statSync(lowSource).size < 250_000) {
   fail(`Blender did not produce a usable low LOD at ${lowSource}`);
 }
 copyFileSync(lowSource, path.join(publicDir, "player-01-low.glb"));
+const matchMeshopt = path.join(repoRoot, "assets", "characters", "player-01-match.meshopt.glb");
+const lowMeshopt = path.join(repoRoot, "assets", "characters", "player-01-low.meshopt.glb");
+for (const [compressed, label, maxBytes] of [
+  [matchMeshopt, "player-01-match.meshopt.glb", 1_000_000],
+  [lowMeshopt, "player-01-low.meshopt.glb", 900_000],
+]) {
+  if (!existsSync(compressed) || statSync(compressed).size > maxBytes) {
+    fail(`Compressed ${label} missing or over the ${maxBytes}-byte budget`);
+  }
+  copyFileSync(compressed, path.join(publicDir, label));
+}
 console.log(
-  `copied ${path.relative(repoRoot, source)}, player-01-match.glb and player-01-low.glb -> packages/client/public/characters/`,
+  `copied ${path.relative(repoRoot, source)}, match/low and their meshopt variants -> packages/client/public/characters/`,
 );
 
 if (preview) {
