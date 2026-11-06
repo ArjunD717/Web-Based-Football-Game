@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 26**:
+both devices are thin clients. This repository is at **Milestone 27**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -29,7 +29,8 @@ camera-distance player LOD and a bounded real-shadow budget for authored
 players. M25 selects detail from projected screen size and throttles
 skeletal animation for distant authored players while keeping their root
 transforms at 60 Hz. M26 adds frustum-aware animation culling, adaptive shadow
-pressure and a pass/fail render-budget gate.
+pressure and a pass/fail render-budget gate. M27 adds a low-poly authored
+template and a Lambert material fallback for minimal-detail players.
 
 ## Requirements
 
@@ -164,7 +165,66 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 27 scope
+
+Implemented:
+
+- The Blender pipeline now exports a third authored template,
+  `player-01-low.glb`, after the existing match LOD. It has **3,491
+  triangles**, **6 meshes**, the same **53-bone skeleton**, the same 15 clips
+  and the same palette material names. It removes the eye decals and eyebrows
+  and decimates the remaining six meshes again
+- `authored-asset.ts` loads the match and low templates together. The lobby's
+  existing warm-up preloads both; a low-template failure keeps the match
+  template and the procedural fallback intact
+- `player-geometry.ts` maps only `minimal` detail to the low template. Full
+  and reduced detail keep the match mesh
+- Geometry changes have a **10-frame hysteresis**. The renderer waits for the
+  desired geometry to remain stable before disposing and recreating the rig,
+  so detail flicker at the screen threshold cannot churn skeletons every frame
+- `authored-material-lod.ts` builds a per-rig `MeshLambertMaterial` fallback
+  for minimal detail. It preserves albedo, map, transparency, alpha test,
+  side, depth policy and vertex colours, but drops normal maps and the
+  standard-material fragment path. Cheap materials are owned and disposed with
+  the rig; restoring full or reduced detail restores the original materials
+- The player-camera smoke verified both paths:
+  - visible controlled player: `full`, high geometry, **7,561 triangles**
+    including overlays, `MeshStandardMaterial`, material LOD off
+  - off-screen player: `minimal`, low geometry, **3,667 triangles** including
+    overlays, `MeshLambertMaterial`, material LOD on
+  - low and high templates both reported ready; no page errors occurred
+- A 22-player benchmark after loading both templates measured render average
+  **9.83 ms**, p95 **15.60 ms**, budget **16.70 ms**, gate **PASS**, frame
+  interval average **16.70 ms** and p95 **16.90 ms**
+- `pnpm check` passes **681 tests**; `pnpm build` succeeds. No simulation,
+  protocol, replay or collision behaviour changed
+
+Known M27 limitations (by design):
+
+- Low and high templates have independent skeletons and animation mixers.
+  Swapping geometry recreates the rig, which resets its pose, gait phase and
+  foot locks. The 10-frame hysteresis prevents per-frame churn but does not
+  cross-fade the two meshes
+- Only minimal detail uses the low mesh. Reduced and full detail both use the
+  7,385-triangle match mesh; there is no middle geometry tier
+- The low GLB is still **903 KB** because embedded textures and animation
+  clips dominate the file. It is not Draco/meshopt compressed and does not use
+  KTX2 textures
+- The low mesh removes eye decals and eyebrows. A camera that zooms from
+  minimal to full detail must first pass the geometry hysteresis, then the rig
+  is recreated with the higher-detail face
+- Lambert material LOD changes the shading model and removes normal maps. It
+  is only active at minimal detail; full and reduced detail remain PBR
+- Geometry switching is driven by the same projected-size policy as M26. An
+  on-screen player near the minimal threshold can visibly change silhouette
+  after the hysteresis window
+- The benchmark gate remains a manual browser check of CPU render p95; GPU
+  completion is not measured
+
 ## Milestone 26 scope
+
+> M27 supersedes the "geometric/material LOD is not implemented" limitation
+> below for minimal detail.
 
 Implemented:
 
