@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 24**:
+both devices are thin clients. This repository is at **Milestone 25**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -26,7 +26,9 @@ stride-locked footstep events and procedural contact audio. M22 places those
 footsteps against the broadcast camera with stereo pan and distance gain. M23
 calibrates stride cadence from each player's authored sprint speed. M24 adds
 camera-distance player LOD and a bounded real-shadow budget for authored
-players.
+players. M25 selects detail from projected screen size and throttles
+skeletal animation for distant authored players while keeping their root
+transforms at 60 Hz.
 
 ## Requirements
 
@@ -161,7 +163,65 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 25 scope
+
+Implemented:
+
+- Authored player detail is now selected from **projected vertical screen
+  height**, replacing M24's raw-distance classification. The renderer uses the camera's vertical
+  FOV, viewport height and a fixed 1.8 m reference height. Players behind the
+  camera project to zero and therefore minimal detail
+- Detail thresholds are **42 px** for full overlays and **14 px** for reduced
+  overlays. Below 14 px the rig uses minimal overlays. The vertical projection
+  is independent of aspect ratio, so resizing a widescreen window does not
+  silently change the player detail thresholds for the same field of view
+- Real shadows keep the **80 m** radius and four-caster budget, and now also
+  require at least **8 projected pixels**. The nearest eligible players still
+  win the budget
+- Authored skeletal animation runs every frame at full detail, every second
+  frame at reduced detail and every fourth frame at minimal detail. Root
+  position, facing and overlays continue to update every rendered frame, so a
+  throttled player never lags behind the snapshot position
+- Updates are staggered by a per-player phase derived from the shirt number.
+  State changes, rewinds, teleports beyond the foot-IK reset threshold and a
+  stride change force an immediate animation update, so one-shot clips do not
+  start several frames late
+- `performance.html` is a repeatable 22-player authored stress page. It warms
+  up for 2.5 seconds, measures 300 frames at high quality on the broadcast
+  camera and reports the average/p95 CPU time around `renderer.render()`,
+  implied FPS and the observed frame interval. Run it with `pnpm dev` and open
+  `https://localhost:5173/performance.html`
+- A headless Chromium run at 1280 × 720 measured **6.19 ms** average and
+  **10.90 ms** p95 render time, with a **16.64 ms** average and **16.90 ms**
+  p95 frame interval. All 22 authored players resolved to reduced detail, and
+  each mixer advanced about **90 times over 180 frames** instead of once per
+  frame. No console or page errors occurred
+- `pnpm check` passes **666 tests**; `pnpm build` includes the benchmark page
+  and succeeds. No simulation, protocol, replay or collision behaviour changed
+
+Known M25 limitations (by design):
+
+- The screen-size estimate is a pinhole approximation. It ignores occlusion,
+  camera roll, the player's actual pose/height and the near clip plane, and uses
+  one fixed 1.8 m reference height for every player
+- Off-screen players in front of the camera still project a large height and
+  can consume a shadow slot. The 80 m radius and four-caster cap limit the cost
+- Throttled animation is intentionally stepped at 30 Hz or 15 Hz. Continuous
+  transitions on a reduced/minimal player can shimmer at the threshold; state
+  changes are forced, but the first blended frames can still differ from a
+  60 Hz update
+- The root transform and overlays always run at the render rate; only the
+  skeleton mixer, IK, gait and footstep clock skip. Geometry and materials are
+  still full detail
+- The benchmark measures the CPU time around `renderer.render()`, not GPU
+  completion. Compare runs on the same device and window size; the shipped page
+  does not enforce a pass/fail budget
+- The procedural low-quality player has no skeletal mixer and is not throttled
+
 ## Milestone 24 scope
+
+> The distance-based detail classification below was superseded by M25's
+> screen-space policy. The shadow budget and shadow-distance rule remain.
 
 Implemented:
 
@@ -1692,6 +1752,7 @@ packages/server      HTTPS/WSS, sessions, rooms, input routing, match runner, QR
 packages/client      LAN lobby, match client/interpolation, canvas + Three.js renderers
   ├── controller     phone controller page (virtual stick + action buttons)
   ├── character.html player character lab (M14)
+  ├── performance.html 22-player authored render benchmark (M25)
   ├── practice.html  offline M1 simulation
   └── link.html      M0 transport diagnostics
 assets               player source/output, PBR maps, previews, font licences
