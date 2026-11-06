@@ -49,6 +49,38 @@ if (!existsSync(lowSource) || statSync(lowSource).size < 250_000) {
   fail(`Blender did not produce a usable low LOD at ${lowSource}`);
 }
 copyFileSync(lowSource, path.join(publicDir, "player-01-low.glb"));
+const matchKtx2 = path.join(repoRoot, "assets", "characters", "player-01-match.ktx2.glb");
+const lowKtx2 = path.join(repoRoot, "assets", "characters", "player-01-low.ktx2.glb");
+const gltfpack = process.env.GLTFPACK_BIN;
+if (gltfpack) {
+  run(python.command, [
+    ...python.prefix,
+    path.join("tools", "character", "pack_ktx2.py"),
+    matchSource,
+    matchKtx2,
+    gltfpack,
+  ]);
+  run(python.command, [
+    ...python.prefix,
+    path.join("tools", "character", "pack_ktx2.py"),
+    lowSource,
+    lowKtx2,
+    gltfpack,
+  ]);
+} else if (!existsSync(matchKtx2) || !existsSync(lowKtx2)) {
+  fail("KTX2 assets are missing; set GLTFPACK_BIN to regenerate them");
+} else {
+  console.log("using existing KTX2 assets; set GLTFPACK_BIN to regenerate them");
+}
+for (const [ktx2, label, maxBytes] of [
+  [matchKtx2, "player-01-match.ktx2.glb", 900_000],
+  [lowKtx2, "player-01-low.ktx2.glb", 700_000],
+]) {
+  if (!existsSync(ktx2) || statSync(ktx2).size > maxBytes) {
+    fail(`KTX2 ${label} missing or over the ${maxBytes}-byte budget`);
+  }
+  copyFileSync(ktx2, path.join(publicDir, label));
+}
 const matchMeshopt = path.join(repoRoot, "assets", "characters", "player-01-match.meshopt.glb");
 const lowMeshopt = path.join(repoRoot, "assets", "characters", "player-01-low.meshopt.glb");
 for (const [compressed, label, maxBytes] of [
@@ -61,8 +93,28 @@ for (const [compressed, label, maxBytes] of [
   copyFileSync(compressed, path.join(publicDir, label));
 }
 console.log(
-  `copied ${path.relative(repoRoot, source)}, match/low and their meshopt variants -> packages/client/public/characters/`,
+  `copied ${path.relative(repoRoot, source)}, match/low, KTX2 and meshopt variants -> packages/client/public/characters/`,
 );
+
+const basisDir = path.join(repoRoot, "packages", "client", "public", "basis");
+const basisSource = path.join(
+  repoRoot,
+  "packages",
+  "client",
+  "node_modules",
+  "three",
+  "examples",
+  "jsm",
+  "libs",
+  "basis",
+);
+mkdirSync(basisDir, { recursive: true });
+for (const file of ["basis_transcoder.js", "basis_transcoder.wasm", "README.md"]) {
+  if (!existsSync(path.join(basisSource, file))) {
+    fail(`Basis decoder source missing: ${file}`);
+  }
+  copyFileSync(path.join(basisSource, file), path.join(basisDir, file));
+}
 
 if (preview) {
   run(blender, [

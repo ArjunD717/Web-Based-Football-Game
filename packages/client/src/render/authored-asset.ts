@@ -2,11 +2,14 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import {
   PLAYER_LOW_ASSET_URL,
+  PLAYER_LOW_KTX2_URL,
   PLAYER_LOW_MESHOPT_URL,
   PLAYER_MATCH_ASSET_URL,
+  PLAYER_MATCH_KTX2_URL,
   PLAYER_MATCH_MESHOPT_URL,
 } from "../character/asset";
 import {
@@ -14,12 +17,14 @@ import {
   type AuthoredAssetKind,
 } from "./asset-budget";
 
+export type AuthoredDelivery = "ktx2" | "meshopt" | "plain";
+
 export interface AuthoredTemplate {
   readonly scene: THREE.Group;
   readonly materials: ReadonlyMap<string, THREE.Material>;
   readonly modelBaseY: number;
   readonly clips: ReadonlyMap<string, THREE.AnimationClip>;
-  readonly compressed: boolean;
+  readonly delivery: AuthoredDelivery;
 }
 
 export interface AuthoredTemplates {
@@ -27,8 +32,123 @@ export interface AuthoredTemplates {
   readonly low: AuthoredTemplate | null;
 }
 
+interface TemplateVariant {
+  readonly delivery: AuthoredDelivery;
+  readonly url: string;
+}
+
+const BASIS_TRANSCODER_JS = "/basis/basis_transcoder.js";
+const BASIS_TRANSCODER_WASM = "/basis/basis_transcoder.wasm";
+const KTX2_LOAD_TIMEOUT_MS = 12_000;
+
 let templatesPromise: Promise<AuthoredTemplates> | null = null;
 let templates: AuthoredTemplates | null = null;
+let ktx2LoaderPromise: Promise<KTX2Loader | null> | undefined;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
+async function basisDecoderReady(): Promise<boolean> {
+  if (typeof WebAssembly !== "object" || typeof Worker !== "function") {
+    return false;
+  }
+  try {
+    const [jsResponse, wasmResponse] = await Promise.all([
+      fetch(BASIS_TRANSCODER_JS),
+      fetch(BASIS_TRANSCODER_WASM),
+    ]);
+    if (!jsResponse.ok || !wasmResponse.ok) {
+      return false;
+    }
+    const jsContentType = jsResponse.headers.get("content-type") ?? "";
+    const contentType = wasmResponse.headers.get("content-type") ?? "";
+    if (
+      jsContentType.includes("text/html") ||
+      contentType.includes("text/html")
+    ) {
+      return false;
+    }
+    const wasm = new Uint8Array(await wasmResponse.arrayBuffer());
+    return (
+      wasm.length > 4 &&
+      wasm[0] === 0x00 &&
+      wasm[1] === 0x61 &&
+      wasm[2] === 0x73 &&
+      wasm[3] === 0x6d
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * KTX2Loader needs a renderer's extension support before it can choose a
+ * transcode target. The lobby preloads assets before the match renderer
+ * exists, so probe a throwaway context instead of constructing a renderer.
+ */
+async function createKtx2Loader(): Promise<KTX2Loader | null> {
+  if (!(await basisDecoderReady()) || typeof document === "undefined") {
+    return null;
+  }
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+  if (gl === null) {
+    return null;
+  }
+  const extensions = {
+    has(name: string): boolean {
+      try {
+        return gl.getExtension(name) !== null;
+      } catch {
+        return false;
+      }
+    },
+    get(name: string): unknown {
+      try {
+        return gl.getExtension(name);
+      } catch {
+        return null;
+      }
+    },
+  };
+  try {
+    const loader = new KTX2Loader().setTranscoderPath("/basis/");
+    loader.detectSupport({
+      isWebGPURenderer: false,
+      extensions,
+    } as unknown as THREE.WebGLRenderer);
+    return loader;
+  } catch (error: unknown) {
+    console.warn("KTX2 support probe failed; using compressed fallbacks.", error);
+    return null;
+  } finally {
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+  }
+}
+
+function getKtx2Loader(): Promise<KTX2Loader | null> {
+  if (ktx2LoaderPromise === undefined) {
+    ktx2LoaderPromise = createKtx2Loader();
+  }
+  return ktx2LoaderPromise;
+}
 
 function countTriangles(scene: THREE.Object3D): number {
   let triangles = 0;
@@ -59,7 +179,7 @@ function countBones(scene: THREE.Object3D): number {
 function warnBudget(
   kind: AuthoredAssetKind,
   scene: THREE.Object3D,
-  compressed: boolean,
+  delivery: AuthoredDelivery,
   bytes: number | null,
 ): void {
   const issues = authoredAssetBudgetIssues({
@@ -70,7 +190,7 @@ function warnBudget(
   });
   if (issues.length > 0) {
     console.warn(
-      `Authored ${kind} ${compressed ? "meshopt" : "uncompressed"} asset exceeds budget:`,
+      `Authored ${kind} ${delivery} asset exceeds budget:`,
       issues,
     );
   }
@@ -82,7 +202,7 @@ function parseTemplate(
     readonly animations: readonly THREE.AnimationClip[];
   },
   kind: AuthoredAssetKind,
-  compressed: boolean,
+  delivery: AuthoredDelivery,
   bytes: number | null,
 ): AuthoredTemplate {
   const scene = gltf.scene;
@@ -111,13 +231,13 @@ function parseTemplate(
     }
   });
   const bounds = new THREE.Box3().setFromObject(scene);
-  warnBudget(kind, scene, compressed, bytes);
+  warnBudget(kind, scene, delivery, bytes);
   return {
     scene,
     materials,
     modelBaseY: -bounds.min.y,
     clips: new Map(gltf.animations.map((clip) => [clip.name, clip])),
-    compressed,
+    delivery,
   };
 }
 
@@ -135,39 +255,55 @@ async function fetchBytes(url: string): Promise<number | null> {
   }
 }
 
+async function loadVariant(
+  kind: AuthoredAssetKind,
+  variant: TemplateVariant,
+): Promise<AuthoredTemplate> {
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  if (variant.delivery === "ktx2") {
+    const decoder = await getKtx2Loader();
+    if (decoder === null) {
+      throw new Error("KTX2 transcoding is unavailable in this browser");
+    }
+    loader.setKTX2Loader(decoder);
+  }
+  const bytes = await fetchBytes(variant.url);
+  const loading = loader.loadAsync(variant.url);
+  const gltf =
+    variant.delivery === "ktx2"
+      ? await withTimeout(
+          loading,
+          KTX2_LOAD_TIMEOUT_MS,
+          "KTX2 template load timed out",
+        )
+      : await loading;
+  return parseTemplate(gltf, kind, variant.delivery, bytes);
+}
+
 async function loadArchivedTemplate(
   kind: AuthoredAssetKind,
-  compressedUrl: string,
-  fallbackUrl: string,
+  variants: readonly TemplateVariant[],
 ): Promise<AuthoredTemplate | null> {
-  const compressedBytes = await fetchBytes(compressedUrl);
-  const meshoptLoader = new GLTFLoader();
-  meshoptLoader.setMeshoptDecoder(MeshoptDecoder);
-  try {
-    const gltf = await meshoptLoader.loadAsync(compressedUrl);
-    return parseTemplate(gltf, kind, true, compressedBytes);
-  } catch (error: unknown) {
-    console.warn(
-      `Authored ${kind} meshopt asset unavailable; trying uncompressed.`,
-      error,
-    );
+  for (const variant of variants) {
+    try {
+      return await loadVariant(kind, variant);
+    } catch (error: unknown) {
+      console.warn(
+        `Authored ${kind} ${variant.delivery} asset unavailable; trying the next variant.`,
+        error,
+      );
+    }
   }
-  try {
-    const fallbackLoader = new GLTFLoader();
-    const gltf = await fallbackLoader.loadAsync(fallbackUrl);
-    return parseTemplate(gltf, kind, false, await fetchBytes(fallbackUrl));
-  } catch (error: unknown) {
-    console.warn(
-      `Authored ${kind} fallback asset unavailable; keeping procedural players.`,
-      error,
-    );
-    return null;
-  }
+  console.warn(
+    `Authored ${kind} assets unavailable; keeping procedural players.`,
+  );
+  return null;
 }
 
 /**
- * Load the compressed match and low templates, with an uncompressed fallback
- * when meshopt decoding is unavailable. The lobby warms both during its first
+ * Load the KTX2 templates first, then the meshopt geometry templates, then
+ * the original WebP templates. The lobby warms all variants during its first
  * paint.
  */
 export function loadAuthoredTemplates(): Promise<AuthoredTemplates> {
@@ -178,8 +314,16 @@ export function loadAuthoredTemplates(): Promise<AuthoredTemplates> {
     return templatesPromise;
   }
   templatesPromise = Promise.all([
-    loadArchivedTemplate("match", PLAYER_MATCH_MESHOPT_URL, PLAYER_MATCH_ASSET_URL),
-    loadArchivedTemplate("low", PLAYER_LOW_MESHOPT_URL, PLAYER_LOW_ASSET_URL),
+    loadArchivedTemplate("match", [
+      { delivery: "ktx2", url: PLAYER_MATCH_KTX2_URL },
+      { delivery: "meshopt", url: PLAYER_MATCH_MESHOPT_URL },
+      { delivery: "plain", url: PLAYER_MATCH_ASSET_URL },
+    ]),
+    loadArchivedTemplate("low", [
+      { delivery: "ktx2", url: PLAYER_LOW_KTX2_URL },
+      { delivery: "meshopt", url: PLAYER_LOW_MESHOPT_URL },
+      { delivery: "plain", url: PLAYER_LOW_ASSET_URL },
+    ]),
   ]).then(([match, low]) => {
     templates = { match, low };
     return templates;
