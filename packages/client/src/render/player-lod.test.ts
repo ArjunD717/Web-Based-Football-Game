@@ -78,6 +78,7 @@ describe("player screen-space LOD", () => {
       { id: "edge", distanceM: 80, screenHeightPx: 20, onScreen: true },
     ];
     expect([...shadowCasterIds(players, tuning)]).toEqual(["near", "middle"]);
+    expect([...shadowCasterIds(players, tuning, 1)]).toEqual(["near"]);
   });
 
   it("returns no shadows when the budget is zero", () => {

@@ -32,6 +32,11 @@ import {
   shadowCasterIds,
   type PlayerLodEntry,
 } from "./player-lod";
+import {
+  INITIAL_FRAME_BUDGET_STATE,
+  updateFrameBudget,
+  type FrameBudgetState,
+} from "./frame-budget";
 import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
@@ -106,6 +111,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly lodToPlayer = new THREE.Vector3();
   private readonly lodProjected = new THREE.Vector3();
   private readonly lodEntries: PlayerLodEntry[] = [];
+  private frameBudget: FrameBudgetState = INITIAL_FRAME_BUDGET_STATE;
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -303,6 +309,13 @@ export class ThreeMatchRenderer implements MatchRenderer {
 
     this.applyPlayerLod();
     this.renderer.render(this.scene, this.camera);
+    if (dt > 0) {
+      this.frameBudget = updateFrameBudget(
+        this.frameBudget,
+        dt * 1000,
+        VISUAL_TUNING.frameBudget,
+      );
+    }
   }
 
   /**
@@ -346,8 +359,14 @@ export class ThreeMatchRenderer implements MatchRenderer {
         onScreen,
       });
     }
+    const shadowCap = this.frameBudget.pressured
+      ? Math.min(
+          tuning.maxShadowCasters,
+          VISUAL_TUNING.frameBudget.pressureShadowCasters,
+        )
+      : tuning.maxShadowCasters;
     const casters = VISUAL_QUALITY[this.visualQuality].shadows
-      ? shadowCasterIds(this.lodEntries, tuning)
+      ? shadowCasterIds(this.lodEntries, tuning, shadowCap)
       : new Set<string>();
     for (const entry of this.lodEntries) {
       const rig = this.players.get(entry.id);

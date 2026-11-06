@@ -120,6 +120,7 @@ export function playerDetailForScreenHeight(
 export function shadowCasterIds(
   entries: readonly PlayerLodEntry[],
   tuning: PlayerLodTuning,
+  maxCasters = tuning.maxShadowCasters,
 ): ReadonlySet<string> {
   const eligible = entries
     .filter(
@@ -131,7 +132,7 @@ export function shadowCasterIds(
         entry.screenHeightPx >= tuning.shadowMinScreenPx,
     )
     .sort((a, b) => a.distanceM - b.distanceM)
-    .slice(0, Math.max(0, Math.floor(tuning.maxShadowCasters)));
+    .slice(0, Math.max(0, Math.floor(maxCasters)));
   return new Set(eligible.map((entry) => entry.id));
 }
 

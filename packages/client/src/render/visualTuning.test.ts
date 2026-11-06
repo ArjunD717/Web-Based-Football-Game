@@ -81,6 +81,19 @@ describe("visual quality presets", () => {
     );
   });
 
+  it("keeps the adaptive frame budget hysteretic", () => {
+    const budget = VISUAL_TUNING.frameBudget;
+    expect(budget.targetFrameMs).toBeGreaterThan(0);
+    expect(budget.slowFrameRatio).toBeGreaterThan(1);
+    expect(budget.recoverFrameRatio).toBeLessThan(1);
+    expect(budget.slowStreak).toBeGreaterThan(0);
+    expect(budget.recoverStreak).toBeGreaterThan(0);
+    expect(budget.pressureShadowCasters).toBeGreaterThanOrEqual(0);
+    expect(budget.pressureShadowCasters).toBeLessThan(
+      VISUAL_TUNING.playerLod.maxShadowCasters,
+    );
+  });
+
   it("keeps footstep attenuation ranges ordered", () => {
     const audio = VISUAL_TUNING.audio;
     expect(audio.footstepReferenceDistanceM).toBeGreaterThan(0);

@@ -170,6 +170,20 @@ export interface VisualTuning {
       readonly hiddenStride: number;
     };
   };
+  readonly frameBudget: {
+    /** Desired wall-clock interval for one rendered frame. */
+    readonly targetFrameMs: number;
+    /** A frame above target × this ratio counts as slow. */
+    readonly slowFrameRatio: number;
+    /** A frame below target × this ratio counts as recovered. */
+    readonly recoverFrameRatio: number;
+    /** Consecutive slow frames required before entering pressure. */
+    readonly slowStreak: number;
+    /** Consecutive recovered frames required before leaving pressure. */
+    readonly recoverStreak: number;
+    /** Shadow-caster cap while pressure is active. */
+    readonly pressureShadowCasters: number;
+  };
   readonly audio: {
     /** Footsteps at or inside this listener distance play at full gain. */
     readonly footstepReferenceDistanceM: number;
@@ -291,6 +305,14 @@ export const VISUAL_TUNING: VisualTuning = {
       minimalStride: 4,
       hiddenStride: 8,
     },
+  },
+  frameBudget: {
+    targetFrameMs: 16.7,
+    slowFrameRatio: 1.2,
+    recoverFrameRatio: 0.9,
+    slowStreak: 30,
+    recoverStreak: 60,
+    pressureShadowCasters: 2,
   },
   audio: {
     footstepReferenceDistanceM: 4,
