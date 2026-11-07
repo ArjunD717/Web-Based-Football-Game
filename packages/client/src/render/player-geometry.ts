@@ -83,12 +83,3 @@ export function dissolveTargetVisible(
 ): boolean {
   return ditherThreshold >= dissolveCutoff(progress);
 }
-
-/** Keep the frame spike finite when many players cross a geometry threshold. */
-export function geometryFadeBudgetAvailable(active: number, cap: number): boolean {
-  const maximum = Number.isFinite(cap)
-    ? Math.max(1, Math.floor(cap))
-    : 1;
-  const used = Number.isFinite(active) ? Math.max(0, Math.floor(active)) : 0;
-  return used < maximum;
-}

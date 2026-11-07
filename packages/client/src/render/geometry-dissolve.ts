@@ -4,18 +4,22 @@ import type * as THREE from "three";
 
 const DISSOLVE_UNIFORM = "uFbDissolve";
 const INVERTED_UNIFORM = "uFbDissolveInverted";
+const BLUE_NOISE_UNIFORM = "uFbBlueNoise";
 const ALPHA_TEST_INCLUDE = "#include <alphatest_fragment>";
 const FRAGMENT_MAIN = "void main() {";
 
 /**
- * Screen-space dithering. Both sides of a dissolve evaluate the same
- * coordinate hash, so their survive/discard decisions are complementary at
- * every pixel. The hash is stable frame to frame.
+ * Screen-space blue-noise dithering. Both sides of a dissolve evaluate the
+ * same texture coordinate, so their survive/discard decisions are
+ * complementary at every pixel. The texture is static, so no per-frame random
+ * hash is introduced while the camera and player are still.
  */
-const DISSOLVE_FRAGMENT = /* glsl */ `
-	float fbDither = fract(
-		52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715)))
-	);
+function dissolveFragment(noiseSize: number): string {
+  return /* glsl */ `
+	float fbDither = texture2D(
+		${BLUE_NOISE_UNIFORM},
+		floor(gl_FragCoord.xy) / ${noiseSize}.0
+	).r;
 	float fbCutoff = 1.0 - uFbDissolve;
 	if (uFbDissolveInverted > 0.5) {
 		if (fbDither < fbCutoff) discard;
@@ -23,6 +27,7 @@ const DISSOLVE_FRAGMENT = /* glsl */ `
 		discard;
 	}
 `;
+}
 
 export interface DissolveProgress {
   value: number;
@@ -31,6 +36,8 @@ export interface DissolveProgress {
 export interface DissolveMaterial {
   readonly material: THREE.Material;
   readonly progress: DissolveProgress;
+  readonly source: THREE.Material;
+  readonly incoming: boolean;
 }
 
 /**
@@ -41,31 +48,36 @@ export interface DissolveMaterial {
 export function createDissolveMaterial(
   source: THREE.Material,
   incoming: boolean,
+  blueNoise: THREE.Texture,
+  blueNoiseSize: number,
 ): DissolveMaterial {
   const material = source.clone();
   const progress: DissolveProgress = { value: 0 };
   const inverted: DissolveProgress = { value: incoming ? 1 : 0 };
+  const noiseScale = Math.max(1, Math.floor(blueNoiseSize));
   const previous = material.onBeforeCompile.bind(material);
   material.onBeforeCompile = (shader, renderer) => {
     previous(shader, renderer);
     shader.uniforms[DISSOLVE_UNIFORM] = progress;
     shader.uniforms[INVERTED_UNIFORM] = inverted;
+    shader.uniforms[BLUE_NOISE_UNIFORM] = { value: blueNoise };
     shader.fragmentShader = shader.fragmentShader
       .replace(
         FRAGMENT_MAIN,
-        `uniform float ${DISSOLVE_UNIFORM};
+        `uniform sampler2D ${BLUE_NOISE_UNIFORM};
+uniform float ${DISSOLVE_UNIFORM};
 uniform float ${INVERTED_UNIFORM};
 ${FRAGMENT_MAIN}`,
       )
       .replace(
         ALPHA_TEST_INCLUDE,
         `${ALPHA_TEST_INCLUDE}
-${DISSOLVE_FRAGMENT}`,
+${dissolveFragment(noiseScale)}`,
       );
   };
   const previousKey = material.customProgramCacheKey.bind(material);
   material.customProgramCacheKey = () =>
-    `${previousKey()}|fb-dissolve-${incoming ? "in" : "out"}`;
+    `${previousKey()}|fb-dissolve-${incoming ? "in" : "out"}-${noiseScale}`;
   material.needsUpdate = true;
-  return { material, progress };
+  return { material, progress, source, incoming };
 }

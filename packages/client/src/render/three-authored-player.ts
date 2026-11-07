@@ -14,12 +14,13 @@ import {
   type AuthoredTemplate,
 } from "./authored-asset";
 import { cheapMaterialFor } from "./authored-material-lod";
+import type { DissolveMaterial } from "./geometry-dissolve";
 import {
-  createDissolveMaterial,
-  type DissolveMaterial,
-} from "./geometry-dissolve";
+  GeometryDissolvePool,
+  releaseGeometryFadeBudget,
+  tryAcquireGeometryFadeBudget,
+} from "./geometry-dissolve-pool";
 import {
-  geometryFadeBudgetAvailable,
   geometryFadeProgress,
   type PlayerGeometry,
 } from "./player-geometry";
@@ -113,6 +114,7 @@ export class AuthoredPlayerLibrary {
   private lowTemplate: AuthoredTemplate | null = null;
   private loadPromise: Promise<boolean> | null = null;
   private readonly palettes = new Map<string, AuthoredPalette>();
+  private readonly dissolvePool = new GeometryDissolvePool();
   private footstepSink: FootstepSink | null = null;
   private disposed = false;
 
@@ -160,6 +162,7 @@ export class AuthoredPlayerLibrary {
       template,
       this.lowTemplate,
       palette,
+      this.dissolvePool,
       player,
     );
     rig.setFootstepSink(this.footstepSink);
@@ -180,6 +183,7 @@ export class AuthoredPlayerLibrary {
       }
     }
     this.palettes.clear();
+    this.dissolvePool.dispose();
   }
 
   private paletteFor(
@@ -229,8 +233,6 @@ export class AuthoredPlayerLibrary {
 }
 
 export class AuthoredPlayerRig implements MatchPlayerRig {
-  private static activeGeometryFades = 0;
-
   readonly root = new THREE.Group();
 
   get geometry(): PlayerGeometry {
@@ -256,18 +258,6 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private geometryFade: GeometryFade | null = null;
   private lowAttached = false;
   private readonly geometrySlots: GeometrySlot[] = [];
-  private readonly outgoingFadeMaterials = new Map<
-    THREE.Material,
-    DissolveMaterial
-  >();
-  private readonly incomingFadeMaterials = new Map<
-    THREE.Material,
-    DissolveMaterial
-  >();
-  private readonly fadeTargets = new Map<
-    GeometrySlot,
-    THREE.SkinnedMesh
-  >();
   private animationStride = 1;
   private readonly animationPhase: number;
   private forceAnimation = true;
@@ -323,6 +313,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     template: AuthoredTemplate,
     lowTemplate: AuthoredTemplate | null,
     palette: AuthoredPalette,
+    private readonly dissolvePool: GeometryDissolvePool,
     player: RenderPlayer,
   ) {
     this.root.name = `authored-player-${player.id}`;
@@ -833,12 +824,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     if (to === "low" && !this.lowAttached) {
       return false;
     }
-    if (
-      !geometryFadeBudgetAvailable(
-        AuthoredPlayerRig.activeGeometryFades,
-        VISUAL_TUNING.authoredPlayer.geometryFadeMaxActive,
-      )
-    ) {
+    if (!tryAcquireGeometryFadeBudget()) {
       return false;
     }
     const from = this.visualGeometry;
@@ -855,7 +841,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       const currentMaterial = slot.mesh.material;
       const currentWasArray = Array.isArray(currentMaterial);
       const source = sourceVisible
-        ? this.dissolveMaterialsFor(currentMaterial, false)
+        ? this.acquireDissolveMaterials(currentMaterial, false)
         : [];
       if (sourceVisible) {
         slot.mesh.material = currentWasArray
@@ -875,7 +861,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       let target: DissolveMaterial[] = [];
       if (targetVisible && targetGeometry !== null) {
         const targetBase = this.baseMaterialFor(slot);
-        target = this.dissolveMaterialsFor(targetBase, true);
+        target = this.acquireDissolveMaterials(targetBase, true);
         for (const entry of target) {
           entry.progress.value = 0;
         }
@@ -902,7 +888,6 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       duration,
       entries,
     };
-    AuthoredPlayerRig.activeGeometryFades += 1;
     return true;
   }
 
@@ -941,37 +926,30 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         ? slot.lowGeometry !== null
         : slot.highVisible;
       slot.mesh.material = this.baseMaterialFor(slot);
-      targetMesh?.parent?.remove(targetMesh);
       if (targetMesh !== null) {
-        targetMesh.visible = false;
+        this.dissolvePool.releaseMesh(targetMesh);
+      }
+      for (const source of entry.source) {
+        this.dissolvePool.releaseMaterial(source);
+      }
+      for (const target of entry.target) {
+        this.dissolvePool.releaseMaterial(target);
       }
     }
-    AuthoredPlayerRig.activeGeometryFades = Math.max(
-      0,
-      AuthoredPlayerRig.activeGeometryFades - 1,
-    );
+    releaseGeometryFadeBudget();
     this.visualGeometry = fade.to;
     this.geometryLevel = fade.to;
     this.geometryFade = null;
   }
 
-  private dissolveMaterialsFor(
+  private acquireDissolveMaterials(
     source: MaterialLike,
     incoming: boolean,
   ): DissolveMaterial[] {
-    const pool = incoming
-      ? this.incomingFadeMaterials
-      : this.outgoingFadeMaterials;
     const sourceMaterials = Array.isArray(source) ? source : [source];
-    return sourceMaterials.map((material) => {
-      const cached = pool.get(material);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const created = createDissolveMaterial(material, incoming);
-      pool.set(material, created);
-      return created;
-    });
+    return sourceMaterials.map((material) =>
+      this.dissolvePool.acquireMaterial(material, incoming),
+    );
   }
 
   private fadeTargetFor(
@@ -979,17 +957,10 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     geometry: THREE.BufferGeometry,
     material: MaterialLike,
   ): THREE.SkinnedMesh {
-    let target = this.fadeTargets.get(slot);
-    if (target === undefined) {
-      target = new THREE.SkinnedMesh(geometry, material);
-      target.name = `${slot.mesh.name}:fade`;
-      target.castShadow = false;
-      target.receiveShadow = false;
-      this.fadeTargets.set(slot, target);
-    } else {
-      target.geometry = geometry;
-      target.material = material;
-    }
+    const target = this.dissolvePool.acquireMesh(geometry, material);
+    target.name = `${slot.mesh.name}:fade`;
+    target.castShadow = false;
+    target.receiveShadow = false;
     target.position.copy(slot.mesh.position);
     target.quaternion.copy(slot.mesh.quaternion);
     target.scale.copy(slot.mesh.scale);
@@ -1006,19 +977,6 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     }
     slot.mesh.parent?.add(target);
     return target;
-  }
-
-  private disposeFadeResources(): void {
-    for (const pool of [
-      this.outgoingFadeMaterials,
-      this.incomingFadeMaterials,
-    ]) {
-      for (const entry of pool.values()) {
-        entry.material.dispose();
-      }
-      pool.clear();
-    }
-    this.fadeTargets.clear();
   }
 
   private baseMaterialFor(slot: GeometrySlot): MaterialLike {
@@ -1364,23 +1322,25 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   dispose(): void {
     if (this.geometryFade !== null) {
       for (const entry of this.geometryFade.entries) {
-        entry.targetMesh?.parent?.remove(entry.targetMesh);
         if (entry.targetMesh !== null) {
-          entry.targetMesh.visible = false;
+          this.dissolvePool.releaseMesh(entry.targetMesh);
+        }
+        for (const source of entry.source) {
+          this.dissolvePool.releaseMaterial(source);
+        }
+        for (const target of entry.target) {
+          this.dissolvePool.releaseMaterial(target);
         }
       }
       this.geometryFade = null;
-      AuthoredPlayerRig.activeGeometryFades = Math.max(
-        0,
-        AuthoredPlayerRig.activeGeometryFades - 1,
-      );
+      releaseGeometryFadeBudget();
     }
-    this.disposeFadeResources();
     this.mixer?.stopAllAction();
     this.clipActions.clear();
     this.activeClipAction = null;
     disposeObject(this.overlays);
     for (const material of this.ownedMaterials) {
+      this.dissolvePool.dropSource(material);
       material.dispose();
     }
   }

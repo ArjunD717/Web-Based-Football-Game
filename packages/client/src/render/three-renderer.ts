@@ -45,6 +45,7 @@ import {
 import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
+import { configureGeometryFadeBudget } from "./geometry-dissolve-pool";
 import { spatializeFootstep, type FootstepSink } from "./footsteps";
 import {
   VISUAL_QUALITY,
@@ -316,6 +317,11 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.cameraDebug.update(frame);
     }
 
+    configureGeometryFadeBudget(
+      this.frameBudget.pressured
+        ? VISUAL_TUNING.authoredPlayer.geometryFadeMaxActiveUnderPressure
+        : VISUAL_TUNING.authoredPlayer.geometryFadeMaxActive,
+    );
     this.applyPlayerLod();
     for (const rig of this.players.values()) {
       rig.advanceVisualTransition?.(dt);

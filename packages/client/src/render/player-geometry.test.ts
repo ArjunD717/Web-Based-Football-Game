@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   dissolveSourceVisible,
   dissolveTargetVisible,
-  geometryFadeBudgetAvailable,
   geometryFadeProgress,
   geometryForDetail,
   nextGeometryRequest,
@@ -96,23 +95,5 @@ describe("player geometry dissolve", () => {
   it("clamps dissolve progress before choosing a side", () => {
     expect(dissolveSourceVisible(0.1, -1)).toBe(true);
     expect(dissolveTargetVisible(0.1, 2)).toBe(true);
-  });
-});
-
-describe("player geometry dissolve budget", () => {
-  it("admits transitions below the cap", () => {
-    expect(geometryFadeBudgetAvailable(0, 1)).toBe(true);
-    expect(geometryFadeBudgetAvailable(4, 6)).toBe(true);
-  });
-
-  it("rejects transitions at or above the cap", () => {
-    expect(geometryFadeBudgetAvailable(6, 6)).toBe(false);
-    expect(geometryFadeBudgetAvailable(7, 6)).toBe(false);
-  });
-
-  it("treats invalid caps and negative counts defensively", () => {
-    expect(geometryFadeBudgetAvailable(0, Number.NaN)).toBe(true);
-    expect(geometryFadeBudgetAvailable(1, Number.NaN)).toBe(false);
-    expect(geometryFadeBudgetAvailable(-2, 2)).toBe(true);
   });
 });

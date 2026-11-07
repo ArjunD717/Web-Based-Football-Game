@@ -74,8 +74,10 @@ export interface VisualTuning {
     readonly clipFadeSeconds: number;
     /** Seconds used to dissolve between high and low geometry. */
     readonly geometryFadeSeconds: number;
-    /** Maximum simultaneous geometry dissolves; bounds per-frame material work. */
+    /** Maximum simultaneous geometry dissolves under normal frame pressure. */
     readonly geometryFadeMaxActive: number;
+    /** Lower simultaneous-dissolve cap when the frame budget is pressured. */
+    readonly geometryFadeMaxActiveUnderPressure: number;
     /** Action time multiplier at empty stamina; 1 at full stamina. */
     readonly clipStaminaTimeScaleMin: number;
     readonly footPlant: {
@@ -230,6 +232,7 @@ export const VISUAL_TUNING: VisualTuning = {
     clipFadeSeconds: 0.14,
     geometryFadeSeconds: 0.18,
     geometryFadeMaxActive: 6,
+    geometryFadeMaxActiveUnderPressure: 3,
     clipStaminaTimeScaleMin: 0.86,
     footPlant: {
       maxCorrectionM: 0.12,
