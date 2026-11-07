@@ -317,6 +317,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
 
     this.applyPlayerLod();
+    for (const rig of this.players.values()) {
+      rig.advanceVisualTransition?.(dt);
+    }
     this.renderer.render(this.scene, this.camera);
     if (dt > 0) {
       this.frameBudget = updateFrameBudget(

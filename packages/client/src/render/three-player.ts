@@ -352,6 +352,7 @@ export interface MatchPlayerRig {
   setAnimationStride?(stride: number): void;
   setMaterialLod?(active: boolean): void;
   setGeometryDetail?(detail: "high" | "low"): void;
+  advanceVisualTransition?(deltaSeconds: number): void;
   attachLowTemplate?(template: { readonly scene: THREE.Object3D } | null): void;
   readonly geometry?: "high" | "low";
   dispose(): void;

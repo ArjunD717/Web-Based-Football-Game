@@ -14,7 +14,10 @@ import {
   type AuthoredTemplate,
 } from "./authored-asset";
 import { cheapMaterialFor } from "./authored-material-lod";
-import type { PlayerGeometry } from "./player-geometry";
+import {
+  geometryFadeProgress,
+  type PlayerGeometry,
+} from "./player-geometry";
 import {
   footPlantOffset,
   groundedLiftFor,
@@ -67,6 +70,37 @@ interface LegRig {
 
 interface AuthoredPalette {
   readonly materials: ReadonlyMap<string, THREE.Material>;
+}
+
+type MaterialLike = THREE.Material | THREE.Material[];
+
+interface FadeMaterial {
+  readonly material: THREE.Material;
+  readonly baseOpacity: number;
+}
+
+interface GeometrySlot {
+  readonly mesh: THREE.Mesh;
+  readonly highGeometry: THREE.BufferGeometry;
+  readonly highVisible: boolean;
+  lowGeometry: THREE.BufferGeometry | null;
+  readonly baseMaterial: MaterialLike;
+  readonly cheapMaterial: MaterialLike | null;
+}
+
+interface GeometryFadeEntry {
+  readonly slot: GeometrySlot;
+  readonly source: readonly FadeMaterial[];
+  readonly targetMesh: THREE.SkinnedMesh | null;
+  readonly target: readonly FadeMaterial[];
+}
+
+interface GeometryFade {
+  readonly from: PlayerGeometry;
+  readonly to: PlayerGeometry;
+  elapsed: number;
+  readonly duration: number;
+  readonly entries: readonly GeometryFadeEntry[];
 }
 
 /**
@@ -198,9 +232,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   readonly root = new THREE.Group();
 
   get geometry(): PlayerGeometry {
-    return this.lowAttached && this.geometryLevel === "low"
-      ? "low"
-      : "high";
+    return this.lowAttached ? this.visualGeometry : "high";
   }
 
   private readonly visual = new THREE.Group();
@@ -218,18 +250,11 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private shadowCasting = false;
   private materialLod = false;
   private geometryLevel: PlayerGeometry = "high";
+  private visualGeometry: PlayerGeometry = "high";
+  private geometryFade: GeometryFade | null = null;
   private lowAttached = false;
-  private readonly geometrySlots: Array<{
-    readonly mesh: THREE.Mesh;
-    readonly highGeometry: THREE.BufferGeometry;
-    readonly highVisible: boolean;
-    lowGeometry: THREE.BufferGeometry | null;
-  }> = [];
-  private readonly materialSlots: Array<{
-    readonly mesh: THREE.Mesh;
-    readonly original: THREE.Material | THREE.Material[];
-    readonly cheap: THREE.Material | THREE.Material[];
-  }> = [];
+  private readonly geometrySlots: GeometrySlot[] = [];
+  private readonly transitionMaterials: THREE.Material[] = [];
   private animationStride = 1;
   private readonly animationPhase: number;
   private forceAnimation = true;
@@ -336,12 +361,6 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         : materials.get(mesh.material.name) ?? mesh.material;
       mesh.visible = !HIDDEN_DETAIL_MESH.test(mesh.name);
       if (mesh.visible) {
-        this.geometrySlots.push({
-          mesh,
-          highGeometry: mesh.geometry,
-          highVisible: mesh.visible,
-          lowGeometry: null,
-        });
         const original = mesh.material;
         const cheap = Array.isArray(original)
           ? original.map((entry) => cheapMaterialFor(entry))
@@ -351,12 +370,15 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
               (entry, index) => entry !== original[index],
             )
           : cheap !== original;
+        this.geometrySlots.push({
+          mesh,
+          highGeometry: mesh.geometry,
+          highVisible: mesh.visible,
+          lowGeometry: null,
+          baseMaterial: original,
+          cheapMaterial: changed ? cheap : null,
+        });
         if (changed) {
-          this.materialSlots.push({
-            mesh,
-            original,
-            cheap,
-          });
           const cheapMaterials = Array.isArray(cheap) ? cheap : [cheap];
           for (const cheapMaterial of cheapMaterials) {
             if (!this.ownedMaterials.includes(cheapMaterial)) {
@@ -755,27 +777,179 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       slot.lowGeometry = lowGeometries.get(slot.mesh.name) ?? null;
     }
     this.lowAttached = true;
-    this.applyGeometry();
+    if (this.geometryLevel === "low" && this.visualGeometry !== "low") {
+      this.startGeometryFade("low");
+    }
   }
 
   setGeometryDetail(detail: PlayerGeometry): void {
     if (detail === this.geometryLevel) {
       return;
     }
+    if (this.geometryFade !== null) {
+      this.finishGeometryFade();
+    }
     this.geometryLevel = detail;
-    this.applyGeometry();
+    if (detail === "low" && !this.lowAttached) {
+      return;
+    }
+    if (detail !== this.visualGeometry) {
+      this.startGeometryFade(detail);
+    }
   }
 
-  private applyGeometry(): void {
-    const useLow = this.lowAttached && this.geometryLevel === "low";
-    for (const slot of this.geometrySlots) {
-      slot.mesh.geometry =
-        useLow && slot.lowGeometry !== null
-          ? slot.lowGeometry
-          : slot.highGeometry;
-      slot.mesh.visible =
-        useLow && slot.lowGeometry === null ? false : slot.highVisible;
+  /**
+   * Render both geometry levels together for a short dissolve. The outgoing
+   * meshes use transparent clones of their current materials and the incoming
+   * geometry is a temporary SkinnedMesh bound to the same skeleton. No mixer,
+   * pose, gait phase or foot lock is touched.
+   */
+  private startGeometryFade(to: PlayerGeometry): void {
+    if (to === this.visualGeometry) {
+      return;
     }
+    if (to === "low" && !this.lowAttached) {
+      return;
+    }
+    const from = this.visualGeometry;
+    const duration = VISUAL_TUNING.authoredPlayer.geometryFadeSeconds;
+    const entries: GeometryFadeEntry[] = [];
+    for (const slot of this.geometrySlots) {
+      const sourceVisible =
+        from === "high" ? slot.highVisible : slot.lowGeometry !== null;
+      slot.mesh.geometry =
+        from === "high"
+          ? slot.highGeometry
+          : (slot.lowGeometry ?? slot.highGeometry);
+      slot.mesh.visible = sourceVisible;
+      const currentMaterial = slot.mesh.material;
+      const currentWasArray = Array.isArray(currentMaterial);
+      const source = sourceVisible
+        ? this.cloneFadeMaterials(currentMaterial, 1)
+        : [];
+      if (sourceVisible) {
+        slot.mesh.material = currentWasArray
+          ? source.map((entry) => entry.material)
+          : source[0]!.material;
+      }
+
+      const targetGeometry =
+        to === "low" ? slot.lowGeometry : slot.highGeometry;
+      const targetVisible =
+        targetGeometry !== null &&
+        (to === "high" ? slot.highVisible : true);
+      let targetMesh: THREE.SkinnedMesh | null = null;
+      let target: FadeMaterial[] = [];
+      if (targetVisible && targetGeometry !== null) {
+        const targetBase = this.baseMaterialFor(slot);
+        const targetWasArray = Array.isArray(targetBase);
+        const cloned = this.cloneFadeMaterials(targetBase, 0);
+        const materials: MaterialLike = targetWasArray
+          ? cloned.map((entry) => entry.material)
+          : cloned[0]!.material;
+        targetMesh = new THREE.SkinnedMesh(targetGeometry, materials);
+        targetMesh.name = `${slot.mesh.name}:fade`;
+        targetMesh.position.copy(slot.mesh.position);
+        targetMesh.quaternion.copy(slot.mesh.quaternion);
+        targetMesh.scale.copy(slot.mesh.scale);
+        targetMesh.matrixAutoUpdate = slot.mesh.matrixAutoUpdate;
+        targetMesh.frustumCulled = slot.mesh.frustumCulled;
+        targetMesh.castShadow = false;
+        targetMesh.receiveShadow = false;
+        targetMesh.renderOrder = slot.mesh.renderOrder + 1;
+        if (slot.mesh instanceof THREE.SkinnedMesh) {
+          targetMesh.bind(slot.mesh.skeleton, slot.mesh.bindMatrix);
+          targetMesh.bindMode = slot.mesh.bindMode;
+        }
+        slot.mesh.parent?.add(targetMesh);
+        target = cloned;
+      }
+      entries.push({
+        slot,
+        source,
+        targetMesh,
+        target,
+      });
+    }
+    this.geometryFade = {
+      from,
+      to,
+      elapsed: 0,
+      duration,
+      entries,
+    };
+  }
+
+  advanceVisualTransition(deltaSeconds: number): void {
+    const fade = this.geometryFade;
+    if (fade === null || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0) {
+      return;
+    }
+    fade.elapsed = Math.min(fade.duration, fade.elapsed + deltaSeconds);
+    const alpha = geometryFadeProgress(fade.elapsed, fade.duration);
+    for (const entry of fade.entries) {
+      for (const source of entry.source) {
+        source.material.opacity = source.baseOpacity * (1 - alpha);
+      }
+      for (const target of entry.target) {
+        target.material.opacity = target.baseOpacity * alpha;
+      }
+    }
+    if (fade.elapsed >= fade.duration) {
+      this.finishGeometryFade();
+    }
+  }
+
+  private finishGeometryFade(): void {
+    const fade = this.geometryFade;
+    if (fade === null) {
+      return;
+    }
+    for (const entry of fade.entries) {
+      const { slot, targetMesh } = entry;
+      const useLow = fade.to === "low";
+      slot.mesh.geometry = useLow
+        ? (slot.lowGeometry ?? slot.highGeometry)
+        : slot.highGeometry;
+      slot.mesh.visible = useLow
+        ? slot.lowGeometry !== null
+        : slot.highVisible;
+      slot.mesh.material = this.baseMaterialFor(slot);
+      targetMesh?.parent?.remove(targetMesh);
+    }
+    this.disposeTransitionMaterials();
+    this.visualGeometry = fade.to;
+    this.geometryLevel = fade.to;
+    this.geometryFade = null;
+  }
+
+  private cloneFadeMaterials(
+    source: MaterialLike,
+    opacityScale: number,
+  ): FadeMaterial[] {
+    const sourceMaterials = Array.isArray(source) ? source : [source];
+    return sourceMaterials.map((material) => {
+      const clone = material.clone();
+      clone.transparent = true;
+      clone.depthWrite = false;
+      clone.opacity = material.opacity * opacityScale;
+      clone.needsUpdate = true;
+      this.transitionMaterials.push(clone);
+      return { material: clone, baseOpacity: material.opacity };
+    });
+  }
+
+  private baseMaterialFor(slot: GeometrySlot): MaterialLike {
+    return this.materialLod && slot.cheapMaterial !== null
+      ? slot.cheapMaterial
+      : slot.baseMaterial;
+  }
+
+  private disposeTransitionMaterials(): void {
+    for (const material of this.transitionMaterials) {
+      material.dispose();
+    }
+    this.transitionMaterials.length = 0;
   }
 
   setFootstepSink(sink: FootstepSink | null): void {
@@ -822,8 +996,11 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       return;
     }
     this.materialLod = active;
-    for (const slot of this.materialSlots) {
-      slot.mesh.material = active ? slot.cheap : slot.original;
+    if (this.geometryFade !== null) {
+      this.finishGeometryFade();
+    }
+    for (const slot of this.geometrySlots) {
+      slot.mesh.material = this.baseMaterialFor(slot);
     }
   }
 
@@ -1110,6 +1287,13 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   }
 
   dispose(): void {
+    if (this.geometryFade !== null) {
+      for (const entry of this.geometryFade.entries) {
+        entry.targetMesh?.parent?.remove(entry.targetMesh);
+      }
+      this.geometryFade = null;
+    }
+    this.disposeTransitionMaterials();
     this.mixer?.stopAllAction();
     this.clipActions.clear();
     this.activeClipAction = null;

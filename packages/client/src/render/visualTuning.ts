@@ -72,6 +72,8 @@ export interface VisualTuning {
     readonly poseBlendRate: number;
     /** Seconds used to cross-fade between baked animation clips. */
     readonly clipFadeSeconds: number;
+    /** Seconds used to dissolve between high and low geometry. */
+    readonly geometryFadeSeconds: number;
     /** Action time multiplier at empty stamina; 1 at full stamina. */
     readonly clipStaminaTimeScaleMin: number;
     readonly footPlant: {
@@ -224,6 +226,7 @@ export const VISUAL_TUNING: VisualTuning = {
     armDownRadians: -0.58,
     poseBlendRate: 20,
     clipFadeSeconds: 0.14,
+    geometryFadeSeconds: 0.18,
     clipStaminaTimeScaleMin: 0.86,
     footPlant: {
       maxCorrectionM: 0.12,

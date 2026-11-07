@@ -47,3 +47,17 @@ export function nextGeometryRequest(
         : previous.committed,
   };
 }
+
+/** Linear dissolve progress; invalid durations resolve immediately. */
+export function geometryFadeProgress(
+  elapsedSeconds: number,
+  durationSeconds: number,
+): number {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return 1;
+  }
+  if (!Number.isFinite(elapsedSeconds)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, elapsedSeconds / durationSeconds));
+}

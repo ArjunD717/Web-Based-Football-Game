@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  geometryFadeProgress,
   geometryForDetail,
   nextGeometryRequest,
   type PlayerGeometryRequest,
@@ -50,5 +51,21 @@ describe("player geometry hysteresis", () => {
     state = nextGeometryRequest(state, "low", 5);
     state = nextGeometryRequest(state, "low", 5);
     expect(state?.committed).toBe("low");
+  });
+});
+
+
+describe("player geometry fade", () => {
+  it("clamps linear progress to the transition", () => {
+    expect(geometryFadeProgress(0, 0.2)).toBe(0);
+    expect(geometryFadeProgress(0.1, 0.2)).toBe(0.5);
+    expect(geometryFadeProgress(0.2, 0.2)).toBe(1);
+    expect(geometryFadeProgress(0.5, 0.2)).toBe(1);
+  });
+
+  it("resolves an invalid duration immediately", () => {
+    expect(geometryFadeProgress(0, 0)).toBe(1);
+    expect(geometryFadeProgress(0, Number.NaN)).toBe(1);
+    expect(geometryFadeProgress(Number.NaN, 0.2)).toBe(0);
   });
 });
