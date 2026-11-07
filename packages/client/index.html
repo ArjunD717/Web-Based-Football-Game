@@ -415,8 +415,8 @@
                   <p class="ui-kicker">Match night</p>
                   <h2 class="ui-context-panel__title">Settings</h2>
                   <p class="ui-context-panel__lede">
-                    Match sound, controller rumble, local prediction and 3D
-                    quality for this browser.
+                    Match sound, controller rumble, local prediction, temporal
+                    antialiasing and 3D quality for this browser.
                   </p>
                 </header>
                 <div class="ui-panel ui-panel--padded">
@@ -453,6 +453,18 @@
                       aria-checked="false"
                     >
                       <span>Local prediction</span>
+                      <span class="ui-toggle__track" aria-hidden="true">
+                        <span class="ui-toggle__thumb"></span>
+                      </span>
+                    </button>
+                    <button
+                      id="settings-taa"
+                      class="ui-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked="false"
+                    >
+                      <span>Temporal antialiasing</span>
                       <span class="ui-toggle__track" aria-hidden="true">
                         <span class="ui-toggle__thumb"></span>
                       </span>

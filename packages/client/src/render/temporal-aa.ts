@@ -26,15 +26,66 @@ void main() {
 }
 `;
 
+const MOTION_VERTEX = /* glsl */ `
+#include <common>
+#include <skinning_pars_vertex>
+
+uniform mat4 uPrevModelMatrix;
+uniform mat4 uPrevViewProjection;
+varying vec2 vVelocity;
+varying float vValid;
+
+void main() {
+	vec4 transformed = vec4(position, 1.0);
+	#include <skinning_vertex>
+
+	vec4 currentWorld = modelMatrix * transformed;
+	vec4 currentClip = projectionMatrix * viewMatrix * currentWorld;
+	vec4 previousWorld = uPrevModelMatrix * transformed;
+	vec4 previousClip = uPrevViewProjection * previousWorld;
+	gl_Position = currentClip;
+
+	if (currentClip.w <= 0.0 || previousClip.w <= 0.0) {
+		vVelocity = vec2(0.0);
+		vValid = 0.0;
+		return;
+	}
+	vec2 currentUv = currentClip.xy / currentClip.w * 0.5 + 0.5;
+	vec2 previousUv = previousClip.xy / previousClip.w * 0.5 + 0.5;
+	vVelocity = currentUv - previousUv;
+	vValid = 1.0;
+}
+`;
+
+const MOTION_FRAGMENT = /* glsl */ `
+varying vec2 vVelocity;
+varying float vValid;
+void main() {
+	gl_FragColor = vec4(vVelocity, 0.0, vValid);
+}
+`;
+
+const DEPTH_COPY_FRAGMENT = /* glsl */ `
+uniform sampler2D tDepth;
+varying vec2 vUv;
+void main() {
+	gl_FragColor = vec4(texture2D(tDepth, vUv).x, 0.0, 0.0, 1.0);
+}
+`;
+
 const RESOLVE_FRAGMENT = /* glsl */ `
 uniform sampler2D tCurrent;
 uniform sampler2D tHistory;
 uniform sampler2D tDepth;
+uniform sampler2D tMotion;
+uniform sampler2D tPrevDepth;
 uniform mat4 uInvViewProjection;
 uniform mat4 uPrevViewProjection;
+uniform mat4 uInvPrevViewProjection;
 uniform vec2 uResolution;
 uniform float uHistoryWeight;
 uniform float uHistoryValid;
+uniform float uDisocclusionDepthM;
 varying vec2 vUv;
 
 void main() {
@@ -55,26 +106,50 @@ void main() {
 	}
 
 	float depth = texture2D(tDepth, uv).x;
-	vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-	vec4 world = uInvViewProjection * clip;
-	world.xyz /= max(world.w, 1e-6);
-	vec4 previousClip = uPrevViewProjection * vec4(world.xyz, 1.0);
-	vec2 previousUv = previousClip.xy / max(abs(previousClip.w), 1e-6) * 0.5 + 0.5;
-	vec3 history = texture2D(tHistory, clamp(previousUv, vec2(0.0), vec2(1.0))).rgb;
-	history = clamp(history, minimum, maximum);
+	vec4 currentClip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+	vec4 currentWorldClip = uInvViewProjection * currentClip;
+	vec3 currentWorld = currentWorldClip.xyz / max(currentWorldClip.w, 1e-6);
 
+	vec4 motion = texture2D(tMotion, uv);
+	vec2 previousUv;
 	float valid = uHistoryValid;
+	if (motion.a > 0.5) {
+		previousUv = uv - motion.xy;
+	} else {
+		vec4 previousClip = uPrevViewProjection * vec4(currentWorld, 1.0);
+		previousUv = previousClip.xy / max(abs(previousClip.w), 1e-6) * 0.5 + 0.5;
+		if (previousClip.w <= 0.0) {
+			valid = 0.0;
+		}
+	}
 	if (
-		previousClip.w <= 0.0 ||
 		previousUv.x < 0.0 || previousUv.x > 1.0 ||
 		previousUv.y < 0.0 || previousUv.y > 1.0
 	) {
 		valid = 0.0;
 	}
+	vec2 clampedPreviousUv = clamp(previousUv, vec2(0.0), vec2(1.0));
+	float previousDepth = texture2D(tPrevDepth, clampedPreviousUv).x;
+	vec4 previousWorldClip = vec4(
+		clampedPreviousUv * 2.0 - 1.0,
+		previousDepth * 2.0 - 1.0,
+		1.0
+	);
+	vec4 previousWorldHomogeneous = uInvPrevViewProjection * previousWorldClip;
+	vec3 previousWorld = previousWorldHomogeneous.xyz /
+		max(previousWorldHomogeneous.w, 1e-6);
+	if (distance(currentWorld, previousWorld) > uDisocclusionDepthM) {
+		valid = 0.0;
+	}
+
+	vec3 history = texture2D(tHistory, clampedPreviousUv).rgb;
+	history = clamp(history, minimum, maximum);
 	vec3 resolved = mix(current, history, uHistoryWeight * valid);
 	gl_FragColor = vec4(resolved, 1.0);
 }
 `;
+
+const MOTION_LAYER = 1;
 
 export function halton(index: number, base: number): number {
   let result = 0;
@@ -102,15 +177,31 @@ export function temporalJitter(
   return target;
 }
 
+interface VelocityUniforms {
+  [uniform: string]: THREE.IUniform;
+  uPrevModelMatrix: { value: THREE.Matrix4 };
+  uPrevViewProjection: { value: THREE.Matrix4 };
+}
+
+interface DepthCopyUniforms {
+  [uniform: string]: THREE.IUniform;
+  tDepth: { value: THREE.Texture | null };
+}
+
 /**
- * Minimal TAA for the live Three scene. Camera jitter supplies subpixel
- * samples; depth is reprojected into the previous view-projection and a
- * neighborhood clamp rejects most history from moving players. This is
- * deliberately feature-flagged: there are no per-object motion vectors yet.
+ * Temporal antialiasing for the live Three scene. Camera jitter supplies
+ * subpixel samples; depth plus per-mesh velocity reprojects into the previous
+ * frame. A depth and neighborhood check rejects history at disocclusions,
+ * while the feature remains user-selectable because unsupported WebGL context
+ * combinations must be able to bypass it.
  */
 export class TemporalAa {
   private readonly resolveMaterial: THREE.ShaderMaterial;
   private readonly copyMaterial: THREE.ShaderMaterial;
+  private readonly velocityMaterial: THREE.ShaderMaterial;
+  private readonly depthCopyMaterial: THREE.ShaderMaterial;
+  private readonly velocityUniforms: VelocityUniforms;
+  private readonly depthCopyUniforms: DepthCopyUniforms;
   private readonly fullscreenMesh: THREE.Mesh;
   private readonly fullscreenScene = new THREE.Scene();
   private readonly fullscreenCamera = new THREE.OrthographicCamera(
@@ -122,7 +213,12 @@ export class TemporalAa {
     1,
   );
   private sceneTarget: THREE.WebGLRenderTarget | null = null;
+  private velocityTarget: THREE.WebGLRenderTarget | null = null;
   private readonly history: (THREE.WebGLRenderTarget | null)[] = [null, null];
+  private readonly depthHistory: (THREE.WebGLRenderTarget | null)[] = [
+    null,
+    null,
+  ];
   private width = 0;
   private height = 0;
   private readIndex = 0;
@@ -136,20 +232,74 @@ export class TemporalAa {
   private readonly lastViewProjection = new THREE.Matrix4();
   private readonly currentViewProjection = new THREE.Matrix4();
   private readonly inverseViewProjection = new THREE.Matrix4();
+  private readonly lastInverseViewProjection = new THREE.Matrix4();
   private readonly drawingBuffer = new THREE.Vector2();
   private readonly jitter = new THREE.Vector2();
+  private readonly savedClearColor = new THREE.Color();
+  private motionObjects: readonly THREE.Object3D[] = [];
+  private readonly motionMeshes: THREE.Object3D[] = [];
+  private readonly motionLayerAssigned = new WeakSet<THREE.Object3D>();
+  private readonly previousMotionMatrices = new WeakMap<
+    THREE.Object3D,
+    THREE.Matrix4
+  >();
 
   constructor(private readonly renderer: THREE.WebGLRenderer) {
+    const velocityUniforms: VelocityUniforms = {
+      uPrevModelMatrix: { value: new THREE.Matrix4() },
+      uPrevViewProjection: { value: new THREE.Matrix4() },
+    };
+    this.velocityUniforms = velocityUniforms;
+    this.velocityMaterial = new THREE.ShaderMaterial({
+      uniforms: velocityUniforms,
+      vertexShader: MOTION_VERTEX,
+      fragmentShader: MOTION_FRAGMENT,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NoBlending,
+      toneMapped: false,
+    });
+    this.velocityMaterial.onBeforeRender = (
+      _renderer,
+      _scene,
+      _camera,
+      _geometry,
+      object,
+    ) => {
+      const previous = this.previousMotionMatrices.get(object);
+      this.velocityUniforms.uPrevModelMatrix.value.copy(
+        previous ?? object.matrixWorld,
+      );
+    };
+
+    const depthCopyUniforms: DepthCopyUniforms = {
+      tDepth: { value: null },
+    };
+    this.depthCopyUniforms = depthCopyUniforms;
+    this.depthCopyMaterial = new THREE.ShaderMaterial({
+      uniforms: depthCopyUniforms,
+      vertexShader: FULLSCREEN_VERTEX,
+      fragmentShader: DEPTH_COPY_FRAGMENT,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+
     this.resolveMaterial = new THREE.ShaderMaterial({
       uniforms: {
         tCurrent: { value: null },
         tHistory: { value: null },
         tDepth: { value: null },
+        tMotion: { value: null },
+        tPrevDepth: { value: null },
         uInvViewProjection: { value: new THREE.Matrix4() },
         uPrevViewProjection: { value: new THREE.Matrix4() },
+        uInvPrevViewProjection: { value: new THREE.Matrix4() },
         uResolution: { value: new THREE.Vector2() },
         uHistoryWeight: { value: 0 },
         uHistoryValid: { value: 0 },
+        uDisocclusionDepthM: { value: 0 },
       },
       vertexShader: FULLSCREEN_VERTEX,
       fragmentShader: RESOLVE_FRAGMENT,
@@ -173,6 +323,10 @@ export class TemporalAa {
     this.fullscreenScene.add(this.fullscreenMesh);
   }
 
+  setMotionObjects(objects: readonly THREE.Object3D[]): void {
+    this.motionObjects = objects;
+  }
+
   reset(): void {
     this.historyValid = false;
     this.frame = 0;
@@ -189,16 +343,16 @@ export class TemporalAa {
     this.height = height;
     this.disposeTargets();
     this.sceneTarget = this.createSceneTarget(width, height);
-    this.history[0] = this.createHistoryTarget(width, height);
-    this.history[1] = this.createHistoryTarget(width, height);
+    this.velocityTarget = this.createHalfFloatTarget(width, height);
+    this.history[0] = this.createHalfFloatTarget(width, height);
+    this.history[1] = this.createHalfFloatTarget(width, height);
+    this.depthHistory[0] = this.createHalfFloatTarget(width, height);
+    this.depthHistory[1] = this.createHalfFloatTarget(width, height);
     this.readIndex = 0;
     this.reset();
   }
 
-  render(
-    scene: THREE.Scene,
-    camera: THREE.PerspectiveCamera,
-  ): void {
+  render(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
     this.resize();
     if (this.sceneTarget === null) {
       return;
@@ -236,31 +390,52 @@ export class TemporalAa {
     const previousTarget = this.renderer.getRenderTarget();
     this.renderer.setRenderTarget(this.sceneTarget);
     this.renderer.render(scene, camera);
+    this.collectMotionMeshes();
+    this.renderMotionVectors(scene, camera);
     camera.clearViewOffset();
 
     const historyRead = this.history[this.readIndex] ?? null;
     const historyWrite = this.history[1 - this.readIndex] ?? null;
-    if (historyRead === null || historyWrite === null) {
+    const previousDepth = this.depthHistory[this.readIndex] ?? null;
+    const depthWrite = this.depthHistory[1 - this.readIndex] ?? null;
+    if (
+      historyRead === null ||
+      historyWrite === null ||
+      previousDepth === null ||
+      depthWrite === null
+    ) {
+      this.renderer.setRenderTarget(previousTarget);
       return;
     }
+
     const uniforms = this.resolveMaterial.uniforms as {
       tCurrent: { value: THREE.Texture | null };
-      tDepth: { value: THREE.Texture | null };
       tHistory: { value: THREE.Texture | null };
+      tDepth: { value: THREE.Texture | null };
+      tMotion: { value: THREE.Texture | null };
+      tPrevDepth: { value: THREE.Texture | null };
       uInvViewProjection: { value: THREE.Matrix4 };
       uPrevViewProjection: { value: THREE.Matrix4 };
+      uInvPrevViewProjection: { value: THREE.Matrix4 };
       uResolution: { value: THREE.Vector2 };
       uHistoryWeight: { value: number };
       uHistoryValid: { value: number };
+      uDisocclusionDepthM: { value: number };
     };
     uniforms.tCurrent.value = this.sceneTarget.texture;
-    uniforms.tDepth.value = this.sceneTarget.depthTexture;
     uniforms.tHistory.value = historyRead.texture;
+    uniforms.tDepth.value = this.sceneTarget.depthTexture;
+    uniforms.tMotion.value = this.velocityTarget?.texture ?? null;
+    uniforms.tPrevDepth.value = previousDepth.texture;
     uniforms.uInvViewProjection.value.copy(this.inverseViewProjection);
     uniforms.uPrevViewProjection.value.copy(this.lastViewProjection);
+    uniforms.uInvPrevViewProjection.value.copy(
+      this.lastInverseViewProjection,
+    );
     uniforms.uResolution.value.set(this.width, this.height);
     uniforms.uHistoryWeight.value = tuning.historyWeight;
     uniforms.uHistoryValid.value = this.historyValid ? 1 : 0;
+    uniforms.uDisocclusionDepthM.value = tuning.disocclusionDepthM;
 
     this.fullscreenMesh.material = this.resolveMaterial;
     this.renderer.setRenderTarget(historyWrite);
@@ -272,8 +447,13 @@ export class TemporalAa {
     this.fullscreenMesh.material = this.copyMaterial;
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.fullscreenScene, this.fullscreenCamera);
+    this.copyDepth(depthWrite);
+    this.fullscreenMesh.material = this.copyMaterial;
     this.renderer.setRenderTarget(previousTarget);
+
+    this.updateMotionMatrices();
     this.lastViewProjection.copy(this.currentViewProjection);
+    this.lastInverseViewProjection.copy(this.inverseViewProjection);
     this.historyValid = true;
     this.readIndex = 1 - this.readIndex;
   }
@@ -282,7 +462,90 @@ export class TemporalAa {
     this.disposeTargets();
     this.resolveMaterial.dispose();
     this.copyMaterial.dispose();
+    this.velocityMaterial.dispose();
+    this.depthCopyMaterial.dispose();
     this.fullscreenMesh.geometry.dispose();
+  }
+
+  private collectMotionMeshes(): void {
+    this.motionMeshes.length = 0;
+    for (const root of this.motionObjects) {
+      root.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) {
+          return;
+        }
+        if (!this.motionLayerAssigned.has(object)) {
+          object.layers.enable(MOTION_LAYER);
+          this.motionLayerAssigned.add(object);
+        }
+        this.motionMeshes.push(object);
+      });
+    }
+  }
+
+  private renderMotionVectors(
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+  ): void {
+    if (this.velocityTarget === null) {
+      return;
+    }
+    const previousTarget = this.renderer.getRenderTarget();
+    const savedLayers = camera.layers.mask;
+    const savedOverride = scene.overrideMaterial;
+    const savedBackground = scene.background;
+    const savedFog = scene.fog;
+    const savedShadows = this.renderer.shadowMap.enabled;
+    const savedAutoClear = this.renderer.autoClear;
+    this.renderer.getClearColor(this.savedClearColor);
+    const savedAlpha = this.renderer.getClearAlpha();
+
+    this.renderer.setRenderTarget(this.velocityTarget);
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.clear(true, false, false);
+    camera.layers.set(MOTION_LAYER);
+    scene.overrideMaterial = this.velocityMaterial;
+    scene.background = null;
+    scene.fog = null;
+    this.renderer.shadowMap.enabled = false;
+    this.renderer.autoClear = false;
+    this.velocityUniforms.uPrevViewProjection.value.copy(
+      this.lastViewProjection,
+    );
+    this.renderer.render(scene, camera);
+
+    this.renderer.autoClear = savedAutoClear;
+    this.renderer.shadowMap.enabled = savedShadows;
+    scene.fog = savedFog;
+    scene.background = savedBackground;
+    scene.overrideMaterial = savedOverride;
+    camera.layers.mask = savedLayers;
+    this.renderer.setClearColor(this.savedClearColor, savedAlpha);
+    this.renderer.setRenderTarget(previousTarget);
+  }
+
+  private copyDepth(target: THREE.WebGLRenderTarget): void {
+    const sceneTarget = this.sceneTarget;
+    if (sceneTarget === null || sceneTarget.depthTexture === null) {
+      return;
+    }
+    const previousTarget = this.renderer.getRenderTarget();
+    this.depthCopyUniforms.tDepth.value = sceneTarget.depthTexture;
+    this.fullscreenMesh.material = this.depthCopyMaterial;
+    this.renderer.setRenderTarget(target);
+    this.renderer.render(this.fullscreenScene, this.fullscreenCamera);
+    this.renderer.setRenderTarget(previousTarget);
+  }
+
+  private updateMotionMatrices(): void {
+    for (const mesh of this.motionMeshes) {
+      let matrix = this.previousMotionMatrices.get(mesh);
+      if (matrix === undefined) {
+        matrix = new THREE.Matrix4();
+        this.previousMotionMatrices.set(mesh, matrix);
+      }
+      matrix.copy(mesh.matrixWorld);
+    }
   }
 
   private cameraJumped(
@@ -326,11 +589,13 @@ export class TemporalAa {
     return target;
   }
 
-  private createHistoryTarget(
+  private createHalfFloatTarget(
     width: number,
     height: number,
   ): THREE.WebGLRenderTarget {
     const target = new THREE.WebGLRenderTarget(width, height, {
+      type: THREE.HalfFloatType,
+      format: THREE.RGBAFormat,
       depthBuffer: false,
       stencilBuffer: false,
       minFilter: THREE.NearestFilter,
@@ -343,10 +608,16 @@ export class TemporalAa {
   private disposeTargets(): void {
     this.sceneTarget?.depthTexture?.dispose();
     this.sceneTarget?.dispose();
+    this.velocityTarget?.dispose();
     this.history[0]?.dispose();
     this.history[1]?.dispose();
+    this.depthHistory[0]?.dispose();
+    this.depthHistory[1]?.dispose();
     this.sceneTarget = null;
+    this.velocityTarget = null;
     this.history[0] = null;
     this.history[1] = null;
+    this.depthHistory[0] = null;
+    this.depthHistory[1] = null;
   }
 }

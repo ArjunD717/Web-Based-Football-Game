@@ -31,6 +31,8 @@ export interface MatchRenderer {
   inputBasis?(): CameraInputBasis | null;
   /** Select a 3D quality preset; the 2D renderer ignores this. */
   setQuality?(quality: VisualQuality): void;
+  /** Enable or bypass the temporal resolve; the 2D renderer ignores this. */
+  setTemporalAa?(enabled: boolean): void;
   /**
    * Suspend context cuts while replaying recorded frames. The 2D renderer
    * ignores this.

@@ -56,8 +56,10 @@ import {
 } from "./render/factory";
 import type { MatchView, RenderPlayer } from "./render/view";
 import {
+  loadTemporalAa,
   loadVisualQuality,
   parseVisualQuality,
+  saveTemporalAa,
   saveVisualQuality,
   type VisualQuality,
 } from "./render/visualTuning";
@@ -193,6 +195,7 @@ const settingsHapticsButton =
   byId<HTMLButtonElement>("settings-haptics");
 const settingsPredictionButton =
   byId<HTMLButtonElement>("settings-prediction");
+const settingsTaaButton = byId<HTMLButtonElement>("settings-taa");
 const settingsQualitySelect =
   byId<HTMLSelectElement>("settings-quality");
 const homeSwatch = byId<HTMLElement>("home-swatch");
@@ -328,6 +331,7 @@ let lastQrRoomCode: string | null = null;
 let cameraMode: CameraMode = loadCameraMode();
 let replayCamera: CameraMode = "broadcast";
 let visualQuality: VisualQuality = loadVisualQuality();
+let temporalAaEnabled: boolean = loadTemporalAa();
 
 const substitutionPanel = new SubstitutionPanel({
   onSubstitute: (outId, inId) => client.substitute(outId, inId),
@@ -381,7 +385,9 @@ settingsQualitySelect.addEventListener("change", () => {
   updateQualityControl();
 });
 renderer.setQuality?.(visualQuality);
+renderer.setTemporalAa?.(temporalAaEnabled);
 updateQualityControl();
+updateTemporalAaControl();
 
 updateRendererControl();
 updateAudioControl();
@@ -769,6 +775,13 @@ settingsPredictionButton.addEventListener("click", () => {
   saveLocalPrediction(localPredictionEnabled);
   localPrediction.reset();
   updatePredictionControl();
+});
+
+settingsTaaButton.addEventListener("click", () => {
+  temporalAaEnabled = !temporalAaEnabled;
+  saveTemporalAa(temporalAaEnabled);
+  renderer.setTemporalAa?.(temporalAaEnabled);
+  updateTemporalAaControl();
 });
 
 window.addEventListener("pointerdown", () => {
@@ -3118,6 +3131,7 @@ function switchRenderer(next: RendererMode): void {
   rendererFellBack = mounted.fellBack;
   renderer.setCameraMode?.(cameraMode);
   renderer.setQuality?.(visualQuality);
+  renderer.setTemporalAa?.(temporalAaEnabled);
   saveRendererMode(rendererMode);
   if (rendererMode !== "3d") {
     delete pitchStage.dataset.quality;
@@ -3125,6 +3139,7 @@ function switchRenderer(next: RendererMode): void {
   updateRendererControl();
   updateCameraControl();
   updateQualityControl();
+  updateTemporalAaControl();
   updateReplayCameraButtons();
   if (latestView !== null) {
     renderer.render(latestView);
@@ -3199,6 +3214,18 @@ function updateQualityControl(): void {
     rendererMode === "3d"
       ? "3D shadows, crowd and effects quality"
       : "Switch to the 3D view to change quality";
+}
+
+function updateTemporalAaControl(): void {
+  settingsTaaButton.setAttribute(
+    "aria-checked",
+    String(temporalAaEnabled),
+  );
+  settingsTaaButton.disabled = rendererMode !== "3d";
+  settingsTaaButton.title =
+    rendererMode === "3d"
+      ? "Temporal resolve; disable if the GPU shows ghosting"
+      : "Switch to the 3D view to change temporal antialiasing";
 }
 
 function updateRendererControl(): void {

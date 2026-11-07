@@ -5,6 +5,7 @@ import {
   DEFAULT_VISUAL_QUALITY,
   VISUAL_QUALITY,
   VISUAL_TUNING,
+  parseTemporalAa,
   parseVisualQuality,
 } from "./visualTuning";
 
@@ -15,6 +16,16 @@ describe("visual quality presets", () => {
     expect(parseVisualQuality("high")).toBe("high");
     expect(parseVisualQuality("ultra")).toBe(DEFAULT_VISUAL_QUALITY);
     expect(parseVisualQuality(null)).toBe(DEFAULT_VISUAL_QUALITY);
+  });
+
+  it("parses temporal AA switches and keeps a caller fallback", () => {
+    expect(parseTemporalAa("1")).toBe(true);
+    expect(parseTemporalAa("0")).toBe(false);
+    expect(parseTemporalAa(true)).toBe(true);
+    expect(parseTemporalAa(false)).toBe(false);
+    expect(parseTemporalAa("yes", true)).toBe(true);
+    expect(parseTemporalAa(null, false)).toBe(false);
+    expect(VISUAL_TUNING.temporalAa.disocclusionDepthM).toBeGreaterThan(0);
   });
 
   it("increases resolution and shadow resolution with quality", () => {

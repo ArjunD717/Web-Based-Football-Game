@@ -124,7 +124,8 @@ export class ThreeMatchRenderer implements MatchRenderer {
     PlayerGeometryRequest
   >();
   private frameBudget: FrameBudgetState = INITIAL_FRAME_BUDGET_STATE;
-  private readonly temporalAa: TemporalAa | null;
+  private temporalAa: TemporalAa | null;
+  private readonly motionObjects: THREE.Object3D[] = [];
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -334,6 +335,12 @@ export class ThreeMatchRenderer implements MatchRenderer {
       rig.advanceVisualTransition?.(dt);
     }
     if (this.temporalAa !== null) {
+      this.motionObjects.length = 0;
+      this.motionObjects.push(this.ball, this.ballShadow);
+      for (const rig of this.players.values()) {
+        this.motionObjects.push(rig.root);
+      }
+      this.temporalAa.setMotionObjects(this.motionObjects);
       this.temporalAa.render(this.scene, this.camera);
     } else {
       this.renderer.render(this.scene, this.camera);
@@ -499,6 +506,19 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
     this.visualQuality = quality;
     this.applyQuality();
+  }
+
+  setTemporalAa(enabled: boolean): void {
+    if (enabled === (this.temporalAa !== null)) {
+      return;
+    }
+    if (enabled) {
+      this.temporalAa = new TemporalAa(this.renderer);
+      this.temporalAa.resize();
+    } else {
+      this.temporalAa?.dispose();
+      this.temporalAa = null;
+    }
   }
 
   indicatorStates(): readonly ScreenIndicator[] {

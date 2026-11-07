@@ -27,6 +27,7 @@ export interface VisualQualityProfile {
 
 export const DEFAULT_VISUAL_QUALITY: VisualQuality = "high";
 export const VISUAL_QUALITY_STORAGE_KEY = "fb.visualQuality";
+export const TEMPORAL_AA_STORAGE_KEY = "fb.temporalAa";
 
 export const VISUAL_QUALITY: Readonly<
   Record<VisualQuality, VisualQualityProfile>
@@ -66,7 +67,10 @@ export interface VisualTuning {
   /** Render-only ball model scale; physics stays at the real 0.22 m diameter. */
   readonly ballScale: number;
   readonly temporalAa: {
-    /** Default off; enable with ?taa=1 while validating the resolver. */
+    /**
+     * Default when no stored setting or explicit URL override exists.
+     * Remains off after the full-quality benchmark missed its p95 gate.
+     */
     readonly enabled: boolean;
     /** History contribution after the neighborhood clamp. */
     readonly historyWeight: number;
@@ -76,6 +80,8 @@ export interface VisualTuning {
     readonly cameraCutDistanceM: number;
     /** A camera rotation jump above this resets history. */
     readonly cameraCutAngleRadians: number;
+    /** World-space depth mismatch that invalidates reprojected history. */
+    readonly disocclusionDepthM: number;
   };
   readonly authoredPlayer: {
     /** Base shoulder drop applied to the glTF A-pose in every grounded pose. */
@@ -244,6 +250,7 @@ export const VISUAL_TUNING: VisualTuning = {
     jitterPixels: 0.5,
     cameraCutDistanceM: 8,
     cameraCutAngleRadians: 0.4,
+    disocclusionDepthM: 0.6,
   },
   authoredPlayer: {
     armDownRadians: -0.58,
@@ -390,5 +397,47 @@ export function saveVisualQuality(quality: VisualQuality): void {
     window.localStorage.setItem(VISUAL_QUALITY_STORAGE_KEY, quality);
   } catch {
     // The current session still uses the selected quality.
+  }
+}
+
+export function parseTemporalAa(
+  value: unknown,
+  fallback: boolean = VISUAL_TUNING.temporalAa.enabled,
+): boolean {
+  if (value === "1" || value === 1 || value === true) {
+    return true;
+  }
+  if (value === "0" || value === 0 || value === false) {
+    return false;
+  }
+  return fallback;
+}
+
+/**
+ * URL overrides are intentionally stronger than localStorage and the default:
+ * `?taa=0` is the escape hatch for a failing GPU or an A/B acceptance run.
+ */
+export function loadTemporalAa(): boolean {
+  try {
+    const query = new URLSearchParams(window.location.search).get("taa");
+    if (query !== null) {
+      return parseTemporalAa(query);
+    }
+    return parseTemporalAa(
+      window.localStorage.getItem(TEMPORAL_AA_STORAGE_KEY),
+    );
+  } catch {
+    return VISUAL_TUNING.temporalAa.enabled;
+  }
+}
+
+export function saveTemporalAa(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(
+      TEMPORAL_AA_STORAGE_KEY,
+      enabled ? "1" : "0",
+    );
+  } catch {
+    // The current session still uses the selected mode.
   }
 }
