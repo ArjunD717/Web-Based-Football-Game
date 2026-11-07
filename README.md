@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 30**:
+both devices are thin clients. This repository is at **Milestone 31**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -34,7 +34,9 @@ template and a Lambert material fallback for minimal-detail players. M28 swaps
 that geometry on the existing skeleton so animation and foot locks survive the
 transition. M29 delivers meshopt-compressed match and low templates with an
 uncompressed fallback and explicit compressed-byte, triangle and bone budgets.
-M30 adds KTX2/Basis textures with a WebP/meshopt fallback chain.
+M30 adds KTX2/Basis textures with a WebP/meshopt fallback chain. M31
+cross-fades the high and low authored geometry instead of snapping between
+them.
 
 ## Requirements
 
@@ -172,6 +174,70 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 31 scope
+
+Implemented:
+
+- `AuthoredPlayerRig` now dissolves between the high and match low templates
+  over **0.18 s**. The outgoing geometry stays on the existing meshes with
+  transparent material clones; the incoming geometry is a temporary
+  `SkinnedMesh` bound to the same high-template skeleton
+- Both sides share the live skeleton, animation mixer, gait phase, foot locks
+  and footstep clock. Starting or finishing a dissolve does not reset any
+  animation or physical presentation state
+- High-only meshes such as eye decals and eyebrows fade out when entering low
+  detail and fade back in when returning to high. Low-only slots do not exist
+- Material opacity is eased linearly by `geometryFadeProgress`. Originals are
+  never mutated: every source and target material is a temporary clone with
+  its own base opacity, disposed when the dissolve finishes
+- `ThreeMatchRenderer` advances the dissolve from the actual render delta every
+  frame. The 10-frame geometry hysteresis and the animation-stride throttling
+  remain independent, so distant players still dissolve even when their
+  skeleton updates are skipped
+- Material LOD changes complete an in-flight dissolve rather than leaving
+  transparent materials attached. A reversal during a dissolve finishes the
+  current target and starts a new transition; the hysteresis makes this
+  uncommon
+- Synthetic rig smoke:
+  - high: 10 visible skinned meshes
+  - low dissolve start: 16 visible meshes, high source opacity 1, low target 0
+  - low dissolve half: 16 visible meshes, all source/target opacities 0.5
+  - low end: 6 visible meshes, geometry low, no fade meshes or temporary
+    materials
+  - high dissolve start: 16 visible meshes, low source 1, high target 0
+  - high half: all 16 at 0.5
+  - high end: 10 visible meshes, geometry high, no fade meshes
+  - No script errors; close-up screenshots showed the intended ghosted
+    halfway dissolve
+- The 22-player render benchmark remains **PASS**. Latest run: render average
+  **8.51 ms**, p95 **10.00 ms**, budget **16.70 ms**; frame interval average
+  **16.64 ms**, p95 **16.80 ms**. Repeated runs ranged from 6.43–8.64 ms
+  average, so the renderer remains under budget but the benchmark is noisy
+- `pnpm check` passes **689 tests**; the two new geometry-fade progress tests
+  cover clamping and invalid durations. `pnpm build` succeeds
+
+Known M31 limitations (by design):
+
+- The dissolve is an alpha blend, not a dithered or alpha-hashed transition.
+  Two overlapping skinned surfaces at 50% can show ghosting and transparent
+  sorting artefacts, especially on the face and kit edges
+- Each active dissolve temporarily doubles that player's skinned draw calls
+  and allocates geometry-target meshes and material clones. Resources are
+  disposed at the end, but there is no per-rig pool yet
+- The target mesh shares the high-template bind matrices and skeleton. The
+  low geometry must keep the same bone order and bind pose established by M28
+- A reversal in the middle of a dissolve snaps to the current target before
+  starting the reverse transition. The 10-frame hysteresis reduces, but does
+  not eliminate, this case
+- A material-LOD change during a dissolve finishes the dissolve immediately,
+  which can produce a one-frame material switch
+- The public `geometry` value reports the outgoing level during the dissolve
+  and the incoming level only at completion
+- Fade target meshes never cast real shadows; authored players still use the
+  blob shadow
+- There is no resource pooling or adaptive cap for many simultaneous
+  transitions; every player crossing the minimal threshold starts one
 
 ## Milestone 30 scope
 
