@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 36**:
+both devices are thin clients. This repository is at **Milestone 37**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -180,6 +180,57 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 37 scope
+
+Implemented:
+
+- Replaced the full-dynamic-mesh velocity render with a dedicated motion scene
+  of rigid proxies: one capsule per player root and one sphere for the ball.
+  Each proxy receives the current root world matrix and writes screen-space
+  motion against the previous proxy matrix
+- The proxy pass renders only those small rigid shapes, so it avoids a second
+  full skinned-mesh submission for all 22 players. The scene pass, shadows,
+  layers, background and fog are untouched
+- TAA is now **on by default**. `VISUAL_TUNING.temporalAa.enabled` is `true`;
+  the Settings switch and `fb.temporalAa` still persist an explicit opt-out,
+  and `?taa=0` remains the per-tab escape hatch. `?taa=1` forces it on for A/B
+  runs
+- The depth-history disocclusion check, half-float velocity buffer, Halton
+  jitter, neighborhood clamp and camera-cut resets from M36 are retained
+- Proxy dimensions live in `VISUAL_TUNING.temporalAa.motionProxy` with metre
+  units and comments
+
+Verification:
+
+- `pnpm check` passes **707 tests**; lint and typecheck pass
+- `pnpm build` succeeds
+- Clean single-tab benchmarks on the same 22-player scene:
+  - default TAA on: render average **10.46 ms**, p95 **13.40 ms**, gate
+    **PASS**
+  - direct `?taa=0`: render average **8.56 ms**, p95 **11.30 ms**, gate
+    **PASS**
+  - two additional opt-in proxy runs: **10.12 / 12.00 ms** and
+    **10.39 / 12.40 ms** average/p95, both **PASS**
+- Moving-player and camera-cut captures under TAA produced no shader, WebGL or
+  script errors; the authored silhouette and ball stayed stable
+- The Settings switch starts checked with no stored preference, writes `0`/`1`
+  to `fb.temporalAa` when toggled, and updates `aria-checked`
+
+Known M37 limitations:
+
+- Motion proxies are rigid root capsules/spheres. They capture root
+  translation, rotation and scale but not limb or ball-spin deformation; depth
+  rejection and the color clamp handle the uncovered detail
+- A capsule can cover a small amount of background around a player. That
+  background gets the proxy velocity unless depth disocclusion rejects it
+- The velocity and previous-depth targets remain full-resolution half-float
+  attachments; there is no byte fallback or stencil/velocity-mask test
+- Sprites and line geometry remain outside the motion pass; number markers and
+  the ball trail rely on depth/clamp handling
+- The setting has no automatic GPU capability probe; `?taa=0` or the Settings
+  switch is the manual fallback
+- All other M36 and M35 presentation caveats remain
+
 ## Milestone 36 scope
 
 Implemented:
@@ -200,11 +251,11 @@ Implemented:
   `setTemporalAa` path. `?taa=1` enables the resolve for an A/B run and
   `?taa=0` forces it off. The setting is disabled while the 2D renderer is
   active
-- Default remains **off** after acceptance. The direct path passed the latest
-  22-player benchmark, but two enabled runs were inconsistent: one passed at
-  p95 **14.80 ms**, the final repeat failed at p95 **18.50 ms** against the
-  **16.70 ms** gate. The setting therefore stays an explicit opt-in rather
-  than silently degrading default frame time
+- M36 initially kept the resolve **off** after acceptance. The direct path
+  passed the latest 22-player benchmark, but two enabled full-mesh runs were
+  inconsistent: one passed at p95 **14.80 ms**, the final repeat failed at p95
+  **18.50 ms** against the **16.70 ms** gate. M37 replaces that full-mesh
+  velocity pass with rigid proxies and flips the default on
 
 Verification:
 
@@ -222,9 +273,8 @@ Verification:
 
 Known M36 limitations:
 
-- TAA remains opt-in because the velocity and depth-history passes push the
-  full-quality p95 over the frame gate. The present velocity pass re-renders
-  every dynamic mesh at full resolution
+- M36's full-mesh velocity and depth-history passes pushed the full-quality
+  p95 over the frame gate; M37's proxy pass resolves this
 - There is no stencil buffer or velocity-mask disocclusion. Rejection uses
   previous depth and world-position distance only
 - Skinned vertices use the current skeleton for both current and previous
@@ -246,9 +296,9 @@ Known M36 limitations:
 Implemented:
 
 - M35 shipped a feature-flagged temporal antialiasing resolve for the Three
-  renderer without per-object motion vectors. M36 adds motion vectors and
-  depth-history disocclusion, but keeps the switch opt-in because the full
-  velocity pass misses the p95 frame gate
+  renderer without per-object motion vectors. M36 added motion vectors and
+  depth-history disocclusion; M37 replaces the full-mesh pass with rigid
+  proxies and makes the resolve default-on
 - The scene renders into an RGBA render target with a depth texture. A Halton
   subpixel camera jitter produces new samples, and a fullscreen resolve shader
   reprojects current depth through the previous view-projection into the
