@@ -65,6 +65,18 @@ export interface VisualTuning {
   readonly playerScale: number;
   /** Render-only ball model scale; physics stays at the real 0.22 m diameter. */
   readonly ballScale: number;
+  readonly temporalAa: {
+    /** Default off; enable with ?taa=1 while validating the resolver. */
+    readonly enabled: boolean;
+    /** History contribution after the neighborhood clamp. */
+    readonly historyWeight: number;
+    /** Maximum camera jitter in drawing-buffer pixels. */
+    readonly jitterPixels: number;
+    /** A camera translation jump above this resets history. */
+    readonly cameraCutDistanceM: number;
+    /** A camera rotation jump above this resets history. */
+    readonly cameraCutAngleRadians: number;
+  };
   readonly authoredPlayer: {
     /** Base shoulder drop applied to the glTF A-pose in every grounded pose. */
     readonly armDownRadians: number;
@@ -226,6 +238,13 @@ export interface VisualTuning {
 export const VISUAL_TUNING: VisualTuning = {
   playerScale: 1.22,
   ballScale: 1.45,
+  temporalAa: {
+    enabled: false,
+    historyWeight: 0.85,
+    jitterPixels: 0.5,
+    cameraCutDistanceM: 8,
+    cameraCutAngleRadians: 0.4,
+  },
   authoredPlayer: {
     armDownRadians: -0.58,
     poseBlendRate: 20,

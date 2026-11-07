@@ -46,6 +46,7 @@ import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
 import { configureGeometryFadeBudget } from "./geometry-dissolve-pool";
+import { TemporalAa } from "./temporal-aa";
 import { spatializeFootstep, type FootstepSink } from "./footsteps";
 import {
   VISUAL_QUALITY,
@@ -123,6 +124,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     PlayerGeometryRequest
   >();
   private frameBudget: FrameBudgetState = INITIAL_FRAME_BUDGET_STATE;
+  private readonly temporalAa: TemporalAa | null;
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -144,6 +146,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.renderer.toneMappingExposure = 1.08;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.temporalAa = temporalAaEnabled()
+      ? new TemporalAa(this.renderer)
+      : null;
 
     this.backdrop = createBackdropTexture();
     this.scene.background = this.backdrop;
@@ -258,6 +263,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       ),
     );
     this.renderer.setSize(this.width, this.height, false);
+    this.temporalAa?.resize();
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
   }
@@ -327,7 +333,11 @@ export class ThreeMatchRenderer implements MatchRenderer {
     for (const rig of this.players.values()) {
       rig.advanceVisualTransition?.(dt);
     }
-    this.renderer.render(this.scene, this.camera);
+    if (this.temporalAa !== null) {
+      this.temporalAa.render(this.scene, this.camera);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
     if (dt > 0) {
       this.frameBudget = updateFrameBudget(
         this.frameBudget,
@@ -423,6 +433,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       return;
     }
     this.cameraMode = mode;
+    this.temporalAa?.reset();
     this.baseShot = createCameraShot(mode);
     if (this.lastCameraState !== null) {
       this.cameraDirector.replaceBase(
@@ -438,6 +449,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       return;
     }
     this.replayActive = active;
+    this.temporalAa?.reset();
     this.cameraDirector.reset();
     this.contextController.reset();
     this.lastCameraState = null;
@@ -541,6 +553,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.cameraDebug.destroy();
     this.clearPlayers();
     this.authoredPlayers.dispose();
+    this.temporalAa?.dispose();
     disposeObject(this.scene);
     this.backdrop.dispose();
     this.renderer.dispose();
@@ -877,3 +890,13 @@ function createBallTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+function temporalAaEnabled(): boolean {
+  if (VISUAL_TUNING.temporalAa.enabled) {
+    return true;
+  }
+  try {
+    return new URLSearchParams(window.location.search).get("taa") === "1";
+  } catch {
+    return false;
+  }
+}
