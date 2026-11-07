@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 35**:
+both devices are thin clients. This repository is at **Milestone 36**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -180,13 +180,75 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 36 scope
+
+Implemented:
+
+- A per-mesh motion-vector buffer. Player rigs, their shadow/rings and the ball
+  are collected each frame, assigned a dedicated render layer, and rendered
+  through a skinning-aware velocity material. The velocity material transforms
+  the current and previous mesh world matrices into screen UV and writes the
+  delta into a half-float target
+- The resolver now samples that velocity first. Pixels without a velocity
+  fragment fall back to depth reprojection through the previous view
+  projection
+- A half-float previous-depth history is copied after each scene pass. The
+  resolver reconstructs the current and previous world positions and rejects
+  history when they differ by more than the configured world-space threshold,
+  covering disocclusion without a stencil buffer
+- A settings toggle, persisted in `fb.temporalAa`, with a renderer-level
+  `setTemporalAa` path. `?taa=1` enables the resolve for an A/B run and
+  `?taa=0` forces it off. The setting is disabled while the 2D renderer is
+  active
+- Default remains **off** after acceptance. The direct path passed the latest
+  22-player benchmark, but two enabled runs were inconsistent: one passed at
+  p95 **14.80 ms**, the final repeat failed at p95 **18.50 ms** against the
+  **16.70 ms** gate. The setting therefore stays an explicit opt-in rather
+  than silently degrading default frame time
+
+Verification:
+
+- `pnpm check` passes **707 tests**; lint, typecheck and all existing suites
+  remain green
+- `pnpm build` succeeds
+- Direct path, no query: render average **10.42 ms**, p95 **12.90 ms**, gate
+  **PASS**
+- Opt-in TAA: render average **15.96 ms**, p95 **18.50 ms**, gate **FAIL** on
+  the final run
+- Moving-player and camera-cut captures under `?taa=1` produced no shader,
+  WebGL or script errors; the player silhouette and ball remained stable
+- Settings toggle state, `aria-checked` and localStorage persistence (`0`/`1`)
+  were exercised in the browser
+
+Known M36 limitations:
+
+- TAA remains opt-in because the velocity and depth-history passes push the
+  full-quality p95 over the frame gate. The present velocity pass re-renders
+  every dynamic mesh at full resolution
+- There is no stencil buffer or velocity-mask disocclusion. Rejection uses
+  previous depth and world-position distance only
+- Skinned vertices use the current skeleton for both current and previous
+  positions. The previous mesh world matrix captures root translation/rotation,
+  but not the previous bone pose, so fast limb motion can still ghost
+- Velocity and depth-history targets require half-float color attachments; no
+  UnsignedByte fallback is implemented
+- Sprites and line geometry are excluded from the velocity layer; number
+  markers and the ball trail therefore rely on depth/depth-clamp handling
+- Transparent overlays and dissolving geometry use the same ordinary velocity
+  path
+- Camera cuts are still reset by translation/rotation thresholds and explicit
+  mode/replay/resize resets
+- The setting is only exposed in the Settings panel; there is no command-line
+  GPU capability probe or automatic quality downgrade
+
 ## Milestone 35 scope
 
 Implemented:
 
-- A feature-flagged temporal antialiasing resolve for the Three renderer.
-  Enable it with `?taa=1`; `VISUAL_TUNING.temporalAa.enabled` defaults to
-  **false** while motion-vector support is still outstanding
+- M35 shipped a feature-flagged temporal antialiasing resolve for the Three
+  renderer without per-object motion vectors. M36 adds motion vectors and
+  depth-history disocclusion, but keeps the switch opt-in because the full
+  velocity pass misses the p95 frame gate
 - The scene renders into an RGBA render target with a depth texture. A Halton
   subpixel camera jitter produces new samples, and a fullscreen resolve shader
   reprojects current depth through the previous view-projection into the
@@ -210,8 +272,8 @@ Implemented:
   - `pnpm check` passes **706 tests**; the new tests cover the Halton sequence,
     jitter bounds and invalid pixel-size clamping
   - `pnpm build` succeeds
-- Available with a development query parameter only; there is no production
-  menu toggle yet
+- M35 exposed the resolve through a query parameter only; M36 adds the
+  persisted Settings toggle
 
 Known M35 limitations (by design):
 
@@ -231,7 +293,7 @@ Known M35 limitations (by design):
   TAA is enabled, independent of quality tier
 - Transparent eye decals and netting are resolved as ordinary scene color; no
   special transparency handling
-- TAA is not exposed in the settings UI and remains a query/tuning flag
+- M35's query-only toggle was replaced by the M36 Settings switch
 - All M34 limitations remain outside the TAA path
 
 ## Milestone 34 scope
