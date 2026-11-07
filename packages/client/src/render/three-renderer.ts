@@ -116,6 +116,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly lodForward = new THREE.Vector3();
   private readonly lodToPlayer = new THREE.Vector3();
   private readonly lodProjected = new THREE.Vector3();
+  private readonly lodBufferSize = new THREE.Vector2();
   private readonly lodEntries: PlayerLodEntry[] = [];
   private readonly geometryRequests = new Map<
     string,
@@ -343,6 +344,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
    */
   private applyPlayerLod(): void {
     this.camera.updateMatrixWorld();
+    this.renderer.getDrawingBufferSize(this.lodBufferSize);
     this.camera.getWorldPosition(this.lodCameraPosition);
     this.camera.getWorldDirection(this.lodForward);
     const tuning = VISUAL_TUNING.playerLod;
@@ -388,6 +390,14 @@ export class ThreeMatchRenderer implements MatchRenderer {
       : new Set<string>();
     for (const entry of this.lodEntries) {
       const rig = this.players.get(entry.id);
+      if (rig !== undefined) {
+        const root = rig.root.getWorldPosition(this.lodPlayerPosition);
+        this.lodProjected.copy(root).project(this.camera);
+        rig.setDitherAnchor?.(
+          (this.lodProjected.x * 0.5 + 0.5) * this.lodBufferSize.x,
+          (this.lodProjected.y * 0.5 + 0.5) * this.lodBufferSize.y,
+        );
+      }
       const detail = playerDetailForScreenHeight(
         entry.screenHeightPx,
         tuning,

@@ -21,6 +21,11 @@ describe("geometry dissolve material", () => {
     expect(dissolve.material).not.toBe(source);
     expect(dissolve.source).toBe(source);
     expect(dissolve.incoming).toBe(false);
+    expect(dissolve.anchor.value.x).toBe(0);
+    expect(dissolve.anchor.value.y).toBe(0);
+    dissolve.anchor.value.set(12, 34);
+    expect(dissolve.anchor.value.x).toBe(12);
+    expect(dissolve.anchor.value.y).toBe(34);
     expect(dissolve.material.transparent).toBe(true);
     expect(dissolve.material.opacity).toBe(0.6);
     expect(dissolve.material.depthWrite).toBe(false);
@@ -45,8 +50,11 @@ describe("geometry dissolve material", () => {
     expect(shader.uniforms.uFbDissolve).toBe(dissolve.progress);
     expect(shader.uniforms.uFbDissolveInverted?.value).toBe(1);
     expect(shader.uniforms.uFbBlueNoise?.value).toBe(noise);
+    expect(shader.uniforms.uFbDitherAnchor).toBe(dissolve.anchor);
     expect(shader.fragmentShader).toContain("uniform sampler2D uFbBlueNoise;");
+    expect(shader.fragmentShader).toContain("uniform vec2 uFbDitherAnchor;");
     expect(shader.fragmentShader).toContain("uniform float uFbDissolve;");
+    expect(shader.fragmentShader).toContain("uFbDitherAnchor");
     expect(shader.fragmentShader).toContain("texture2D");
     expect(shader.fragmentShader).toContain("/ 8.0");
     expect(shader.fragmentShader).toContain("discard");

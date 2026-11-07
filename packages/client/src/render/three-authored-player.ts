@@ -256,6 +256,8 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private geometryLevel: PlayerGeometry = "high";
   private visualGeometry: PlayerGeometry = "high";
   private geometryFade: GeometryFade | null = null;
+  private ditherAnchorX = 0;
+  private ditherAnchorY = 0;
   private lowAttached = false;
   private readonly geometrySlots: GeometrySlot[] = [];
   private animationStride = 1;
@@ -850,6 +852,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       }
       for (const entry of source) {
         entry.progress.value = 0;
+        entry.anchor.value.set(this.ditherAnchorX, this.ditherAnchorY);
       }
 
       const targetGeometry =
@@ -864,6 +867,7 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         target = this.acquireDissolveMaterials(targetBase, true);
         for (const entry of target) {
           entry.progress.value = 0;
+          entry.anchor.value.set(this.ditherAnchorX, this.ditherAnchorY);
         }
         const targetMaterial: MaterialLike = Array.isArray(targetBase)
           ? target.map((entry) => entry.material)
@@ -983,6 +987,33 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     return this.materialLod && slot.cheapMaterial !== null
       ? slot.cheapMaterial
       : slot.baseMaterial;
+  }
+
+  /**
+   * Bind the dither texture origin to the player's projected root. The
+   * source and target share this anchor, so the dissolve partition remains
+   * complementary while the pattern follows the player on screen.
+   */
+  setDitherAnchor(x: number, y: number): void {
+    const nextX = Number.isFinite(x) ? x : 0;
+    const nextY = Number.isFinite(y) ? y : 0;
+    if (nextX === this.ditherAnchorX && nextY === this.ditherAnchorY) {
+      return;
+    }
+    this.ditherAnchorX = nextX;
+    this.ditherAnchorY = nextY;
+    const fade = this.geometryFade;
+    if (fade === null) {
+      return;
+    }
+    for (const entry of fade.entries) {
+      for (const source of entry.source) {
+        source.anchor.value.set(nextX, nextY);
+      }
+      for (const target of entry.target) {
+        target.anchor.value.set(nextX, nextY);
+      }
+    }
   }
 
   setFootstepSink(sink: FootstepSink | null): void {
