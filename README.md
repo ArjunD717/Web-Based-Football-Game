@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 33**:
+both devices are thin clients. This repository is at **Milestone 34**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -40,6 +40,8 @@ them. M32 replaces the alpha-blend cross-fade with a screen-space dithered
 geometry dissolve and pools transition resources. M33 moves that dither to a
 static generated blue-noise texture, shares the transition cache across rigs
 and lowers the dissolve budget automatically when frames are under pressure.
+M34 anchors that pattern to each player's projected root so it no longer
+slides across the screen as the camera moves.
 
 ## Requirements
 
@@ -177,6 +179,58 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 34 scope
+
+> M33's screen-anchored dither limitation is superseded by the player-anchored
+> sampling below. A full TAA temporal resolve is still deferred: it needs
+> motion vectors and a post-processing depth/history pipeline rather than a
+> half-implemented shader blend.
+
+Implemented:
+
+- The blue-noise coordinate is now
+  `floor(gl_FragCoord.xy) - uFbDitherAnchor` and is divided by the texture
+  size. Source and target materials share the anchor, so the exactly-one-
+  surface partition is unchanged
+- `ThreeMatchRenderer` projects each player rig's root into drawing-buffer
+  pixels in the same LOD pass that selects detail. It uses the renderer's real
+  drawing-buffer size, not the CSS canvas size, and calls
+  `setDitherAnchor` before any geometry transition starts
+- `AuthoredPlayerRig` stores the anchor independently of a fade and applies it
+  to every active source/target material. Moving the player or camera updates
+  the anchor and therefore moves the pattern with the player. Pooled material
+  clones receive the current anchor again when a new fade starts
+- The shared skeleton, animation mixer, gait phase, foot locks and footstep
+  clock are untouched
+- Verification:
+  - in the authored-rig probe, the controlled player's anchor settled at
+    drawing-buffer pixel `(853, 253)` while an off-screen teammate had a
+    distinct off-screen projection
+  - switching to broadcast and moving the teammate from `(20, 10)` to
+    `(80, 55)` moved that teammate's anchor from `(436, 556)` to
+    `(1520, 232)`, independently of the controlled player
+  - a frozen half-dissolve capture showed the anchored blue-noise stipple
+    with no shader errors
+- `pnpm check` passes **703 tests**; `pnpm build` succeeds
+- Latest 22-player render benchmark: render average **8.88 ms**, p95
+  **10.60 ms**, budget **16.70 ms**, **PASS**; frame average **16.64 ms**,
+  p95 **16.80 ms**. Headless timings remain noisy; only optional KTX2 `HEAD`
+  aborts were logged
+
+Known M34 limitations:
+
+- Anchoring is to the player's projected root, not to the skinned surface or
+  its UVs. Root-relative animation and body rotation can still make the
+  pattern slide across the shirt and limbs
+- Off-screen or behind-camera roots produce large/negative anchor values;
+  those fragments are not visible, but the uniform is not clamped
+- There is still no TAA history, camera jitter, motion vectors or temporal
+  resolve. The pattern is static per frame but not temporally accumulated
+- All M33 limitations remain: 32 × 32 repeat, approximate blue-noise
+  generator, transparent eye decals, shared palette clone retention, deferred
+  transitions under pressure, standard shader-chunk assumptions, reversal
+  snapping and no real fade-target shadows
 
 ## Milestone 33 scope
 
