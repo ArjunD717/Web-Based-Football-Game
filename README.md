@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 32**:
+both devices are thin clients. This repository is at **Milestone 33**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -37,7 +37,9 @@ uncompressed fallback and explicit compressed-byte, triangle and bone budgets.
 M30 adds KTX2/Basis textures with a WebP/meshopt fallback chain. M31
 cross-fades the high and low authored geometry instead of snapping between
 them. M32 replaces the alpha-blend cross-fade with a screen-space dithered
-geometry dissolve and pools transition resources.
+geometry dissolve and pools transition resources. M33 moves that dither to a
+static generated blue-noise texture, shares the transition cache across rigs
+and lowers the dissolve budget automatically when frames are under pressure.
 
 ## Requirements
 
@@ -175,6 +177,77 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 33 scope
+
+> M32's per-rig transition pools and fixed dissolve cap are superseded by
+> M33. The dither remains screen-anchored; this milestone does not add TAA.
+
+Implemented:
+
+- The dissolve threshold comes from a deterministic **32 × 32 blue-noise
+  texture** generated at load time by tileable farthest-point sampling. It is
+  sampled with nearest filtering and repeat wrapping from the fragment's
+  screen coordinate. There is no per-frame random hash, so a stationary
+  camera and player produce a stable pattern
+- Source and target materials still evaluate the same texture coordinate and
+  complementary cutoffs, preserving the exactly-one-surface partition.
+  Opaque materials stay opaque and depth-writing
+- `AuthoredPlayerLibrary` owns one shared `GeometryDissolvePool`:
+  - outgoing and incoming material clones are cached by original material
+  - temporary `SkinnedMesh` targets are cached globally, rebound to the live
+    skeleton on acquisition, and unbound when released
+  - per-rig skin/boot and cheap-material clones are dropped from the shared
+    cache when that rig is disposed; shared palette materials remain cached
+- The global dissolve budget is now adaptive:
+  - normal cap **6**
+  - frame-budget-pressured cap **3**
+  - `ThreeMatchRenderer` configures the budget from the previous frame's
+    pressure state before applying LOD
+  - deferred transitions still retry automatically
+- The shared skeleton, mixer, gait phase, foot-lock state and footstep clock
+  remain untouched.
+- Verification:
+  - 32 × 32 rank generator is deterministic, covers `0..254`, and produces a
+    repeat/nearest-filtered `DataTexture`
+  - a half-dissolve authored-rig capture showed blue-noise stipple at the
+    silhouette with no alpha ghosting and no shader errors
+  - first rig entering low detail left 6 free fade meshes and 16 material
+    clones in the shared pool; a second same-team rig reused all 6 fade
+    meshes, leaving the free-mesh count at 6. Its distinct skin/boot materials
+    correctly created additional entries
+  - entering high detail grew the free-mesh pool only to the number of target
+    slots that need high geometry
+  - material/mesh free-list reuse, double-release protection, per-rig source
+    eviction and the adaptive budget (including invalid-cap clamping) are
+    covered by unit tests
+- `pnpm check` passes **703 tests**; `pnpm build` succeeds
+- Latest 22-player render benchmark: render average **9.08 ms**, p95
+  **10.80 ms**, budget **16.70 ms**, **PASS**; frame interval average
+  **16.64 ms**, p95 **16.80 ms**. Headless benchmark timings vary noticeably
+  between runs; the gate remains green. Only the optional KTX2 `HEAD` aborts
+  were reported
+
+Known M33 limitations (by design):
+
+- The blue-noise pattern is still locked to screen space. A moving camera can
+  make it slide across a surface; there is no player-anchored sampler or TAA
+  accumulation yet
+- The 32 × 32 texture repeats every 32 screen pixels. It is static and
+  deterministic, but large close-ups can reveal the repeat
+- The generator is a progressive farthest-point rank, not a full
+  void-and-cluster blue-noise optimiser
+- Transparent eye decals continue to alpha-blend beneath the dissolve
+- The shared cache retains free material clones for shared palette colours
+  until library disposal. Per-rig colours are evicted on rig disposal, but
+  repeated team selections can still accumulate palette keys
+- The adaptive cap can defer low-detail transitions under pressure; those
+  players stay at high geometry until budget is available
+- Shader injection still assumes Three's standard `void main()` and
+  `alphatest_fragment` chunks
+- Reversals and material-LOD changes still finish the current dissolve before
+  starting another
+- Fade target meshes do not cast real shadows
 
 ## Milestone 32 scope
 
