@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 31**:
+both devices are thin clients. This repository is at **Milestone 32**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -36,7 +36,8 @@ transition. M29 delivers meshopt-compressed match and low templates with an
 uncompressed fallback and explicit compressed-byte, triangle and bone budgets.
 M30 adds KTX2/Basis textures with a WebP/meshopt fallback chain. M31
 cross-fades the high and low authored geometry instead of snapping between
-them.
+them. M32 replaces the alpha-blend cross-fade with a screen-space dithered
+geometry dissolve and pools transition resources.
 
 ## Requirements
 
@@ -174,6 +175,84 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 32 scope
+
+> The M31 alpha-blend ghosting and no-pooling limitations are superseded by
+> M32.
+
+Implemented:
+
+- The high/low geometry transition is now a **screen-space dithered dissolve**
+  instead of a transparent cross-fade. Both surfaces evaluate the same
+  coordinate hash; the outgoing surface survives below a moving cutoff and the
+  incoming surface survives above it. Every pixel is drawn by exactly one
+  level, so there are no double-covered or missing pixels in the middle of the
+  transition
+- Opaque source materials stay opaque and depth-writing. Eye-decal materials
+  keep their original transparency mode. The shader is injected only into
+  temporary fade clones; source materials, opacity, alpha test and depth
+  settings are never mutated
+- Transition resources are pooled per rig:
+  - one reusable fade target `SkinnedMesh` per geometry slot, rebound to the
+    live skeleton whenever a dissolve starts
+  - outgoing and incoming material clones cached by their original material
+    and by dissolve side
+  - low/high/low/high transitions reuse the same meshes and clones; pools are
+    disposed with the rig
+- A global cap keeps at most **6** geometry dissolves active at once. Deferred
+  starts leave the committed level different from the visual level, so the
+  next LOD pass retries. A late-arriving low template follows the same retry
+  path. No transition is dropped permanently
+- The shared skeleton, animation mixer, gait phase, foot-lock state and
+  footstep clock remain untouched by both the dissolve and the pooling
+- Synthetic authored-rig verification:
+  - high: 10 visible skinned meshes
+  - high → low start: 16 visible meshes, 6 pooled fade targets, 8 outgoing and
+    6 incoming material clones, progress 0
+  - high → low half: progress 0.5, 16 visible meshes, all fade uniforms 0.5;
+    close-up showed a stippled silhouette and no alpha ghosting
+  - low end: 6 visible meshes, geometry low, 0 fade meshes in the scene
+  - low → high → low → high: pool sizes stabilized at 10 fade targets, 8
+    outgoing and 8 incoming material clones; no per-transition growth
+  - 9-rig cap probe: exactly 6 rigs started dissolving, the other 3 remained
+    committed/visual high; the next request started the remaining 3
+- `pnpm check` passes **698 tests**:
+  - complement/discard rules for the dither partition
+  - edge clamping and invalid fade durations
+  - dissolve budget admission and invalid-cap handling
+  - shader-uniform injection, opacity/depth preservation and distinct program
+    cache keys for incoming/outgoing materials
+- `pnpm build` succeeds
+- Latest 22-player render benchmark: render average **5.06 ms**, p95
+  **6.10 ms**, budget **16.70 ms**, **PASS**; frame interval average
+  **16.64 ms**, p95 **16.80 ms**. The optional KTX2 HEAD aborts remain
+  non-fatal; no script or shader errors were observed
+
+Known M32 limitations (by design):
+
+- The dither pattern is locked to screen space, not surface UVs. It is stable
+  frame to frame but can shimmer as the camera or player moves across it; there
+  is no TAA or blue-noise temporal filter
+- High and low silhouettes are partitioned at pixel granularity, so silhouette
+  edges visibly stipple during the 0.18 s transition. Interior pixels usually
+  look solid because the two levels share colours
+- Transparent submeshes such as eye decals still use alpha blending beneath the
+  dissolve. This is acceptable for their small screen area but is not a full
+  order-independent transparency solution
+- The cap can defer low-detail transitions for a few frames when many players
+  cross the threshold together. The deferred players stay on high geometry
+  until the next LOD pass obtains budget
+- Pools are per rig. A rig may retain up to one target mesh per geometry slot
+  and two material clones per distinct source material until it is disposed;
+  there is no cross-rig cache
+- The shader injection assumes Three's standard fragment chunks, specifically
+  `void main() {` and `#include <alphatest_fragment>`. Custom ShaderMaterials
+  are out of scope
+- Reversals during a dissolve still finish the current target before starting
+  the reverse, and a material-LOD change still completes the dissolve
+- Fade target meshes do not cast real shadows; authored players keep the blob
+  shadow
 
 ## Milestone 31 scope
 
