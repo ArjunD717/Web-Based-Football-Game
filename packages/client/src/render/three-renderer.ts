@@ -46,7 +46,7 @@ import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
 import { configureGeometryFadeBudget } from "./geometry-dissolve-pool";
-import { TemporalAa } from "./temporal-aa";
+import { TemporalAa, type TemporalMotionSource } from "./temporal-aa";
 import { spatializeFootstep, type FootstepSink } from "./footsteps";
 import {
   VISUAL_QUALITY,
@@ -125,7 +125,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
   >();
   private frameBudget: FrameBudgetState = INITIAL_FRAME_BUDGET_STATE;
   private temporalAa: TemporalAa | null;
-  private readonly motionObjects: THREE.Object3D[] = [];
+  private readonly motionSources: TemporalMotionSource[] = [];
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -335,12 +335,12 @@ export class ThreeMatchRenderer implements MatchRenderer {
       rig.advanceVisualTransition?.(dt);
     }
     if (this.temporalAa !== null) {
-      this.motionObjects.length = 0;
-      this.motionObjects.push(this.ball, this.ballShadow);
+      this.motionSources.length = 0;
+      this.motionSources.push({ object: this.ball, shape: "ball" });
       for (const rig of this.players.values()) {
-        this.motionObjects.push(rig.root);
+        this.motionSources.push({ object: rig.root, shape: "player" });
       }
-      this.temporalAa.setMotionObjects(this.motionObjects);
+      this.temporalAa.setMotionSources(this.motionSources);
       this.temporalAa.render(this.scene, this.camera);
     } else {
       this.renderer.render(this.scene, this.camera);
@@ -911,12 +911,16 @@ function createBallTexture(): THREE.CanvasTexture {
 }
 
 function temporalAaEnabled(): boolean {
-  if (VISUAL_TUNING.temporalAa.enabled) {
-    return true;
-  }
   try {
-    return new URLSearchParams(window.location.search).get("taa") === "1";
+    const query = new URLSearchParams(window.location.search).get("taa");
+    if (query === "1") {
+      return true;
+    }
+    if (query === "0") {
+      return false;
+    }
   } catch {
-    return false;
+    // Fall through to the configured default.
   }
+  return VISUAL_TUNING.temporalAa.enabled;
 }

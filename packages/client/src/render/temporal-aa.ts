@@ -27,21 +27,16 @@ void main() {
 `;
 
 const MOTION_VERTEX = /* glsl */ `
-#include <common>
-#include <skinning_pars_vertex>
-
 uniform mat4 uPrevModelMatrix;
 uniform mat4 uPrevViewProjection;
 varying vec2 vVelocity;
 varying float vValid;
 
 void main() {
-	vec4 transformed = vec4(position, 1.0);
-	#include <skinning_vertex>
-
-	vec4 currentWorld = modelMatrix * transformed;
+	vec4 localPosition = vec4(position, 1.0);
+	vec4 currentWorld = modelMatrix * localPosition;
 	vec4 currentClip = projectionMatrix * viewMatrix * currentWorld;
-	vec4 previousWorld = uPrevModelMatrix * transformed;
+	vec4 previousWorld = uPrevModelMatrix * localPosition;
 	vec4 previousClip = uPrevViewProjection * previousWorld;
 	gl_Position = currentClip;
 
@@ -149,7 +144,12 @@ void main() {
 }
 `;
 
-const MOTION_LAYER = 1;
+export type TemporalMotionShape = "player" | "ball";
+
+export interface TemporalMotionSource {
+  readonly object: THREE.Object3D;
+  readonly shape: TemporalMotionShape;
+}
 
 export function halton(index: number, base: number): number {
   let result = 0;
@@ -190,7 +190,7 @@ interface DepthCopyUniforms {
 
 /**
  * Temporal antialiasing for the live Three scene. Camera jitter supplies
- * subpixel samples; depth plus per-mesh velocity reprojects into the previous
+ * subpixel samples; depth plus rigid motion proxies reproject into the previous
  * frame. A depth and neighborhood check rejects history at disocclusions,
  * while the feature remains user-selectable because unsupported WebGL context
  * combinations must be able to bypass it.
@@ -236,9 +236,11 @@ export class TemporalAa {
   private readonly drawingBuffer = new THREE.Vector2();
   private readonly jitter = new THREE.Vector2();
   private readonly savedClearColor = new THREE.Color();
-  private motionObjects: readonly THREE.Object3D[] = [];
-  private readonly motionMeshes: THREE.Object3D[] = [];
-  private readonly motionLayerAssigned = new WeakSet<THREE.Object3D>();
+  private motionSources: readonly TemporalMotionSource[] = [];
+  private readonly motionScene = new THREE.Scene();
+  private readonly motionProxies = new Map<THREE.Object3D, THREE.Mesh>();
+  private readonly playerProxyGeometry: THREE.CapsuleGeometry;
+  private readonly ballProxyGeometry: THREE.SphereGeometry;
   private readonly previousMotionMatrices = new WeakMap<
     THREE.Object3D,
     THREE.Matrix4
@@ -321,10 +323,24 @@ export class TemporalAa {
     );
     this.fullscreenMesh.frustumCulled = false;
     this.fullscreenScene.add(this.fullscreenMesh);
+
+    const proxy = VISUAL_TUNING.temporalAa.motionProxy;
+    this.playerProxyGeometry = new THREE.CapsuleGeometry(
+      proxy.playerRadiusM,
+      proxy.playerLengthM,
+      4,
+      8,
+    );
+    this.playerProxyGeometry.translate(0, proxy.playerCenterYOffsetM, 0);
+    this.ballProxyGeometry = new THREE.SphereGeometry(
+      proxy.ballRadiusM,
+      10,
+      8,
+    );
   }
 
-  setMotionObjects(objects: readonly THREE.Object3D[]): void {
-    this.motionObjects = objects;
+  setMotionSources(sources: readonly TemporalMotionSource[]): void {
+    this.motionSources = sources;
   }
 
   reset(): void {
@@ -390,8 +406,8 @@ export class TemporalAa {
     const previousTarget = this.renderer.getRenderTarget();
     this.renderer.setRenderTarget(this.sceneTarget);
     this.renderer.render(scene, camera);
-    this.collectMotionMeshes();
-    this.renderMotionVectors(scene, camera);
+    this.collectMotionProxies();
+    this.renderMotionVectors(camera);
     camera.clearViewOffset();
 
     const historyRead = this.history[this.readIndex] ?? null;
@@ -464,38 +480,54 @@ export class TemporalAa {
     this.copyMaterial.dispose();
     this.velocityMaterial.dispose();
     this.depthCopyMaterial.dispose();
+    this.playerProxyGeometry.dispose();
+    this.ballProxyGeometry.dispose();
     this.fullscreenMesh.geometry.dispose();
+    this.motionScene.clear();
+    this.motionProxies.clear();
   }
 
-  private collectMotionMeshes(): void {
-    this.motionMeshes.length = 0;
-    for (const root of this.motionObjects) {
-      root.traverse((object) => {
-        if (!(object instanceof THREE.Mesh)) {
-          return;
-        }
-        if (!this.motionLayerAssigned.has(object)) {
-          object.layers.enable(MOTION_LAYER);
-          this.motionLayerAssigned.add(object);
-        }
-        this.motionMeshes.push(object);
-      });
+  private collectMotionProxies(): void {
+    const active = new Set<THREE.Object3D>();
+    for (const source of this.motionSources) {
+      let proxy = this.motionProxies.get(source.object);
+      if (proxy === undefined) {
+        proxy = new THREE.Mesh(
+          source.shape === "ball"
+            ? this.ballProxyGeometry
+            : this.playerProxyGeometry,
+          this.velocityMaterial,
+        );
+        proxy.matrixAutoUpdate = false;
+        proxy.frustumCulled = false;
+        proxy.userData.motionShape = source.shape;
+        this.motionScene.add(proxy);
+        this.motionProxies.set(source.object, proxy);
+      } else if (proxy.userData.motionShape !== source.shape) {
+        proxy.geometry =
+          source.shape === "ball"
+            ? this.ballProxyGeometry
+            : this.playerProxyGeometry;
+        proxy.userData.motionShape = source.shape;
+      }
+      proxy.visible = true;
+      active.add(source.object);
+      proxy.matrix.copy(source.object.matrixWorld);
+      proxy.matrixWorld.copy(source.object.matrixWorld);
+      proxy.matrixWorldNeedsUpdate = false;
+    }
+    for (const [object, proxy] of this.motionProxies) {
+      if (!active.has(object)) {
+        proxy.visible = false;
+      }
     }
   }
 
-  private renderMotionVectors(
-    scene: THREE.Scene,
-    camera: THREE.PerspectiveCamera,
-  ): void {
+  private renderMotionVectors(camera: THREE.PerspectiveCamera): void {
     if (this.velocityTarget === null) {
       return;
     }
     const previousTarget = this.renderer.getRenderTarget();
-    const savedLayers = camera.layers.mask;
-    const savedOverride = scene.overrideMaterial;
-    const savedBackground = scene.background;
-    const savedFog = scene.fog;
-    const savedShadows = this.renderer.shadowMap.enabled;
     const savedAutoClear = this.renderer.autoClear;
     this.renderer.getClearColor(this.savedClearColor);
     const savedAlpha = this.renderer.getClearAlpha();
@@ -503,23 +535,13 @@ export class TemporalAa {
     this.renderer.setRenderTarget(this.velocityTarget);
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.clear(true, false, false);
-    camera.layers.set(MOTION_LAYER);
-    scene.overrideMaterial = this.velocityMaterial;
-    scene.background = null;
-    scene.fog = null;
-    this.renderer.shadowMap.enabled = false;
     this.renderer.autoClear = false;
     this.velocityUniforms.uPrevViewProjection.value.copy(
       this.lastViewProjection,
     );
-    this.renderer.render(scene, camera);
+    this.renderer.render(this.motionScene, camera);
 
     this.renderer.autoClear = savedAutoClear;
-    this.renderer.shadowMap.enabled = savedShadows;
-    scene.fog = savedFog;
-    scene.background = savedBackground;
-    scene.overrideMaterial = savedOverride;
-    camera.layers.mask = savedLayers;
     this.renderer.setClearColor(this.savedClearColor, savedAlpha);
     this.renderer.setRenderTarget(previousTarget);
   }
@@ -538,13 +560,16 @@ export class TemporalAa {
   }
 
   private updateMotionMatrices(): void {
-    for (const mesh of this.motionMeshes) {
-      let matrix = this.previousMotionMatrices.get(mesh);
+    for (const proxy of this.motionProxies.values()) {
+      if (!proxy.visible) {
+        continue;
+      }
+      let matrix = this.previousMotionMatrices.get(proxy);
       if (matrix === undefined) {
         matrix = new THREE.Matrix4();
-        this.previousMotionMatrices.set(mesh, matrix);
+        this.previousMotionMatrices.set(proxy, matrix);
       }
-      matrix.copy(mesh.matrixWorld);
+      matrix.copy(proxy.matrixWorld);
     }
   }
 

@@ -69,7 +69,7 @@ export interface VisualTuning {
   readonly temporalAa: {
     /**
      * Default when no stored setting or explicit URL override exists.
-     * Remains off after the full-quality benchmark missed its p95 gate.
+     * Enabled after the proxy velocity pass cleared the full-quality gate.
      */
     readonly enabled: boolean;
     /** History contribution after the neighborhood clamp. */
@@ -82,6 +82,17 @@ export interface VisualTuning {
     readonly cameraCutAngleRadians: number;
     /** World-space depth mismatch that invalidates reprojected history. */
     readonly disocclusionDepthM: number;
+    /**
+     * Cheap rigid proxies for screen-space motion. They cover the player body
+     * and ball rather than re-rendering every skinned mesh into the velocity
+     * buffer. Values are local units before the rig root scale.
+     */
+    readonly motionProxy: {
+      readonly playerRadiusM: number;
+      readonly playerLengthM: number;
+      readonly playerCenterYOffsetM: number;
+      readonly ballRadiusM: number;
+    };
   };
   readonly authoredPlayer: {
     /** Base shoulder drop applied to the glTF A-pose in every grounded pose. */
@@ -245,12 +256,18 @@ export const VISUAL_TUNING: VisualTuning = {
   playerScale: 1.22,
   ballScale: 1.45,
   temporalAa: {
-    enabled: false,
+    enabled: true,
     historyWeight: 0.85,
     jitterPixels: 0.5,
     cameraCutDistanceM: 8,
     cameraCutAngleRadians: 0.4,
     disocclusionDepthM: 0.6,
+    motionProxy: {
+      playerRadiusM: 0.35,
+      playerLengthM: 1.1,
+      playerCenterYOffsetM: 0.9,
+      ballRadiusM: 0.16,
+    },
   },
   authoredPlayer: {
     armDownRadians: -0.58,

@@ -26,6 +26,15 @@ describe("visual quality presets", () => {
     expect(parseTemporalAa("yes", true)).toBe(true);
     expect(parseTemporalAa(null, false)).toBe(false);
     expect(VISUAL_TUNING.temporalAa.disocclusionDepthM).toBeGreaterThan(0);
+    const proxy = VISUAL_TUNING.temporalAa.motionProxy;
+    expect(proxy.playerRadiusM).toBeGreaterThan(0);
+    expect(proxy.playerLengthM).toBeGreaterThan(0);
+    expect(proxy.playerCenterYOffsetM).toBeCloseTo(
+      proxy.playerLengthM / 2 + proxy.playerRadiusM,
+      6,
+    );
+    expect(proxy.ballRadiusM).toBeGreaterThan(0);
+    expect(proxy.ballRadiusM).toBeLessThan(proxy.playerRadiusM);
   });
 
   it("increases resolution and shadow resolution with quality", () => {
