@@ -61,3 +61,34 @@ export function geometryFadeProgress(
   }
   return Math.max(0, Math.min(1, elapsedSeconds / durationSeconds));
 }
+
+/** A dissolve is either drawing the outgoing or incoming surface at this pixel. */
+export function dissolveCutoff(progress: number): number {
+  const clamped = Number.isFinite(progress)
+    ? Math.max(0, Math.min(1, progress))
+    : 0;
+  return 1 - clamped;
+}
+
+export function dissolveSourceVisible(
+  ditherThreshold: number,
+  progress: number,
+): boolean {
+  return ditherThreshold < dissolveCutoff(progress);
+}
+
+export function dissolveTargetVisible(
+  ditherThreshold: number,
+  progress: number,
+): boolean {
+  return ditherThreshold >= dissolveCutoff(progress);
+}
+
+/** Keep the frame spike finite when many players cross a geometry threshold. */
+export function geometryFadeBudgetAvailable(active: number, cap: number): boolean {
+  const maximum = Number.isFinite(cap)
+    ? Math.max(1, Math.floor(cap))
+    : 1;
+  const used = Number.isFinite(active) ? Math.max(0, Math.floor(active)) : 0;
+  return used < maximum;
+}

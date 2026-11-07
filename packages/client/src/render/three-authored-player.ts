@@ -15,6 +15,11 @@ import {
 } from "./authored-asset";
 import { cheapMaterialFor } from "./authored-material-lod";
 import {
+  createDissolveMaterial,
+  type DissolveMaterial,
+} from "./geometry-dissolve";
+import {
+  geometryFadeBudgetAvailable,
   geometryFadeProgress,
   type PlayerGeometry,
 } from "./player-geometry";
@@ -74,11 +79,6 @@ interface AuthoredPalette {
 
 type MaterialLike = THREE.Material | THREE.Material[];
 
-interface FadeMaterial {
-  readonly material: THREE.Material;
-  readonly baseOpacity: number;
-}
-
 interface GeometrySlot {
   readonly mesh: THREE.Mesh;
   readonly highGeometry: THREE.BufferGeometry;
@@ -90,9 +90,9 @@ interface GeometrySlot {
 
 interface GeometryFadeEntry {
   readonly slot: GeometrySlot;
-  readonly source: readonly FadeMaterial[];
+  readonly source: readonly DissolveMaterial[];
   readonly targetMesh: THREE.SkinnedMesh | null;
-  readonly target: readonly FadeMaterial[];
+  readonly target: readonly DissolveMaterial[];
 }
 
 interface GeometryFade {
@@ -229,6 +229,8 @@ export class AuthoredPlayerLibrary {
 }
 
 export class AuthoredPlayerRig implements MatchPlayerRig {
+  private static activeGeometryFades = 0;
+
   readonly root = new THREE.Group();
 
   get geometry(): PlayerGeometry {
@@ -254,7 +256,18 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
   private geometryFade: GeometryFade | null = null;
   private lowAttached = false;
   private readonly geometrySlots: GeometrySlot[] = [];
-  private readonly transitionMaterials: THREE.Material[] = [];
+  private readonly outgoingFadeMaterials = new Map<
+    THREE.Material,
+    DissolveMaterial
+  >();
+  private readonly incomingFadeMaterials = new Map<
+    THREE.Material,
+    DissolveMaterial
+  >();
+  private readonly fadeTargets = new Map<
+    GeometrySlot,
+    THREE.SkinnedMesh
+  >();
   private animationStride = 1;
   private readonly animationPhase: number;
   private forceAnimation = true;
@@ -777,8 +790,12 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       slot.lowGeometry = lowGeometries.get(slot.mesh.name) ?? null;
     }
     this.lowAttached = true;
-    if (this.geometryLevel === "low" && this.visualGeometry !== "low") {
-      this.startGeometryFade("low");
+    if (
+      this.geometryLevel === "low" &&
+      this.visualGeometry !== "low" &&
+      !this.startGeometryFade("low")
+    ) {
+      this.geometryLevel = this.visualGeometry;
     }
   }
 
@@ -794,22 +811,35 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       return;
     }
     if (detail !== this.visualGeometry) {
-      this.startGeometryFade(detail);
+      if (!this.startGeometryFade(detail)) {
+        // The global budget can defer a dissolve. Keep the committed target
+        // distinct so the next LOD pass retries instead of leaving a mismatch.
+        this.geometryLevel = this.visualGeometry;
+      }
     }
   }
 
   /**
-   * Render both geometry levels together for a short dissolve. The outgoing
-   * meshes use transparent clones of their current materials and the incoming
-   * geometry is a temporary SkinnedMesh bound to the same skeleton. No mixer,
-   * pose, gait phase or foot lock is touched.
+   * Dissolve both geometry levels together. Both surfaces use a shared
+   * screen-space dither pattern with complementary cutoffs, so each pixel is
+   * drawn by exactly one level. Unlike an alpha blend this keeps opaque
+   * materials opaque and depth-writing, avoiding transparent sorting and
+   * ghosting. No mixer, pose, gait phase or foot lock is touched.
    */
-  private startGeometryFade(to: PlayerGeometry): void {
+  private startGeometryFade(to: PlayerGeometry): boolean {
     if (to === this.visualGeometry) {
-      return;
+      return false;
     }
     if (to === "low" && !this.lowAttached) {
-      return;
+      return false;
+    }
+    if (
+      !geometryFadeBudgetAvailable(
+        AuthoredPlayerRig.activeGeometryFades,
+        VISUAL_TUNING.authoredPlayer.geometryFadeMaxActive,
+      )
+    ) {
+      return false;
     }
     const from = this.visualGeometry;
     const duration = VISUAL_TUNING.authoredPlayer.geometryFadeSeconds;
@@ -825,12 +855,15 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       const currentMaterial = slot.mesh.material;
       const currentWasArray = Array.isArray(currentMaterial);
       const source = sourceVisible
-        ? this.cloneFadeMaterials(currentMaterial, 1)
+        ? this.dissolveMaterialsFor(currentMaterial, false)
         : [];
       if (sourceVisible) {
         slot.mesh.material = currentWasArray
           ? source.map((entry) => entry.material)
           : source[0]!.material;
+      }
+      for (const entry of source) {
+        entry.progress.value = 0;
       }
 
       const targetGeometry =
@@ -839,30 +872,21 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         targetGeometry !== null &&
         (to === "high" ? slot.highVisible : true);
       let targetMesh: THREE.SkinnedMesh | null = null;
-      let target: FadeMaterial[] = [];
+      let target: DissolveMaterial[] = [];
       if (targetVisible && targetGeometry !== null) {
         const targetBase = this.baseMaterialFor(slot);
-        const targetWasArray = Array.isArray(targetBase);
-        const cloned = this.cloneFadeMaterials(targetBase, 0);
-        const materials: MaterialLike = targetWasArray
-          ? cloned.map((entry) => entry.material)
-          : cloned[0]!.material;
-        targetMesh = new THREE.SkinnedMesh(targetGeometry, materials);
-        targetMesh.name = `${slot.mesh.name}:fade`;
-        targetMesh.position.copy(slot.mesh.position);
-        targetMesh.quaternion.copy(slot.mesh.quaternion);
-        targetMesh.scale.copy(slot.mesh.scale);
-        targetMesh.matrixAutoUpdate = slot.mesh.matrixAutoUpdate;
-        targetMesh.frustumCulled = slot.mesh.frustumCulled;
-        targetMesh.castShadow = false;
-        targetMesh.receiveShadow = false;
-        targetMesh.renderOrder = slot.mesh.renderOrder + 1;
-        if (slot.mesh instanceof THREE.SkinnedMesh) {
-          targetMesh.bind(slot.mesh.skeleton, slot.mesh.bindMatrix);
-          targetMesh.bindMode = slot.mesh.bindMode;
+        target = this.dissolveMaterialsFor(targetBase, true);
+        for (const entry of target) {
+          entry.progress.value = 0;
         }
-        slot.mesh.parent?.add(targetMesh);
-        target = cloned;
+        const targetMaterial: MaterialLike = Array.isArray(targetBase)
+          ? target.map((entry) => entry.material)
+          : target[0]!.material;
+        targetMesh = this.fadeTargetFor(
+          slot,
+          targetGeometry,
+          targetMaterial,
+        );
       }
       entries.push({
         slot,
@@ -878,6 +902,8 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       duration,
       entries,
     };
+    AuthoredPlayerRig.activeGeometryFades += 1;
+    return true;
   }
 
   advanceVisualTransition(deltaSeconds: number): void {
@@ -886,13 +912,13 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
       return;
     }
     fade.elapsed = Math.min(fade.duration, fade.elapsed + deltaSeconds);
-    const alpha = geometryFadeProgress(fade.elapsed, fade.duration);
+    const progress = geometryFadeProgress(fade.elapsed, fade.duration);
     for (const entry of fade.entries) {
       for (const source of entry.source) {
-        source.material.opacity = source.baseOpacity * (1 - alpha);
+        source.progress.value = progress;
       }
       for (const target of entry.target) {
-        target.material.opacity = target.baseOpacity * alpha;
+        target.progress.value = progress;
       }
     }
     if (fade.elapsed >= fade.duration) {
@@ -916,40 +942,89 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
         : slot.highVisible;
       slot.mesh.material = this.baseMaterialFor(slot);
       targetMesh?.parent?.remove(targetMesh);
+      if (targetMesh !== null) {
+        targetMesh.visible = false;
+      }
     }
-    this.disposeTransitionMaterials();
+    AuthoredPlayerRig.activeGeometryFades = Math.max(
+      0,
+      AuthoredPlayerRig.activeGeometryFades - 1,
+    );
     this.visualGeometry = fade.to;
     this.geometryLevel = fade.to;
     this.geometryFade = null;
   }
 
-  private cloneFadeMaterials(
+  private dissolveMaterialsFor(
     source: MaterialLike,
-    opacityScale: number,
-  ): FadeMaterial[] {
+    incoming: boolean,
+  ): DissolveMaterial[] {
+    const pool = incoming
+      ? this.incomingFadeMaterials
+      : this.outgoingFadeMaterials;
     const sourceMaterials = Array.isArray(source) ? source : [source];
     return sourceMaterials.map((material) => {
-      const clone = material.clone();
-      clone.transparent = true;
-      clone.depthWrite = false;
-      clone.opacity = material.opacity * opacityScale;
-      clone.needsUpdate = true;
-      this.transitionMaterials.push(clone);
-      return { material: clone, baseOpacity: material.opacity };
+      const cached = pool.get(material);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const created = createDissolveMaterial(material, incoming);
+      pool.set(material, created);
+      return created;
     });
+  }
+
+  private fadeTargetFor(
+    slot: GeometrySlot,
+    geometry: THREE.BufferGeometry,
+    material: MaterialLike,
+  ): THREE.SkinnedMesh {
+    let target = this.fadeTargets.get(slot);
+    if (target === undefined) {
+      target = new THREE.SkinnedMesh(geometry, material);
+      target.name = `${slot.mesh.name}:fade`;
+      target.castShadow = false;
+      target.receiveShadow = false;
+      this.fadeTargets.set(slot, target);
+    } else {
+      target.geometry = geometry;
+      target.material = material;
+    }
+    target.position.copy(slot.mesh.position);
+    target.quaternion.copy(slot.mesh.quaternion);
+    target.scale.copy(slot.mesh.scale);
+    target.matrixAutoUpdate = slot.mesh.matrixAutoUpdate;
+    if (!target.matrixAutoUpdate) {
+      target.matrix.copy(slot.mesh.matrix);
+    }
+    target.frustumCulled = slot.mesh.frustumCulled;
+    target.renderOrder = slot.mesh.renderOrder + 1;
+    target.visible = true;
+    if (slot.mesh instanceof THREE.SkinnedMesh) {
+      target.bind(slot.mesh.skeleton, slot.mesh.bindMatrix);
+      target.bindMode = slot.mesh.bindMode;
+    }
+    slot.mesh.parent?.add(target);
+    return target;
+  }
+
+  private disposeFadeResources(): void {
+    for (const pool of [
+      this.outgoingFadeMaterials,
+      this.incomingFadeMaterials,
+    ]) {
+      for (const entry of pool.values()) {
+        entry.material.dispose();
+      }
+      pool.clear();
+    }
+    this.fadeTargets.clear();
   }
 
   private baseMaterialFor(slot: GeometrySlot): MaterialLike {
     return this.materialLod && slot.cheapMaterial !== null
       ? slot.cheapMaterial
       : slot.baseMaterial;
-  }
-
-  private disposeTransitionMaterials(): void {
-    for (const material of this.transitionMaterials) {
-      material.dispose();
-    }
-    this.transitionMaterials.length = 0;
   }
 
   setFootstepSink(sink: FootstepSink | null): void {
@@ -1290,10 +1365,17 @@ export class AuthoredPlayerRig implements MatchPlayerRig {
     if (this.geometryFade !== null) {
       for (const entry of this.geometryFade.entries) {
         entry.targetMesh?.parent?.remove(entry.targetMesh);
+        if (entry.targetMesh !== null) {
+          entry.targetMesh.visible = false;
+        }
       }
       this.geometryFade = null;
+      AuthoredPlayerRig.activeGeometryFades = Math.max(
+        0,
+        AuthoredPlayerRig.activeGeometryFades - 1,
+      );
     }
-    this.disposeTransitionMaterials();
+    this.disposeFadeResources();
     this.mixer?.stopAllAction();
     this.clipActions.clear();
     this.activeClipAction = null;

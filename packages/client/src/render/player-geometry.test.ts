@@ -2,6 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  dissolveSourceVisible,
+  dissolveTargetVisible,
+  geometryFadeBudgetAvailable,
   geometryFadeProgress,
   geometryForDetail,
   nextGeometryRequest,
@@ -67,5 +70,49 @@ describe("player geometry fade", () => {
     expect(geometryFadeProgress(0, 0)).toBe(1);
     expect(geometryFadeProgress(0, Number.NaN)).toBe(1);
     expect(geometryFadeProgress(Number.NaN, 0.2)).toBe(0);
+  });
+});
+
+describe("player geometry dissolve", () => {
+  it("partitions every pixel exactly once between outgoing and incoming", () => {
+    for (const progress of [0, 0.2, 0.5, 0.8, 1]) {
+      for (const threshold of [0, 0.1, 0.5, 0.9, 0.999]) {
+        const source = dissolveSourceVisible(threshold, progress);
+        const target = dissolveTargetVisible(threshold, progress);
+        expect(source).not.toBe(target);
+      }
+    }
+  });
+
+  it("starts fully on the source and ends fully on the target", () => {
+    for (const threshold of [0, 0.25, 0.5, 0.75, 0.999]) {
+      expect(dissolveSourceVisible(threshold, 0)).toBe(true);
+      expect(dissolveTargetVisible(threshold, 0)).toBe(false);
+      expect(dissolveSourceVisible(threshold, 1)).toBe(false);
+      expect(dissolveTargetVisible(threshold, 1)).toBe(true);
+    }
+  });
+
+  it("clamps dissolve progress before choosing a side", () => {
+    expect(dissolveSourceVisible(0.1, -1)).toBe(true);
+    expect(dissolveTargetVisible(0.1, 2)).toBe(true);
+  });
+});
+
+describe("player geometry dissolve budget", () => {
+  it("admits transitions below the cap", () => {
+    expect(geometryFadeBudgetAvailable(0, 1)).toBe(true);
+    expect(geometryFadeBudgetAvailable(4, 6)).toBe(true);
+  });
+
+  it("rejects transitions at or above the cap", () => {
+    expect(geometryFadeBudgetAvailable(6, 6)).toBe(false);
+    expect(geometryFadeBudgetAvailable(7, 6)).toBe(false);
+  });
+
+  it("treats invalid caps and negative counts defensively", () => {
+    expect(geometryFadeBudgetAvailable(0, Number.NaN)).toBe(true);
+    expect(geometryFadeBudgetAvailable(1, Number.NaN)).toBe(false);
+    expect(geometryFadeBudgetAvailable(-2, 2)).toBe(true);
   });
 });
