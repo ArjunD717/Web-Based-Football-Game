@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 34**:
+both devices are thin clients. This repository is at **Milestone 35**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,60 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 35 scope
+
+Implemented:
+
+- A feature-flagged temporal antialiasing resolve for the Three renderer.
+  Enable it with `?taa=1`; `VISUAL_TUNING.temporalAa.enabled` defaults to
+  **false** while motion-vector support is still outstanding
+- The scene renders into an RGBA render target with a depth texture. A Halton
+  subpixel camera jitter produces new samples, and a fullscreen resolve shader
+  reprojects current depth through the previous view-projection into the
+  ping-pong history buffer
+- History is validated against the current 3 × 3 color neighborhood and
+  rejected when the reprojected coordinate leaves the frame or lands behind
+  the camera. The resolve mixes linear color, then the copy pass applies the
+  sRGB transfer solely on output
+- Camera mode changes, replay toggles, resizes and large camera translations
+  or rotations reset history. The TAA targets are sized from the renderer's
+  real drawing-buffer dimensions and resize with the canvas
+- TAA is bypassed entirely when the flag is off, leaving the direct render path
+  unchanged
+- Verification:
+  - `?taa=1` rendered the authored benchmark scene with matching color and
+    brightness relative to the direct path; a 22-player run measured render
+    average **8.31 ms**, p95 **11.50 ms**, gate **PASS** (direct path in the
+    same environment: **7.62 ms**, p95 **9.20 ms**)
+  - moving-player and camera-cut captures produced no script or shader errors;
+    a camera-mode switch reset the history without a stale frame
+  - `pnpm check` passes **706 tests**; the new tests cover the Halton sequence,
+    jitter bounds and invalid pixel-size clamping
+  - `pnpm build` succeeds
+- Available with a development query parameter only; there is no production
+  menu toggle yet
+
+Known M35 limitations (by design):
+
+- **No per-object motion vectors.** Player, ball and other moving geometry
+  rely on depth reprojection plus the color clamp. Fast movement can still
+  produce history smearing or edge softening; this is the main reason the
+  feature defaults off
+- The resolve has no stencil, velocity buffer or reactive-mask disocclusion.
+  Newly revealed geometry falls back to neighborhood clamping rather than a
+  principled disocclusion test
+- The scene target is RGBA8 with no HDR or MSAA; tone mapping happens during
+  the scene pass, and the final copy performs the linear-to-sRGB transfer
+- Camera cuts are detected per frame by translation/rotation thresholds and
+  explicit mode/replay/resize resets. A cut inside those thresholds can retain
+  one stale sample
+- Two fullscreen passes and a full-resolution history pair are allocated while
+  TAA is enabled, independent of quality tier
+- Transparent eye decals and netting are resolved as ordinary scene color; no
+  special transparency handling
+- TAA is not exposed in the settings UI and remains a query/tuning flag
+- All M34 limitations remain outside the TAA path
 
 ## Milestone 34 scope
 
