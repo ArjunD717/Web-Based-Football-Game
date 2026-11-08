@@ -196,6 +196,8 @@ const settingsHapticsButton =
 const settingsPredictionButton =
   byId<HTMLButtonElement>("settings-prediction");
 const settingsTaaButton = byId<HTMLButtonElement>("settings-taa");
+const settingsTaaDiagnostics =
+  byId<HTMLElement>("settings-taa-diagnostics");
 const settingsQualitySelect =
   byId<HTMLSelectElement>("settings-quality");
 const homeSwatch = byId<HTMLElement>("home-swatch");
@@ -430,6 +432,7 @@ let builder: WireViewBuilder | null = null;
 let latestView: MatchView | null = null;
 let autoJoinAttempted = false;
 let lastHudAt = 0;
+let lastTaaDiagnosticsAt = 0;
 let lastMatchEventSeq = 0;
 let matchEventTimer: number | null = null;
 let controls: DesktopControls | null = null;
@@ -1326,6 +1329,10 @@ function renderLoop(now: number): void {
     updateHud(currentState);
     updateOverlay(currentState);
     updateReplayButtons();
+  }
+  if (now - lastTaaDiagnosticsAt >= 500) {
+    lastTaaDiagnosticsAt = now;
+    updateTaaDiagnostics();
   }
 
   requestAnimationFrame(renderLoop);
@@ -3262,6 +3269,27 @@ function updateTemporalAaControl(): void {
         : supported
           ? "Temporal resolve; disable if the GPU shows ghosting"
           : (capability?.reason ?? "This GPU cannot host temporal antialiasing");
+  updateTaaDiagnostics();
+}
+
+function updateTaaDiagnostics(): void {
+  const diagnostics = renderer.temporalAaDiagnostics?.();
+  if (diagnostics === undefined) {
+    settingsTaaDiagnostics.textContent =
+      "TAA diagnostics unavailable for this renderer.";
+    return;
+  }
+  if (!diagnostics.supported) {
+    settingsTaaDiagnostics.textContent = `TAA unavailable: ${diagnostics.reason}`;
+    return;
+  }
+  settingsTaaDiagnostics.textContent = [
+    diagnostics.active ? "TAA on" : "TAA off",
+    diagnostics.autoState,
+    `${diagnostics.historyResets} history resets`,
+    `${diagnostics.timelineResets} replay resets`,
+    `${diagnostics.autoRetries} auto retries`,
+  ].join(" · ");
 }
 
 function updateRendererControl(): void {
