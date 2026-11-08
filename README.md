@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 48**:
+both devices are thin clients. This repository is at **Milestone 49**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,58 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 49 scope
+
+Implemented:
+
+- The acceptance server now generates an ephemeral self-signed certificate at
+  startup with OpenSSL and passes it to `startGameServer`, so the page is served
+  over HTTPS and the WebSocket endpoint runs over WSS
+- Certificate generation uses SANs for `127.0.0.1` and `localhost`, with
+  `OPENSSL_BIN` available as an override; no `mkcert` or committed key material
+  is required for CI
+- Playwright uses `ignoreHTTPSErrors` for the test context; Node-side readiness
+  and payload checks use an HTTPS request with certificate verification
+  disabled only inside the acceptance runner
+- The browser acceptance page now probes the real WebSocket endpoint: it checks
+  `isSecureContext`, completes `hello` → `welcome`, sends a `ping`, and requires
+  the matching `pong` before settling
+- The page publishes a `tls` report (`https:`, secure context) and a `socket`
+  report (`connected`, `welcome`, `pong`, error); its PASS/FAIL status includes
+  the socket probe
+- The Playwright runner independently requires HTTPS, a secure context, and a
+  completed WSS handshake/ping
+- Fixture capture, HTTP payload comparison, motion and TAA reset checks remain
+  in place
+
+Verification:
+
+- `pnpm check` passes **733 tests across 97 files**; lint and typecheck pass
+- `pnpm test:browser:replay` reports **PASS**:
+  - protocol `https:`, `isSecureContext: true`
+  - WSS: connected, welcome and pong all true
+  - active room `ABCD`, clip `g1`, 135 frames
+  - endpoint `/api/replay/ABCD/g1.json`
+  - live frames match the fixture
+  - motion window 33.33 ms, player **0.126 m**, ball **0.434 m**
+  - TAA resets: forward **0**, pause **0**, reverse **1/1**, forward step **2**,
+    backward seek **3**, forward seek **4**, loop wrap **5**
+- `pnpm build` succeeds
+
+Known M49 limitations:
+
+- The certificate is ephemeral and self-signed; Playwright bypasses trust, so
+  this verifies the secure-context and WSS path rather than device certificate
+  installation
+- No browser client joins the active room; the socket probe completes protocol
+  handshaking and ping/pong but does not receive room lobby or replay messages
+- The acceptance server remains a test harness with a pre-captured room, not a
+  live ticking match during browser execution
+- Node's insecure HTTPS request is confined to the acceptance runner
+- The report still labels the replay source as HTTP because it is the HTTP
+  replay route even when transported over TLS
+- All M48–M35 presentation caveats remain
 
 ## Milestone 48 scope
 

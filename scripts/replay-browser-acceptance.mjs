@@ -113,6 +113,14 @@ try {
   ) {
     throw new Error("Replay acceptance page is not in a secure context");
   }
+  if (
+    report.socket?.secureContext !== true ||
+    report.socket?.connected !== true ||
+    report.socket?.welcome !== true ||
+    report.socket?.pong !== true
+  ) {
+    throw new Error("Replay acceptance WSS handshake/ping did not complete");
+  }
   const liveResponse = await getInsecure(
     `${BASE_URL}/api/replay/${report.replayCode}/${report.clipId}.json`,
   );
