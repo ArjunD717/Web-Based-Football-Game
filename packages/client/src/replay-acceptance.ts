@@ -1,62 +1,29 @@
 // packages/client/src/replay-acceptance.ts
 
-import { createPitch } from "@fb/sim";
+import { parseReplayExport } from "./match/replay-gallery";
+import { WireViewBuilder } from "./match/view-from-wire";
 import { MatchReplayBuffer } from "./presentation/replay";
+import { buildReplayExportFixture } from "./presentation/replay-export-fixture";
 import { createThreeRenderer } from "./render/three-renderer";
-import type { MatchView, RenderPlayer, RenderTeam } from "./render/view";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#pitch")!;
 const result = document.querySelector<HTMLElement>("#result")!;
-const pitch = createPitch();
 
-function player(
-  id: string,
-  team: "home" | "away",
-  x: number,
-  y: number,
-): RenderPlayer {
-  return {
-    id,
-    number: 9,
-    team,
-    goalkeeper: false,
-    x,
-    y,
-    facing: team === "home" ? Math.PI / 2 : -Math.PI / 2,
-    state: "idle",
-    stamina: 1,
-    sprintSpeed: 80,
-    sentOff: false,
-    yellowCards: 0,
-    controlled: team === "home",
-    switchTarget: false,
-  };
+const exported = buildReplayExportFixture();
+const parsed = parseReplayExport(exported);
+if (parsed === null) {
+  throw new Error("Exported replay fixture failed validation");
 }
-
-const home: RenderTeam = {
-  name: "Home",
-  colors: { primary: "#e7e1cf", secondary: "#111815", keeper: "#f1c75b" },
-  players: [player("home-9", "home", 45, 34)],
-};
-const away: RenderTeam = {
-  name: "Away",
-  colors: { primary: "#4b6bff", secondary: "#e7e1cf", keeper: "#f1c75b" },
-  players: [player("away-9", "away", 60, 34)],
-};
-
-function recordedView(index: number): MatchView {
-  return {
-    matchId: "replay-acceptance",
-    pitch,
-    home,
-    away,
-    ball: { x: 52.5, y: 34, z: 0.11, vx: 0, vy: 0, vz: 0, spinZ: 0 },
-    selfSide: "home",
-    half: 1,
-    match: null,
-    tick: index,
-    elapsedSeconds: index / 10,
-  };
+const builder = new WireViewBuilder(parsed.setup, null);
+const intervalMs = 1_000 / parsed.setup.snapshotHz;
+const frames = parsed.frames.flatMap((frame, index) => {
+  const view = builder.build(frame);
+  return view === null
+    ? []
+    : [{ view, recordedAtMs: index * intervalMs }];
+});
+if (frames.length !== parsed.frames.length) {
+  throw new Error("Exported replay fixture has unbuildable frames");
 }
 
 const renderer = createThreeRenderer(canvas);
@@ -66,12 +33,8 @@ renderer.setCameraMode?.("broadcast");
 renderer.setAutoTemporalAaDowngrade?.(false);
 
 const replay = new MatchReplayBuffer({ speed: 1 });
-const frames = Array.from({ length: 21 }, (_, index) => ({
-  view: recordedView(index),
-  recordedAtMs: index * 100,
-}));
 if (!replay.loadSaved(frames) || !replay.startSaved(0)) {
-  throw new Error("Could not load the saved replay clip");
+  throw new Error("Could not load the exported replay clip");
 }
 
 const expectedSteps = [
@@ -169,6 +132,9 @@ renderSample(looped, "loop");
 const failed = checks.filter((check) => check.actual !== check.expected);
 const report = {
   status: failed.length === 0 ? "PASS" : "FAIL",
+  replayCode: parsed.code,
+  clipId: parsed.id,
+  frameCount: frames.length,
   taaSupported:
     renderer.temporalAaDiagnostics?.().supported ?? false,
   timelineResets: renderer.temporalAaDiagnostics?.().timelineResets ?? -1,

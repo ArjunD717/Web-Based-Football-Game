@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 41**:
+both devices are thin clients. This repository is at **Milestone 42**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,55 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 42 scope
+
+Implemented:
+
+- An export-shaped fixture (`WireReplayExport`) is validated by the same
+  `parseReplayExport` parser used for downloaded `/api/replay/...` payloads and
+  converted with the real `WireViewBuilder`, not a hand-built presentation
+  scene
+- The browser acceptance page drives that exported fixture through the real
+  `MatchReplayBuffer` and Three renderer, and reports the replay code, clip ID
+  and frame count alongside every timeline-reset assertion
+- A Vitest test covers the fixture through the download parser and view
+  builder on every `pnpm test` run
+- `pnpm test:browser:replay` builds the client, starts Vite preview, launches
+  Chromium through pinned Playwright, and fails on page errors, a missing
+  report, a non-PASS result, the wrong exported fixture or a timeline-reset
+  mismatch
+- CI has a dedicated `Replay acceptance (Chromium)` job that installs the
+  pinned browser, builds and runs the acceptance page
+- Chromium uses SwiftShader so WebGL/TAA acceptance runs without a GPU
+
+Verification:
+
+- `pnpm check` passes **721 tests across 94 files**; lint and typecheck pass
+- `pnpm test:browser:replay` reports **PASS** with the exported fixture:
+  - replay code `ABCD`, 21 frames
+  - forward playback: **0** resets
+  - pause: **0**
+  - first reverse step: **1**
+  - second reverse step: **1**
+  - forward step: **2**
+  - backward seek: **3**
+  - forward seek: **4**
+  - loop wrap: **5**
+- `pnpm build` emits `replay-acceptance.html`; no page errors were observed
+
+Known M42 limitations:
+
+- The fixture is synthetic but export-shaped; it is not a captured server
+  replay. The server export endpoint has separate unit coverage
+- The fixture records 21 snapshots at 10 Hz to keep the acceptance timeline
+  deterministic; real 30 Hz exported clips use the same parser, builder and
+  replay path
+- Chromium is downloaded only for the browser job, so `pnpm test` remains
+  browser-free
+- The acceptance page validates timing and renderer reset behaviour, not visual
+  image quality or shader compilation
+- All M41–M35 presentation caveats remain
 
 ## Milestone 41 scope
 

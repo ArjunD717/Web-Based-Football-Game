@@ -25,6 +25,7 @@
     "test:watch": "vitest",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "test:soak": "pnpm --filter @fb/sim soak 1000",
+    "test:browser:replay": "pnpm build && node scripts/replay-browser-acceptance.mjs",
     "perf": "pnpm --filter @fb/sim perf",
     "character:build": "node tools/character/build.mjs",
     "character:preview": "node tools/character/build.mjs --preview"
@@ -34,6 +35,7 @@
     "@types/node": "20.17.16",
     "eslint": "9.19.0",
     "globals": "15.14.0",
+    "playwright": "1.65.0",
     "typescript": "5.7.3",
     "typescript-eslint": "8.22.0",
     "vitest": "3.0.5"
