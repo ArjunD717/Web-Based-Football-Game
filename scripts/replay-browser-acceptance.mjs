@@ -91,12 +91,18 @@ try {
   }
   const live = await liveResponse.json();
   const fixture = JSON.parse(await readFile(FIXTURE_PATH, "utf8"));
+  const sameSetup =
+    live.setup.tickHz === fixture.setup.tickHz &&
+    live.setup.snapshotHz === fixture.setup.snapshotHz &&
+    JSON.stringify(live.setup.pitch) === JSON.stringify(fixture.setup.pitch) &&
+    JSON.stringify(live.setup.home) === JSON.stringify(fixture.setup.home) &&
+    JSON.stringify(live.setup.away) === JSON.stringify(fixture.setup.away);
   if (
     live.id !== fixture.id ||
     live.kind !== fixture.kind ||
     live.frameCount !== fixture.frameCount ||
     JSON.stringify(live.frames) !== JSON.stringify(fixture.frames) ||
-    JSON.stringify(live.setup) !== JSON.stringify(fixture.setup)
+    !sameSetup
   ) {
     throw new Error("Live HTTP replay payload does not match the fixture");
   }

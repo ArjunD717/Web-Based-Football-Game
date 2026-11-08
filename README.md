@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 47**:
+both devices are thin clients. This repository is at **Milestone 48**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,55 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 48 scope
+
+Implemented:
+
+- The browser acceptance server no longer seeds a temporary `ReplayStore`.
+  It starts a deterministic AI-only `RoomManager` room, runs until the normal
+  score-change hook captures a natural goal, and serves that in-memory room
+  clip through `/api/replay/ABCD/g1.json`
+- The room stays alive in the server process, so `getReplayClip` resolves
+  through the same `RoomManager.exportReplayClip` path used by the real game
+  server
+- `capture-room.ts` now owns the shared deterministic room setup and natural
+  goal wait used by both the fixture generator and the acceptance server
+- The Playwright payload comparison now ignores randomised `matchId` and the
+  normalised fixture seed, while still requiring identical tick/snapshot
+  cadence, pitch, rosters and every frame
+- No temporary replay directory, index file or `ReplayStore` write remains in
+  the browser acceptance startup path
+- The fixture generator still uses the same helper and produces the same
+  byte-stable fixture hash
+
+Verification:
+
+- `pnpm check` passes **733 tests across 97 files**; lint and typecheck pass
+- `pnpm --filter @fb/server fixture:replay` still produces
+  `cd4509032fd5d4bcc8a92fe49f7cbfc50d15791a8801c5d84cc08e5fa4f58096`
+- `pnpm test:browser:replay` reports **PASS**:
+  - active room `ABCD`, clip `g1`, **135 frames**
+  - source `http`, endpoint `/api/replay/ABCD/g1.json`
+  - live payload frames match the fixture
+  - motion window: **33.33 ms**, **2,946.7 → 2,962.7 ms**
+  - largest player displacement **0.126 m**, ball **0.434 m**
+  - TAA resets: forward **0**, pause **0**, reverse **1/1**, forward step **2**,
+    backward seek **3**, forward seek **4**, loop wrap **5**
+- `pnpm build` succeeds
+
+Known M48 limitations:
+
+- The acceptance capture runs before the HTTP server listens; the room is not
+  advanced by a live simulation loop during browser acceptance
+- No WebSocket client connects to the acceptance room, so this verifies the
+  active `RoomManager` replay path, not full online gameplay during the check
+- The acceptance server remains HTTP-only and exposes no `/api/replays.json`
+  library because it has no persistent store
+- Randomised `matchId` and normalised fixture seed are intentionally excluded
+  from the payload comparison
+- The committed fixture is still used as the comparison oracle
+- All M47–M35 presentation caveats remain
 
 ## Milestone 47 scope
 
