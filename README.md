@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 43**:
+both devices are thin clients. This repository is at **Milestone 44**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -180,6 +180,50 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 44 scope
+
+Implemented:
+
+- `MatchReplayBuffer` now interpolates player and ball transforms between
+  recorded snapshots by default. Saved 30 Hz clips render smoothly at display
+  refresh rates without changing the authoritative snapshots
+- Player x/y, ball x/y/z and velocities, stamina, spin and facing interpolate;
+  facing uses shortest-path angle interpolation across the ±π boundary
+- Discrete state stays from the nearer snapshot: player state, cards,
+  sent-off flags, match phase, score, restart and last event are never invented
+- Lineup changes suppress player interpolation for that frame and fall back to
+  the nearer complete snapshot; exact-frame and exact-seek timestamps bypass
+  interpolation to avoid floating-point epsilon timeline resets
+- `interpolate: false` preserves discrete snapshot playback for callers that
+  want frame stepping without blending
+- Added unit coverage for transform blending, shortest-angle facing, discrete
+  state selection, lineup fallback and disabled interpolation
+- The captured server fixture test now samples between real 30 Hz snapshots and
+  proves that player/ball positions move between frames
+- Browser TAA acceptance still passes with interpolation enabled: exact
+  forward playback produces zero timeline resets, and seeks/steps/loop wrap
+  retain the expected reset sequence
+
+Verification:
+
+- `pnpm check` passes **726 tests across 96 files**; lint and typecheck pass
+- `pnpm test:browser:replay` reports **PASS**, 97 real server-captured frames,
+  TAA timeline resets forward **0**, pause **0**, reverse **1/1**, forward step
+  **2**, backward seek **3**, forward seek **4**, loop wrap **5**
+- `pnpm build` succeeds
+
+Known M44 limitations:
+
+- Interpolation is linear for positions, velocities and stamina; it is not a
+  physics-aware spline or trajectory reconstruction
+- Match clock, phase, score and disciplinary state remain discrete and come
+  from the nearer snapshot
+- Lineups that change between snapshots fall back to a discrete frame rather
+  than blending players in and out
+- The interpolation timestamp comes from recorded replay time, not an
+  extrapolated prediction of the next server snapshot
+- All M43–M35 presentation caveats remain
+
 ## Milestone 43 scope
 
 Implemented:
@@ -232,8 +276,8 @@ Known M43 limitations:
   not byte-identical to the HTTP response that produced it
 - The 711 KiB fixture is a test asset served only by the acceptance page, not
   part of the main game bundle
-- Replay playback still selects discrete 30 Hz frames; it does not synthesise
-  interpolated views between snapshots
+- M43's original playback selected discrete 30 Hz frames; M44 adds transform
+  interpolation between snapshots
 - All M42–M35 presentation caveats remain
 
 ## Milestone 42 scope

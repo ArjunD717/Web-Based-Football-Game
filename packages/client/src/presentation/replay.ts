@@ -1,7 +1,12 @@
 // packages/client/src/presentation/replay.ts
 
 import { TUNING } from "@fb/shared";
-import type { MatchView } from "../render/view";
+import type {
+  MatchView,
+  RenderBall,
+  RenderPlayer,
+  RenderTeam,
+} from "../render/view";
 
 export interface ReplayFrame {
   readonly view: MatchView;
@@ -32,6 +37,12 @@ export interface ReplayBufferOptions {
    */
   readonly captureHz?: number;
   readonly maxFrames?: number;
+  /**
+   * Blend transforms between recorded snapshots. Live 30 Hz clips then render
+   * smoothly on 60–144 Hz displays; discrete state still comes from the
+   * nearest snapshot.
+   */
+  readonly interpolate?: boolean;
 }
 
 /**
@@ -46,6 +57,7 @@ export class MatchReplayBuffer {
   private playbackSpeed: number;
   private readonly captureIntervalMs: number;
   private readonly maxFrames: number;
+  private readonly interpolate: boolean;
   private readonly frames: ReplayFrame[] = [];
   private goalClip: ReplayFrame[] = [];
   private playbackFrames: ReplayFrame[] = [];
@@ -71,6 +83,7 @@ export class MatchReplayBuffer {
     const captureHz = Math.min(60, Math.max(15, options.captureHz ?? 60));
     this.captureIntervalMs = 1_000 / captureHz;
     this.maxFrames = Math.max(10, options.maxFrames ?? 1_200);
+    this.interpolate = options.interpolate ?? true;
   }
 
   get hasClip(): boolean {
@@ -328,7 +341,7 @@ export class MatchReplayBuffer {
       this.playbackDurationMs,
     );
     const targetMs = this.playbackStartMs + elapsedMs;
-    const view = this.frameAt(targetMs);
+    const view = this.viewAt(targetMs);
     if (view === null) {
       this.stop();
       return null;
@@ -385,16 +398,159 @@ export class MatchReplayBuffer {
     return bestIndex;
   }
 
-  private frameAt(targetMs: number): MatchView | null {
-    let best: MatchView | null = null;
+  /** Nearest recorded frame for discrete playback. */
+  private nearestFrame(targetMs: number): ReplayFrame | null {
+    let best: ReplayFrame | null = null;
     let bestDistance = Infinity;
     for (const frame of this.playbackFrames) {
       const distance = Math.abs(frame.recordedAtMs - targetMs);
       if (distance < bestDistance) {
         bestDistance = distance;
-        best = frame.view;
+        best = frame;
       }
     }
     return best;
   }
+
+  private viewAt(targetMs: number): MatchView | null {
+    if (!this.interpolate) {
+      return this.nearestFrame(targetMs)?.view ?? null;
+    }
+    const frames = this.playbackFrames;
+    let lowerIndex = 0;
+    let upperIndex = 0;
+    for (let index = 0; index < frames.length; index += 1) {
+      const frame = frames[index];
+      if (frame === undefined || frame.recordedAtMs > targetMs) {
+        upperIndex = index;
+        break;
+      }
+      lowerIndex = index;
+      upperIndex = index;
+    }
+    const lower = frames[lowerIndex];
+    const upper = frames[upperIndex];
+    if (lower === undefined || upper === undefined || lower === upper) {
+      return lower?.view ?? null;
+    }
+    // Timestamp arithmetic can land a hair past an exact frame boundary;
+    // returning that frame avoids false timeline jumps from epsilon error.
+    if (
+      Math.abs(targetMs - lower.recordedAtMs) <= 1e-3 ||
+      Math.abs(upper.recordedAtMs - targetMs) <= 1e-3
+    ) {
+      return Math.abs(targetMs - lower.recordedAtMs) <=
+        Math.abs(upper.recordedAtMs - targetMs)
+        ? lower.view
+        : upper.view;
+    }
+    const spanMs = upper.recordedAtMs - lower.recordedAtMs;
+    const alpha =
+      spanMs > 0
+        ? Math.min(1, Math.max(0, (targetMs - lower.recordedAtMs) / spanMs))
+        : 0;
+    return blendViews(lower.view, upper.view, alpha);
+  }
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** Shortest-path angle interpolation; facing is wrapped to [-PI, PI]. */
+function lerpAngle(a: number, b: number, t: number): number {
+  let delta = (b - a) % (Math.PI * 2);
+  if (delta > Math.PI) {
+    delta -= Math.PI * 2;
+  } else if (delta < -Math.PI) {
+    delta += Math.PI * 2;
+  }
+  return a + delta * t;
+}
+
+function blendPlayer(
+  lower: RenderPlayer,
+  upper: RenderPlayer,
+  alpha: number,
+): RenderPlayer {
+  const discrete = alpha <= 0.5 ? lower : upper;
+  return {
+    ...discrete,
+    x: lerp(lower.x, upper.x, alpha),
+    y: lerp(lower.y, upper.y, alpha),
+    facing: lerpAngle(lower.facing, upper.facing, alpha),
+    stamina: lerp(lower.stamina, upper.stamina, alpha),
+  };
+}
+
+function blendTeam(
+  lower: RenderTeam,
+  upper: RenderTeam,
+  alpha: number,
+): RenderTeam {
+  const discrete = alpha <= 0.5 ? lower : upper;
+  if (
+    lower.players.length !== upper.players.length ||
+    lower.players.some(
+      (player, index) => upper.players[index]?.id !== player.id,
+    )
+  ) {
+    return discrete;
+  }
+  return {
+    ...discrete,
+    players: lower.players.map((player, index) => {
+      const next = upper.players[index];
+      return next === undefined
+        ? player
+        : blendPlayer(player, next, alpha);
+    }),
+  };
+}
+
+function blendBall(
+  lower: RenderBall,
+  upper: RenderBall,
+  alpha: number,
+): RenderBall {
+  return {
+    x: lerp(lower.x, upper.x, alpha),
+    y: lerp(lower.y, upper.y, alpha),
+    z: lerp(lower.z, upper.z, alpha),
+    vx: lerp(lower.vx, upper.vx, alpha),
+    vy: lerp(lower.vy, upper.vy, alpha),
+    vz: lerp(lower.vz, upper.vz, alpha),
+    spinZ: lerp(lower.spinZ, upper.spinZ, alpha),
+  };
+}
+
+/** Blends only continuous transforms; rules state comes from the nearest frame. */
+function blendViews(
+  lower: MatchView,
+  upper: MatchView,
+  alpha: number,
+): MatchView {
+  const discrete = alpha <= 0.5 ? lower : upper;
+  if (
+    alpha <= 0 ||
+    alpha >= 1 ||
+    lower.matchId !== upper.matchId ||
+    lower.home === undefined ||
+    lower.away === undefined ||
+    lower.ball === undefined
+  ) {
+    return discrete;
+  }
+  return {
+    ...discrete,
+    tick: Math.round(lerp(lower.tick, upper.tick, alpha)),
+    elapsedSeconds: lerp(
+      lower.elapsedSeconds,
+      upper.elapsedSeconds,
+      alpha,
+    ),
+    home: blendTeam(lower.home, upper.home, alpha),
+    away: blendTeam(lower.away, upper.away, alpha),
+    ball: blendBall(lower.ball, upper.ball, alpha),
+  };
 }
