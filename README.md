@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 40**:
+both devices are thin clients. This repository is at **Milestone 41**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -180,6 +180,59 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 41 scope
+
+Implemented:
+
+- A browser acceptance page at `/replay-acceptance.html` that uses the real
+  `MatchReplayBuffer`, real Three renderer and real TAA. It loads a saved clip,
+  drives forward playback, pause, reverse steps, forward steps, backward seek,
+  forward seek and loop wrap, and compares the renderer's timeline-reset count
+  after every step
+- The page writes a structured PASS/FAIL report to
+  `window.__replayAcceptance` and to the page body
+- `TemporalAaDiagnostics` exposes support, active state, automatic state,
+  cumulative history resets, timeline resets and automatic retries
+- The renderer maintains reset counters across auto-disable/retry cycles; TAA
+  itself counts history resets, and the renderer archives the count before
+  disposing targets
+- Settings now shows a live diagnostics line:
+  `TAA on · active · 1 history resets · 0 replay resets · 0 auto retries`
+  (values update every 500 ms and on every toggle or automatic transition)
+- The replay acceptance page is included in the Vite multi-page production
+  build, not just development serving
+
+Verification:
+
+- `pnpm check` passes **720 tests across 93 files**; lint and typecheck pass
+- `pnpm build` succeeds and emits `replay-acceptance.html`
+- Headless Chromium ran the acceptance page:
+  - status **PASS**
+  - forward playback: **0** resets
+  - pause: **0**
+  - first reverse step: **1**
+  - second reverse step: **1**
+  - forward step: **2**
+  - backward seek: **3**
+  - forward seek: **4**
+  - loop wrap: **5**
+- Settings readout in the lobby reported
+  `TAA on · active · 1 history resets · 0 replay resets · 0 auto retries`
+- No shader, WebGL or script errors; only optional KTX2 `HEAD` aborts
+
+Known M41 limitations:
+
+- The acceptance clip is generated and loaded through the saved-clip API, not
+  read from an exported replay file
+- The browser page is a deterministic acceptance harness, not part of the
+  Vitest CI suite; it was exercised through the headless browser runner
+- History reset totals include the initial target allocation reset and resize
+  resets; test assertions use timeline-reset deltas to avoid that noise
+- Diagnostics are intentionally technical and remain in Settings, not the HUD
+- Motion proxies remain rigid root capsules/spheres; no limb or stencil-based
+  disocclusion
+- All M40–M35 presentation caveats remain
+
 ## Milestone 40 scope
 
 Implemented:
@@ -223,9 +276,8 @@ Known M40 limitations:
   toggles reset it intentionally
 - Recovery uses consecutive direct-frame draw times, not a long-window
   percentile or GPU timer query
-- Recorded replay acceptance is a deterministic unit test against the real
-  replay buffer and reset policy; a browser-driven recorded clip test is still
-  absent
+- M40's replay acceptance was unit-level; M41 adds the browser-driven
+  acceptance page against the real renderer
 - Motion proxies remain rigid root capsules/spheres; no limb or stencil-based
   disocclusion
 - Benchmark runs bypass automatic fallback by design
