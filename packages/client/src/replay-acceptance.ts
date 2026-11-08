@@ -1,5 +1,11 @@
 // packages/client/src/replay-acceptance.ts
 
+import {
+  PROTOCOL_VERSION,
+  WS_PATH,
+  encodeClientMessage,
+  parseServerMessage,
+} from "@fb/shared";
 import { parseReplayExport } from "./match/replay-gallery";
 import { WireViewBuilder } from "./match/view-from-wire";
 import { MatchReplayBuffer } from "./presentation/replay";
@@ -32,6 +38,83 @@ const frames = parsed.frames.flatMap((frame, index) => {
 if (frames.length !== parsed.frames.length) {
   throw new Error("Exported replay fixture has unbuildable frames");
 }
+
+interface SocketReport {
+  readonly secureContext: boolean;
+  readonly connected: boolean;
+  readonly welcome: boolean;
+  readonly pong: boolean;
+  readonly error: string | null;
+}
+
+async function probeWebSocket(): Promise<SocketReport> {
+  const secureContext = window.isSecureContext;
+  if (!secureContext) {
+    return {
+      secureContext,
+      connected: false,
+      welcome: false,
+      pong: false,
+      error: "page is not a secure context",
+    };
+  }
+  return new Promise((resolve) => {
+    let connected = false;
+    let welcome = false;
+    let pong = false;
+    let settled = false;
+    const socket = new WebSocket(
+      `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${WS_PATH}`,
+    );
+    const finish = (error: string | null): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      try {
+        socket.close();
+      } catch {
+        // The socket may already be closed.
+      }
+      resolve({ secureContext, connected, welcome, pong, error });
+    };
+    const timeout = setTimeout(() => {
+      finish("socket probe timed out");
+    }, 5_000);
+    socket.addEventListener("open", () => {
+      connected = true;
+      socket.send(
+        encodeClientMessage({ t: "hello", protocolVersion: PROTOCOL_VERSION }),
+      );
+    });
+    socket.addEventListener("message", (event) => {
+      if (typeof event.data !== "string") {
+        return;
+      }
+      const message = parseServerMessage(event.data);
+      if (message?.t === "welcome") {
+        welcome = true;
+        socket.send(
+          encodeClientMessage({ t: "ping", clientTimeMs: Date.now() }),
+        );
+      } else if (message?.t === "pong" && welcome) {
+        pong = true;
+        finish(null);
+      }
+    });
+    socket.addEventListener("error", () => {
+      finish("socket error");
+    });
+    socket.addEventListener("close", () => {
+      if (!pong) {
+        finish("socket closed before pong");
+      }
+    });
+  });
+}
+
+const socketReport = await probeWebSocket();
 
 const renderer = createThreeRenderer(canvas);
 renderer.resize();
@@ -166,9 +249,20 @@ renderSample(looped, "loop");
 
 const failed = checks.filter((check) => check.actual !== check.expected);
 const motionPassed = motion !== null && motion.moved;
+const socketPassed =
+  socketReport.secureContext &&
+  socketReport.connected &&
+  socketReport.welcome &&
+  socketReport.pong;
 const report = {
-  status: failed.length === 0 && motionPassed ? "PASS" : "FAIL",
+  status:
+    failed.length === 0 && motionPassed && socketPassed ? "PASS" : "FAIL",
   source: "http",
+  tls: {
+    protocol: location.protocol,
+    secureContext: window.isSecureContext,
+  },
+  socket: socketReport,
   endpoint,
   replayCode: parsed.code,
   clipId: parsed.id,

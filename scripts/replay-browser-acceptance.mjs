@@ -2,11 +2,12 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import https from "node:https";
 import { chromium } from "playwright";
 
 const HOST = "127.0.0.1";
 const PORT = 4173;
-const BASE_URL = `http://${HOST}:${PORT}`;
+const BASE_URL = `https://${HOST}:${PORT}`;
 const URL = `${BASE_URL}/replay-acceptance.html`;
 const FIXTURE_PATH = "packages/client/public/fixtures/server-goal-replay.json";
 
@@ -23,20 +24,39 @@ function stopPreview(child) {
   }
 }
 
+function getInsecure(url) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, { rejectUnauthorized: false }, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        resolve({ status: response.statusCode ?? 0, body });
+      });
+    });
+    request.setTimeout(2_000, () => {
+      request.destroy(new Error("request timed out"));
+    });
+    request.on("error", reject);
+  });
+}
+
 async function waitForPreview() {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(URL);
-      if (response.ok) {
+      const response = await getInsecure(URL);
+      if (response.status === 200) {
         return;
       }
     } catch {
-      // The preview server has not bound its port yet.
+      // The TLS server has not bound its port yet.
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error(`HTTP replay server did not serve ${URL} within 30s`);
+  throw new Error(`HTTPS replay server did not serve ${URL} within 30s`);
 }
 
 const preview = spawn(
@@ -56,7 +76,11 @@ try {
       "--enable-unsafe-swiftshader",
     ],
   });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+    viewport: { width: 1280, height: 720 },
+  });
+  const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(URL, { waitUntil: "networkidle" });
@@ -83,13 +107,19 @@ try {
   if (report.source !== "http" || report.endpoint !== "/api/replay/ABCD/g1.json") {
     throw new Error("Replay acceptance did not load through the HTTP replay route");
   }
-  const liveResponse = await fetch(
+  if (
+    report.tls?.protocol !== "https:" ||
+    report.tls?.secureContext !== true
+  ) {
+    throw new Error("Replay acceptance page is not in a secure context");
+  }
+  const liveResponse = await getInsecure(
     `${BASE_URL}/api/replay/${report.replayCode}/${report.clipId}.json`,
   );
-  if (!liveResponse.ok) {
+  if (liveResponse.status !== 200) {
     throw new Error(`Live replay endpoint returned ${liveResponse.status}`);
   }
-  const live = await liveResponse.json();
+  const live = JSON.parse(liveResponse.body);
   const fixture = JSON.parse(await readFile(FIXTURE_PATH, "utf8"));
   const sameSetup =
     live.setup.tickHz === fixture.setup.tickHz &&
