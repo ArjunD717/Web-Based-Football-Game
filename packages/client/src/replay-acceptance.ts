@@ -3,6 +3,10 @@
 import { parseReplayExport } from "./match/replay-gallery";
 import { WireViewBuilder } from "./match/view-from-wire";
 import { MatchReplayBuffer } from "./presentation/replay";
+import {
+  findReplayMotionWindow,
+  measureReplayMotion,
+} from "./presentation/replay-motion";
 import { createThreeRenderer } from "./render/three-renderer";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#pitch")!;
@@ -33,6 +37,34 @@ renderer.resize();
 renderer.setQuality?.("low");
 renderer.setCameraMode?.("broadcast");
 renderer.setAutoTemporalAaDowngrade?.(false);
+
+const motionWindow = findReplayMotionWindow(frames);
+let motion: {
+  readonly frameSpanMs: number;
+  readonly fromOffsetMs: number;
+  readonly toOffsetMs: number;
+  readonly playerDeltaM: number;
+  readonly ballDeltaM: number;
+  readonly moved: boolean;
+} | null = null;
+if (motionWindow !== null) {
+  const motionReplay = new MatchReplayBuffer({ speed: 1 });
+  if (motionReplay.loadSaved(frames) && motionReplay.startSaved(0)) {
+    const before = motionReplay.sample(motionWindow.fromOffsetMs);
+    const after = motionReplay.sample(motionWindow.toOffsetMs);
+    if (before !== null && after !== null) {
+      const measured = measureReplayMotion(before.view, after.view);
+      motion = {
+        frameSpanMs: motionWindow.frameSpanMs,
+        fromOffsetMs: motionWindow.fromOffsetMs,
+        toOffsetMs: motionWindow.toOffsetMs,
+        playerDeltaM: measured.playerDeltaM,
+        ballDeltaM: measured.ballDeltaM,
+        moved: measured.moved,
+      };
+    }
+  }
+}
 
 const replay = new MatchReplayBuffer({ speed: 1 });
 if (!replay.loadSaved(frames) || !replay.startSaved(0)) {
@@ -132,14 +164,16 @@ if (looped === null) {
 renderSample(looped, "loop");
 
 const failed = checks.filter((check) => check.actual !== check.expected);
+const motionPassed = motion !== null && motion.moved;
 const report = {
-  status: failed.length === 0 ? "PASS" : "FAIL",
+  status: failed.length === 0 && motionPassed ? "PASS" : "FAIL",
   replayCode: parsed.code,
   clipId: parsed.id,
   frameCount: frames.length,
   taaSupported:
     renderer.temporalAaDiagnostics?.().supported ?? false,
   timelineResets: renderer.temporalAaDiagnostics?.().timelineResets ?? -1,
+  motion,
   checks,
 };
 result.textContent = JSON.stringify(report, null, 2);

@@ -88,6 +88,15 @@ try {
   if (!report.taaSupported || report.timelineResets !== 5) {
     throw new Error("Replay acceptance did not observe all TAA timeline resets");
   }
+  if (
+    report.motion === null ||
+    report.motion === undefined ||
+    !report.motion.moved ||
+    report.motion.toOffsetMs <= report.motion.fromOffsetMs ||
+    (report.motion.playerDeltaM <= 0 && report.motion.ballDeltaM <= 0)
+  ) {
+    throw new Error("Replay acceptance did not observe sub-frame motion");
+  }
 } finally {
   await browser?.close();
   stopPreview(preview);

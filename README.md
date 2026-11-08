@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 44**:
+both devices are thin clients. This repository is at **Milestone 45**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,54 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 45 scope
+
+Implemented:
+
+- `replay-motion.ts` detects the consecutive recorded pair with the largest
+  combined player/ball displacement and returns a sub-frame window inside that
+  pair, relative to the first recorded frame
+- Motion measurement matches players by team and ID across frames, so it
+  measures real displacement rather than array order; sub-millimetre jitter is
+  rejected as timestamp noise
+- The browser acceptance page now samples two moments 16 ms apart inside the
+  largest-motion real server clip window, through a second
+  `MatchReplayBuffer`, and publishes a structured `motion` report
+- The page fails if no motion window exists, no sample is produced, or measured
+  player/ball displacement is zero
+- The Playwright runner fails the CI job on a missing/false motion report, a
+  non-advancing sample window, or zero displacement, in addition to the
+  existing TAA reset assertions
+- Unit tests cover largest-displacement measurement, static-frame rejection,
+  window selection in the highest-motion pair, and null results for static
+  clips
+
+Verification:
+
+- `pnpm check` passes **730 tests across 97 files**; lint and typecheck pass
+- `pnpm test:browser:replay` reports **PASS** with the real captured clip:
+  - motion window span: **33.33 ms**
+  - sampled offsets: **2,980 ms → 2,996 ms**
+  - largest player displacement: **0.157 m**
+  - ball displacement: **0 m** in this window, while player displacement
+    proves interpolation is active
+  - TAA timeline resets remain forward **0**, pause **0**, reverse **1/1**,
+    forward step **2**, backward seek **3**, forward seek **4**, loop wrap **5**
+- `pnpm build` succeeds
+
+Known M45 limitations:
+
+- The detector chooses the largest endpoint displacement; it does not search
+  for the smoothest visual section
+- Motion samples are measured through the replay/view data but are not drawn
+  through the Three renderer, so this is browser-executed logic rather than a
+  pixel-difference test
+- Rotational-only motion without player or ball displacement is not treated as
+  motion
+- The 16 ms sub-frame interval is deliberate for 60 Hz display validation, not
+  a frame-rate-independent motion metric
+- All M44–M35 presentation caveats remain
 
 ## Milestone 44 scope
 
