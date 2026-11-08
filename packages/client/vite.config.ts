@@ -82,6 +82,10 @@ export default defineConfig(({ command, isPreview = false }) => {
           controller: path.resolve(packageDir, "controller.html"),
           character: path.resolve(packageDir, "character.html"),
           performance: path.resolve(packageDir, "performance.html"),
+          replayAcceptance: path.resolve(
+            packageDir,
+            "replay-acceptance.html",
+          ),
         },
       },
     },

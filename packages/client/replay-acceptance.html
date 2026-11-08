@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Replay / TAA acceptance</title>
+    <style>
+      body { margin: 0; background: #0b1210; color: #d8e1e6; font: 14px/1.5 monospace; }
+      canvas { display: block; width: 640px; height: 360px; }
+      pre { padding: 12px; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <canvas id="pitch" width="640" height="360"></canvas>
+    <pre id="result">Running recorded replay acceptance…</pre>
+    <script type="module" src="/src/replay-acceptance.ts"></script>
+  </body>
+</html>
