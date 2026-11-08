@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 46**:
+both devices are thin clients. This repository is at **Milestone 47**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,55 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 47 scope
+
+Implemented:
+
+- Added `pnpm --filter @fb/server serve:replay`, a real `startGameServer`
+  instance that seeds a temporary `ReplayStore` with the natural goal fixture,
+  builds a `RoomManager`, and exposes the normal replay route at
+  `/api/replay/ABCD/g1.json`
+- The acceptance server serves the built client from `packages/client/dist`
+  over HTTP; it does not use the Vite preview server, so the browser exercises
+  the actual request handler and static-file path
+- The browser acceptance page now fetches
+  `/api/replay/ABCD/g1.json` instead of the public fixture file, validates the
+  HTTP payload with `parseReplayExport`, and reports `source: "http"` plus the
+  endpoint
+- The Playwright runner now starts the game server instead of Vite preview,
+  loads the acceptance page from it, and compares the live endpoint payload
+  against the committed fixture: clip ID, kind, frame count, setup and every
+  frame must match
+- The runner still checks the TAA reset sequence and sub-frame motion report
+
+Verification:
+
+- `pnpm check` passes **733 tests across 97 files**; lint and typecheck pass
+- `pnpm test:browser:replay` reports **PASS**:
+  - source `http`, endpoint `/api/replay/ABCD/g1.json`
+  - clip `g1`, **135 frames**
+  - live response **200**, **604,003 bytes**
+  - live frames and setup are identical to the committed fixture
+  - motion window: **33.33 ms**, **2,946.7 → 2,962.7 ms**
+  - largest player displacement **0.126 m**, ball **0.434 m**
+  - TAA resets: forward **0**, pause **0**, reverse **1/1**, forward step **2**,
+    backward seek **3**, forward seek **4**, loop wrap **5**
+- `pnpm build` succeeds
+
+Known M47 limitations:
+
+- The acceptance server is HTTP-only and serves no TLS; production LAN play
+  still requires HTTPS/WSS
+- The HTTP fixture server seeds a temporary `ReplayStore`; it does not run a
+  live match or WebSocket session during browser acceptance
+- Endpoint metadata such as `generatedAtMs` differs from the fixture by
+  design; assertions compare IDs, setup, frame count and all frames
+- The static fixture remains in `packages/client/public/fixtures` as the source
+  used to seed the temporary store
+- The runner starts one extra Node/tsx process, increasing browser-job startup
+  time
+- All M46–M35 presentation caveats remain
 
 ## Milestone 46 scope
 

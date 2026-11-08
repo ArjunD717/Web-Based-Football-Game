@@ -12,13 +12,14 @@ import { createThreeRenderer } from "./render/three-renderer";
 const canvas = document.querySelector<HTMLCanvasElement>("#pitch")!;
 const result = document.querySelector<HTMLElement>("#result")!;
 
-const response = await fetch("/fixtures/server-goal-replay.json");
+const endpoint = "/api/replay/ABCD/g1.json";
+const response = await fetch(endpoint);
 if (!response.ok) {
-  throw new Error(`Could not load server replay fixture (${response.status})`);
+  throw new Error(`Could not load replay from ${endpoint} (${response.status})`);
 }
 const parsed = parseReplayExport(await response.json());
 if (parsed === null) {
-  throw new Error("Server replay fixture failed validation");
+  throw new Error("HTTP replay payload failed validation");
 }
 const builder = new WireViewBuilder(parsed.setup, null);
 const intervalMs = 1_000 / parsed.setup.snapshotHz;
@@ -167,6 +168,8 @@ const failed = checks.filter((check) => check.actual !== check.expected);
 const motionPassed = motion !== null && motion.moved;
 const report = {
   status: failed.length === 0 && motionPassed ? "PASS" : "FAIL",
+  source: "http",
+  endpoint,
   replayCode: parsed.code,
   clipId: parsed.id,
   frameCount: frames.length,

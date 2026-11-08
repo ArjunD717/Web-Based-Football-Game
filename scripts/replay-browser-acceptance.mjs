@@ -1,11 +1,14 @@
 // scripts/replay-browser-acceptance.mjs
 
 import { execFileSync, spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const HOST = "127.0.0.1";
 const PORT = 4173;
-const URL = `http://${HOST}:${PORT}/replay-acceptance.html`;
+const BASE_URL = `http://${HOST}:${PORT}`;
+const URL = `${BASE_URL}/replay-acceptance.html`;
+const FIXTURE_PATH = "packages/client/public/fixtures/server-goal-replay.json";
 
 function stopPreview(child) {
   if (child === null || child.exitCode !== null) {
@@ -33,23 +36,12 @@ async function waitForPreview() {
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error(`Vite preview did not serve ${URL} within 30s`);
+  throw new Error(`HTTP replay server did not serve ${URL} within 30s`);
 }
 
 const preview = spawn(
   process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-  [
-    "--filter",
-    "@fb/client",
-    "exec",
-    "vite",
-    "preview",
-    "--host",
-    HOST,
-    "--port",
-    String(PORT),
-    "--strictPort",
-  ],
+  ["--filter", "@fb/server", "serve:replay"],
   { stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" },
 );
 
@@ -87,6 +79,26 @@ try {
   }
   if (!report.taaSupported || report.timelineResets !== 5) {
     throw new Error("Replay acceptance did not observe all TAA timeline resets");
+  }
+  if (report.source !== "http" || report.endpoint !== "/api/replay/ABCD/g1.json") {
+    throw new Error("Replay acceptance did not load through the HTTP replay route");
+  }
+  const liveResponse = await fetch(
+    `${BASE_URL}/api/replay/${report.replayCode}/${report.clipId}.json`,
+  );
+  if (!liveResponse.ok) {
+    throw new Error(`Live replay endpoint returned ${liveResponse.status}`);
+  }
+  const live = await liveResponse.json();
+  const fixture = JSON.parse(await readFile(FIXTURE_PATH, "utf8"));
+  if (
+    live.id !== fixture.id ||
+    live.kind !== fixture.kind ||
+    live.frameCount !== fixture.frameCount ||
+    JSON.stringify(live.frames) !== JSON.stringify(fixture.frames) ||
+    JSON.stringify(live.setup) !== JSON.stringify(fixture.setup)
+  ) {
+    throw new Error("Live HTTP replay payload does not match the fixture");
   }
   if (
     report.motion === null ||
