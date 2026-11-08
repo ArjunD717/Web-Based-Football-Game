@@ -2,8 +2,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import type { ClientMessage, ServerMessage, WireReplayExport } from "@fb/shared";
-import type { MatchState } from "@fb/sim";
+import { TUNING, type ClientMessage, type ServerMessage, type WireReplayExport } from "@fb/shared";
 import type { ClientConnection } from "../src/client";
 import type { Logger } from "../src/create-server";
 import { loadTeamRegistry } from "../src/data/registry";
@@ -45,10 +44,16 @@ const output = fileURLToPath(
 );
 
 const registry = await loadTeamRegistry(dataDir);
+const matchSeed = Number(process.env.CAPTURE_SEED ?? 20_261_108);
+if (!Number.isInteger(matchSeed)) {
+  throw new Error(`CAPTURE_SEED must be an integer, got ${process.env.CAPTURE_SEED}`);
+}
 const manager = new RoomManager({
   logger: silentLogger,
   registry,
   generateCode: () => "ABCD",
+  matchSeed,
+  aiOnly: true,
 });
 const host = new CaptureClient("capture-host");
 const guest = new CaptureClient("capture-guest");
@@ -59,34 +64,19 @@ manager.onMessage(guest, { t: "joinRoom", code: "ABCD" } satisfies ClientMessage
 manager.onMessage(host, { t: "setReady", ready: true });
 manager.onMessage(guest, { t: "setReady", ready: true });
 
-const internal = manager as unknown as {
-  rooms: Map<
-    string,
-    { match: { state: MatchState; finished: boolean } | null }
-  >;
-};
-const match = internal.rooms.get("ABCD")?.match;
-if (match === null || match === undefined) {
-  throw new Error("Capture room did not start a match");
-}
-
-const tick = (count: number): void => {
-  for (let index = 0; index < count; index += 1) {
-    manager.tick(1 / 60);
+const maxTicks = TUNING.sim.tickHz * 60 * 20;
+for (let tick = 0; tick < maxTicks; tick += 1) {
+  manager.tick(1 / 60);
+  if (latestReplayClips(host).length > 0) {
+    break;
   }
-};
-
-// The room's normal score-change hook owns capture; forcing the authoritative
-// score gives a deterministic goal while every frame remains real match data.
-match.state.referee.scoreHome = 1;
-tick(100);
-match.state.referee.scoreHome = 2;
-tick(100);
-
+}
 const clips = latestReplayClips(host);
 const latest = clips.at(-1);
 if (latest === undefined) {
-  throw new Error("No goal replay clip was captured");
+  throw new Error(
+    `No natural goal was captured with seed ${matchSeed} in ${maxTicks} ticks`,
+  );
 }
 const captured = manager.exportReplayClip("ABCD", latest.id);
 if (captured === null) {

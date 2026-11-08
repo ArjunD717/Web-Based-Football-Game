@@ -69,8 +69,8 @@ describe("replay motion window selection", () => {
   it("returns a sub-frame window inside the pair with the largest movement", () => {
     const frames = [
       { view: view(10, 50, 20), recordedAtMs: 0 },
-      { view: view(11, 50, 20), recordedAtMs: 1_000 },
-      { view: view(30, 50, 20), recordedAtMs: 2_000 },
+      { view: view(10.5, 50, 20), recordedAtMs: 1_000 },
+      { view: view(17, 50, 20), recordedAtMs: 2_000 },
     ];
     const motion = findReplayMotionWindow(frames);
     expect(motion).not.toBeNull();
@@ -80,7 +80,16 @@ describe("replay motion window selection", () => {
     expect(motion.fromOffsetMs).toBeGreaterThan(1_000);
     expect(motion.toOffsetMs).toBeGreaterThan(motion.fromOffsetMs);
     expect(motion.toOffsetMs).toBeLessThan(2_000);
-    expect(motion.playerDeltaM).toBeCloseTo(19, 6);
+    expect(motion.playerDeltaM).toBeCloseTo(6.5, 6);
+  });
+
+  it("returns null when a consecutive pair looks like a reset teleport", () => {
+    expect(
+      findReplayMotionWindow([
+        { view: view(10, 50, 20), recordedAtMs: 0 },
+        { view: view(1_000, 50, 20), recordedAtMs: 100 },
+      ]),
+    ).toBeNull();
   });
 
   it("returns null when every consecutive pair is static", () => {

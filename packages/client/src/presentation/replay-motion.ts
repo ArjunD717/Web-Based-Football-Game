@@ -5,6 +5,9 @@ import type { ReplayFrame } from "./replay";
 
 /** Sub-millimetre motion is timestamp noise, not play. */
 const MIN_MOTION_M = 1e-4;
+/** Above these speeds a consecutive pair is a reset/teleport, not play. */
+const MAX_PLAYER_SPEED_MPS = 12;
+const MAX_BALL_SPEED_MPS = 45;
 
 export interface ReplayMotionMeasurement {
   readonly playerDeltaM: number;
@@ -103,6 +106,13 @@ export function findReplayMotionWindow(
       continue;
     }
     const motion = measureReplayMotion(previous.view, current.view);
+    const spanSeconds = frameSpanMs / 1_000;
+    if (
+      motion.playerDeltaM > MAX_PLAYER_SPEED_MPS * spanSeconds + MIN_MOTION_M ||
+      motion.ballDeltaM > MAX_BALL_SPEED_MPS * spanSeconds + MIN_MOTION_M
+    ) {
+      continue;
+    }
     const score = motion.playerDeltaM + motion.ballDeltaM;
     if (score <= bestScore) {
       continue;

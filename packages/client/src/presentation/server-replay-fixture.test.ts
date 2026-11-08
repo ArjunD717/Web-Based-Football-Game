@@ -20,7 +20,7 @@ describe("server-captured replay fixture", () => {
       return;
     }
     expect(parsed.code).toBe("ABCD");
-    expect(parsed.id).toBe("g2");
+    expect(parsed.id).toMatch(/^g\d+$/);
     expect(parsed.setup.snapshotHz).toBe(30);
     expect(parsed.frames.length).toBeGreaterThan(90);
 

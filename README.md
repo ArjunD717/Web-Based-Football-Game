@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 45**:
+both devices are thin clients. This repository is at **Milestone 46**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -180,6 +180,56 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 46 scope
+
+Implemented:
+
+- `RoomManager` accepts a deterministic `matchSeed` and an `aiOnly` capture
+  mode. AI-only rooms leave every player under simulation AI control and skip
+  user-control preparation entirely
+- The fixture capture command no longer mutates the authoritative score. It
+  starts a deterministic AI-vs-AI room, runs until the normal score-change hook
+  produces a goal clip, waits for the post-roll, and exports that clip
+- Default capture seed `20_261_108` produces a natural 1-0 goal at 748 seconds
+  in the first half; the fixture is clip `g1` with **135 frames** at 30 Hz
+- The natural fixture is byte-stable across regeneration:
+  `cd4509032fd5d4bcc8a92fe49f7cbfc50d15791a8801c5d84cc08e5fa4f58096`
+- A room-manager test now runs a deterministic AI-only match until it captures
+  a goal without touching the score, and asserts the exported clip contains
+  the full pre/post-roll
+- Replay motion detection gained physical plausibility limits (12 m/s players,
+  45 m/s ball). The natural goal's kickoff reset was initially selected as the
+  largest motion pair; teleport-scale consecutive pairs are now rejected
+- Browser motion checks now measure open-play movement instead of the restart
+  discontinuity
+
+Verification:
+
+- `pnpm check` passes **733 tests across 97 files**; lint and typecheck pass
+- `pnpm --filter @fb/server fixture:replay` writes **135 frames** and
+  **1.05 MiB**; regenerating produces the same SHA-256
+- `pnpm test:browser:replay` reports **PASS**:
+  - clip `g1`, 135 frames, code `ABCD`
+  - motion window: **33.33 ms**, **2,946.7 ms → 2,962.7 ms**
+  - largest player displacement: **0.126 m**
+  - ball displacement: **0.434 m**
+  - TAA resets: forward **0**, pause **0**, reverse **1/1**, forward step **2**,
+    backward seek **3**, forward seek **4**, loop wrap **5**
+- `pnpm build` succeeds
+
+Known M46 limitations:
+
+- Natural capture depends on the deterministic seed and the default team
+  pairing; changing either can change the goal or its timing
+- The capture still waits up to 20 simulated minutes for a goal and then for
+  the full post-roll
+- Incidental metadata such as `matchId`, seed and timestamps is normalised for
+  stable diffs; simulation frames are untouched
+- Motion plausibility caps are heuristics; extremely fast legitimate ball
+  travel near 45 m/s is at the boundary
+- The 1.05 MiB fixture is served only by the acceptance page
+- All M45–M35 presentation caveats remain
+
 ## Milestone 45 scope
 
 Implemented:
@@ -317,9 +367,8 @@ Verification:
 
 Known M43 limitations:
 
-- The capture forces the authoritative score to make a goal deterministic; the
-  frames still come from the real match loop, but they are not a naturally
-  occurring open-play goal
+- M43's original capture forced the authoritative score to make a goal
+  deterministic; M46 replaces that pipeline with a natural AI-only goal
 - Fixture metadata is normalised for reproducibility, so the committed file is
   not byte-identical to the HTTP response that produced it
 - The 711 KiB fixture is a test asset served only by the acceptance page, not
