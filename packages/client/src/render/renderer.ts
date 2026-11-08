@@ -5,7 +5,21 @@ import type { FootstepSink } from "./footsteps";
 import type { VisualQuality } from "./visualTuning";
 import type { TemporalAaSupport } from "./temporal-aa-support";
 
-export type TemporalAaAutoState = "disabled" | "retried" | "exhausted";
+export type TemporalAaAutoState =
+  | "active"
+  | "disabled"
+  | "retried"
+  | "exhausted";
+
+export interface TemporalAaDiagnostics {
+  readonly supported: boolean;
+  readonly reason: string;
+  readonly active: boolean;
+  readonly autoState: TemporalAaAutoState;
+  readonly historyResets: number;
+  readonly timelineResets: number;
+  readonly autoRetries: number;
+}
 import type { MatchView } from "./view";
 
 /**
@@ -38,6 +52,8 @@ export interface MatchRenderer {
   setTemporalAa?(enabled: boolean): void;
   /** Report whether this renderer can host temporal AA history buffers. */
   temporalAaCapability?(): TemporalAaSupport;
+  /** Snapshot for the visible diagnostics readout and replay acceptance. */
+  temporalAaDiagnostics?(): TemporalAaDiagnostics;
   /** Receives automatic TAA disable, retry and exhaustion transitions. */
   setTemporalAaAutoStateHandler?(
     handler: ((state: TemporalAaAutoState) => void) | null,

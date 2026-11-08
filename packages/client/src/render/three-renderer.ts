@@ -7,6 +7,7 @@ import type {
   MatchRenderer,
   ScreenIndicator,
   TemporalAaAutoState,
+  TemporalAaDiagnostics,
 } from "./renderer";
 import { CameraDebugOverlay } from "../camera/CameraDebugOverlay";
 import { CameraDirector } from "../camera/CameraDirector";
@@ -152,6 +153,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private taaRecovery: TaaRecoveryState = INITIAL_TAA_RECOVERY_STATE;
   private taaAutoDisabled = false;
   private taaRetries = 0;
+  private taaResetBase = 0;
+  private taaTimelineResets = 0;
+  private taaAutoState: TemporalAaAutoState = "active";
   private autoTaaDowngradeEnabled = true;
   private onTaaAutoState: ((state: TemporalAaAutoState) => void) | null =
     null;
@@ -338,6 +342,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
         VISUAL_TUNING.temporalAa.timelineJumpSeconds,
       )
     ) {
+      this.taaTimelineResets += 1;
       this.temporalAa?.reset();
     }
     this.syncPlayers(view);
@@ -521,11 +526,13 @@ export class ThreeMatchRenderer implements MatchRenderer {
     const exhausted =
       this.taaRetries >= VISUAL_TUNING.temporalAa.autoRetryMax;
     this.taaAutoDisabled = true;
+    this.taaAutoState = exhausted ? "exhausted" : "disabled";
     this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
     this.taaRecovery = INITIAL_TAA_RECOVERY_STATE;
+    this.taaResetBase += this.temporalAa.resets;
     this.temporalAa.dispose();
     this.temporalAa = null;
-    this.onTaaAutoState?.(exhausted ? "exhausted" : "disabled");
+    this.onTaaAutoState?.(this.taaAutoState);
   }
 
   private retryTemporalAaAutomatically(): void {
@@ -534,6 +541,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
     this.taaRetries += 1;
     this.taaAutoDisabled = false;
+    this.taaAutoState = "retried";
     this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
     this.taaRecovery = INITIAL_TAA_RECOVERY_STATE;
     this.temporalAa = new TemporalAa(this.renderer);
@@ -621,6 +629,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
     this.taaAutoDisabled = false;
     this.taaRetries = 0;
+    this.taaAutoState = "active";
     this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
     this.taaRecovery = INITIAL_TAA_RECOVERY_STATE;
     if (enabled === (this.temporalAa !== null)) {
@@ -630,6 +639,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.temporalAa = new TemporalAa(this.renderer);
       this.temporalAa.resize();
     } else {
+      if (this.temporalAa !== null) {
+        this.taaResetBase += this.temporalAa.resets;
+      }
       this.temporalAa?.dispose();
       this.temporalAa = null;
     }
@@ -637,6 +649,19 @@ export class ThreeMatchRenderer implements MatchRenderer {
 
   temporalAaCapability(): TemporalAaSupport {
     return this.taaSupport;
+  }
+
+  temporalAaDiagnostics(): TemporalAaDiagnostics {
+    return {
+      supported: this.taaSupport.supported,
+      reason: this.taaSupport.reason,
+      active: this.temporalAa !== null,
+      autoState: this.taaAutoState,
+      historyResets:
+        this.taaResetBase + (this.temporalAa?.resets ?? 0),
+      timelineResets: this.taaTimelineResets,
+      autoRetries: this.taaRetries,
+    };
   }
 
   setTemporalAaAutoStateHandler(

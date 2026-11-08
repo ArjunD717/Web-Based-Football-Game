@@ -223,6 +223,7 @@ export class TemporalAa {
   private height = 0;
   private readIndex = 0;
   private historyValid = false;
+  private resetCount = 0;
   private frame = 0;
   private hasCameraSample = false;
   private readonly lastCameraPosition = new THREE.Vector3();
@@ -343,7 +344,12 @@ export class TemporalAa {
     this.motionSources = sources;
   }
 
+  get resets(): number {
+    return this.resetCount;
+  }
+
   reset(): void {
+    this.resetCount += 1;
     this.historyValid = false;
     this.frame = 0;
     // After a cut or a replay seek the previous proxy matrix is unrelated to
