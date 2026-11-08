@@ -3,16 +3,18 @@
 import { parseReplayExport } from "./match/replay-gallery";
 import { WireViewBuilder } from "./match/view-from-wire";
 import { MatchReplayBuffer } from "./presentation/replay";
-import { buildReplayExportFixture } from "./presentation/replay-export-fixture";
 import { createThreeRenderer } from "./render/three-renderer";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#pitch")!;
 const result = document.querySelector<HTMLElement>("#result")!;
 
-const exported = buildReplayExportFixture();
-const parsed = parseReplayExport(exported);
+const response = await fetch("/fixtures/server-goal-replay.json");
+if (!response.ok) {
+  throw new Error(`Could not load server replay fixture (${response.status})`);
+}
+const parsed = parseReplayExport(await response.json());
 if (parsed === null) {
-  throw new Error("Exported replay fixture failed validation");
+  throw new Error("Server replay fixture failed validation");
 }
 const builder = new WireViewBuilder(parsed.setup, null);
 const intervalMs = 1_000 / parsed.setup.snapshotHz;
@@ -123,7 +125,7 @@ if (forward === null) {
 }
 renderSample(forward, "seek-forward");
 
-const looped = replay.sample(2_200, true);
+const looped = replay.sample(7_000, true);
 if (looped === null) {
   throw new Error("Loop sample was null");
 }

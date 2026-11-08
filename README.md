@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 42**:
+both devices are thin clients. This repository is at **Milestone 43**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,62 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 43 scope
+
+Implemented:
+
+- A reproducible server capture command,
+  `pnpm --filter @fb/server fixture:replay`, boots a real `RoomManager` room,
+  runs the authoritative match loop, triggers the normal score-change capture
+  hook and exports the goal clip through `exportReplayClip`
+- The captured 30 Hz clip is written to
+  `packages/client/public/fixtures/server-goal-replay.json`; it contains 97
+  frames, 22 real player snapshots per frame, ordinary match clock progression
+  and the room's second generated goal clip (`g2`, 2-0)
+- Incidental metadata (`matchId`, `seed`, generation and creation times) is
+  normalised so regenerating the fixture produces stable diffs; frame data,
+  lineups, ball state and match state are untouched server output
+- The browser acceptance page fetches the captured fixture from
+  `/fixtures/server-goal-replay.json` instead of using a synthetic scene
+- A Vitest fixture test asserts the real clip's 30 Hz cadence, clock
+  monotonicity, 22-player frames and complete `WireViewBuilder` conversion
+- The room-manager goal test now round-trips its live export through JSON,
+  `parseReplayExport`, `WireViewBuilder` and `MatchReplayBuffer` across the
+  server/client package boundary
+- The browser runner now accepts the real clip's 97-frame timeline; playback,
+  pause, reverse/forward steps, seeks and loop wrap still assert the exact TAA
+  reset sequence
+
+Verification:
+
+- `pnpm check` passes **722 tests across 95 files**; lint and typecheck pass
+- `pnpm --filter @fb/server fixture:replay` captures **97 frames** from a real
+  room into a **711 KiB** fixture
+- `pnpm test:browser:replay` reports **PASS** with the server capture:
+  - replay code `ABCD`, clip `g2`, 97 frames
+  - forward playback: **0** resets
+  - pause: **0**
+  - reverse steps: **1**, **1**
+  - forward step: **2**
+  - backward seek: **3**
+  - forward seek: **4**
+  - loop wrap: **5**
+- `pnpm build` succeeds and copies the captured fixture into the production
+  acceptance page bundle
+
+Known M43 limitations:
+
+- The capture forces the authoritative score to make a goal deterministic; the
+  frames still come from the real match loop, but they are not a naturally
+  occurring open-play goal
+- Fixture metadata is normalised for reproducibility, so the committed file is
+  not byte-identical to the HTTP response that produced it
+- The 711 KiB fixture is a test asset served only by the acceptance page, not
+  part of the main game bundle
+- Replay playback still selects discrete 30 Hz frames; it does not synthesise
+  interpolated views between snapshots
+- All M42–M35 presentation caveats remain
 
 ## Milestone 42 scope
 

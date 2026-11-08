@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "fixture:replay": "tsx scripts/capture-replay-fixture.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p scripts/tsconfig.json"
   },
   "dependencies": {
     "@fb/data-tools": "workspace:*",

@@ -82,7 +82,7 @@ try {
   if (report.status !== "PASS") {
     throw new Error(`Replay acceptance failed: ${report.status}`);
   }
-  if (report.replayCode !== "ABCD" || report.frameCount !== 21) {
+  if (report.replayCode !== "ABCD" || report.frameCount < 90) {
     throw new Error("Replay acceptance did not load the exported fixture");
   }
   if (!report.taaSupported || report.timelineResets !== 5) {

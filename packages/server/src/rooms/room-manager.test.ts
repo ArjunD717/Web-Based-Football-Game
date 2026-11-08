@@ -23,6 +23,9 @@ import { loadTeamRegistry, type TeamRegistry } from "../data/registry";
 import { ReplayStore } from "../replays/replay-store";
 import { RoomManager } from "./room-manager";
 import type { MatchState } from "@fb/sim";
+import { parseReplayExport } from "../../../client/src/match/replay-gallery";
+import { WireViewBuilder } from "../../../client/src/match/view-from-wire";
+import { MatchReplayBuffer } from "../../../client/src/presentation/replay";
 
 const silentLogger: Logger = {
   info: () => undefined,
@@ -551,6 +554,45 @@ describe("server replay export", () => {
     expect(clip?.kind).toBe("goal");
     expect(clip?.frames.length).toBe(latest?.frameCount);
     expect(fixture.manager.exportReplayClip(fixture.code, "missing")).toBeNull();
+
+    // Cross-package acceptance: the real room export must survive the same
+    // JSON, parser, view-builder and replay-buffer path used by the browser.
+    const parsed = parseReplayExport(JSON.parse(JSON.stringify(clip)));
+    expect(parsed).not.toBeNull();
+    if (parsed === null) {
+      return;
+    }
+    expect(parsed.setup.snapshotHz).toBe(30);
+    expect(parsed.frames.length).toBeGreaterThan(90);
+    const builder = new WireViewBuilder(parsed.setup, null);
+    const views = parsed.frames.flatMap((frame) => {
+      const view = builder.build(frame);
+      return view === null ? [] : [view];
+    });
+    expect(views).toHaveLength(parsed.frames.length);
+    expect(views[0]?.home.players).toHaveLength(11);
+    expect(views[0]?.away.players).toHaveLength(11);
+    for (let index = 1; index < parsed.frames.length; index += 1) {
+      const previous = parsed.frames[index - 1];
+      const current = parsed.frames[index];
+      if (previous === undefined || current === undefined) {
+        continue;
+      }
+      expect(current.tick).toBeGreaterThan(previous.tick);
+      expect(current.match.clockSeconds).toBeGreaterThanOrEqual(
+        previous.match.clockSeconds,
+      );
+      expect(current.tick - previous.tick).toBe(2);
+    }
+    const replay = new MatchReplayBuffer({ speed: 1 });
+    const replayFrames = views.map((view, index) => ({
+      view,
+      recordedAtMs: index * (1_000 / parsed.setup.snapshotHz),
+    }));
+    expect(replay.loadSaved(replayFrames)).toBe(true);
+    expect(replay.startSaved(0)).toBe(true);
+    const sampled = replay.sample(3_000);
+    expect(sampled?.view.tick).toBeGreaterThan(parsed.frames[0]?.tick ?? 0);
   });
 
   it("writes captured clips into the durable replay library", async () => {
