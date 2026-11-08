@@ -141,6 +141,10 @@ export interface RoomManagerOptions {
   readonly generateCode?: () => string;
   readonly onRoomCreated?: (code: string) => void;
   readonly replayStore?: ReplayStore;
+  /** Deterministic match seed for headless fixture capture. */
+  readonly matchSeed?: number;
+  /** Leave both teams to AI instead of creating user-controlled players. */
+  readonly aiOnly?: boolean;
 }
 
 /**
@@ -156,6 +160,8 @@ export class RoomManager {
   private readonly generateCode: () => string;
   private readonly onRoomCreated: (code: string) => void;
   private readonly replayStore: ReplayStore | null;
+  private readonly matchSeed: number | null;
+  private readonly aiOnly: boolean;
 
   constructor(options: RoomManagerOptions) {
     this.logger = options.logger;
@@ -165,6 +171,8 @@ export class RoomManager {
     this.generateCode = options.generateCode ?? (() => this.randomCode());
     this.onRoomCreated = options.onRoomCreated ?? (() => undefined);
     this.replayStore = options.replayStore ?? null;
+    this.matchSeed = options.matchSeed ?? null;
+    this.aiOnly = options.aiOnly ?? false;
     if (!Number.isFinite(this.reconnectGraceMs) || this.reconnectGraceMs <= 0) {
       throw new RangeError("reconnectGraceMs must be positive");
     }
@@ -1063,6 +1071,9 @@ export class RoomManager {
   }
 
   private prepareControls(match: RoomMatch): void {
+    if (this.aiOnly) {
+      return;
+    }
     prepareTeamControl(match.state, "home", match.controls.home, TICK_SECONDS);
     prepareTeamControl(match.state, "away", match.controls.away, TICK_SECONDS);
   }
@@ -1183,6 +1194,7 @@ export class RoomManager {
           };
     try {
       const serverMatch = createServerMatch({
+        ...(this.matchSeed === null ? {} : { seed: this.matchSeed }),
         rules,
         home: {
           team: hostTeam,

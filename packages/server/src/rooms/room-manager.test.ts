@@ -22,7 +22,7 @@ import type { Logger } from "../create-server";
 import { loadTeamRegistry, type TeamRegistry } from "../data/registry";
 import { ReplayStore } from "../replays/replay-store";
 import { RoomManager } from "./room-manager";
-import type { MatchState } from "@fb/sim";
+import { hashMatchState, type MatchState } from "@fb/sim";
 import { parseReplayExport } from "../../../client/src/match/replay-gallery";
 import { WireViewBuilder } from "../../../client/src/match/view-from-wire";
 import { MatchReplayBuffer } from "../../../client/src/presentation/replay";
@@ -107,6 +107,8 @@ function setupRoom(
   options: {
     reconnectGraceMs?: number;
     replayStore?: ReplayStore;
+    matchSeed?: number;
+    aiOnly?: boolean;
   } = {},
 ): Fixture {
   const created: string[] = [];
@@ -631,6 +633,60 @@ describe("server replay export", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("runs deterministic AI-only capture rooms", () => {
+    const matchSeed = 20_261_108;
+    const first = setupRoom({ matchSeed, aiOnly: true });
+    const second = setupRoom({ matchSeed, aiOnly: true });
+    startReadyMatch(first);
+    startReadyMatch(second);
+    const stateOf = (fixture: Fixture): MatchState => {
+      const internal = fixture.manager as unknown as {
+        rooms: Map<string, { match: { state: MatchState } | null }>;
+      };
+      const state = internal.rooms.get(fixture.code)?.match?.state;
+      if (state === undefined) {
+        throw new Error("Room has no match state");
+      }
+      return state;
+    };
+    expect(stateOf(first).seed).toBe(matchSeed);
+    expect(stateOf(second).seed).toBe(matchSeed);
+    for (let tick = 0; tick < 600; tick += 1) {
+      first.manager.tick(1 / 60);
+      second.manager.tick(1 / 60);
+    }
+    expect(hashMatchState(stateOf(first))).toBe(
+      hashMatchState(stateOf(second)),
+    );
+    for (const team of [stateOf(first).home, stateOf(first).away]) {
+      expect(team.players.every((player) => !player.isUserControlled)).toBe(
+        true,
+      );
+    }
+  });
+
+  it("captures a natural AI-only goal without touching the score", () => {
+    const fixture = setupRoom({ matchSeed: 20_261_108, aiOnly: true });
+    startReadyMatch(fixture);
+    for (let tick = 0; tick < 8_000; tick += 1) {
+      fixture.manager.tick(1 / 60);
+      if (tick % 60 === 0 && fixture.host.lastMessageType("replayClips") !== null) {
+        break;
+      }
+    }
+    const message = fixture.host.lastMessageType("replayClips");
+    expect(message?.clips.length).toBeGreaterThan(0);
+    const latest = message?.clips.at(-1);
+    expect(latest).toMatchObject({ kind: "goal" });
+    expect((latest?.scoreHome ?? 0) + (latest?.scoreAway ?? 0)).toBe(1);
+    const clip = fixture.manager.exportReplayClip(
+      fixture.code,
+      latest?.id ?? "",
+    );
+    expect(clip?.frames.length).toBe(latest?.frameCount);
+    expect(clip?.frames.length).toBeGreaterThan(90);
   });
 
   it("returns null for an unknown room", () => {
