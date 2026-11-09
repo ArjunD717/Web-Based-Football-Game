@@ -12,6 +12,7 @@ import { loadTeamRegistry } from "./data/registry";
 import { formatHttpsUrl, listLanIpv4Addresses } from "./lan";
 import { ReplayStore } from "./replays/replay-store";
 import { RoomManager } from "./rooms/room-manager";
+import { startSimulationLoop } from "./rooms/simulation-loop";
 import { ServerTickMetrics } from "./performance";
 import { loadTlsMaterial } from "./tls";
 
@@ -75,29 +76,21 @@ async function main(): Promise<void> {
   });
   runtimePort = running.port;
 
-  let lastFrameAt = performance.now();
   let lastSlowTickLogAt = 0;
-  // Drive the accumulator at the simulated rate instead of waking four times
-  // as often. The accumulator still absorbs ordinary timer jitter.
-  const simulationLoop = setInterval(() => {
-    const now = performance.now();
-    const dt = Math.min(
-      (now - lastFrameAt) / 1_000,
-      TUNING.presentation.maxFrameDeltaSeconds,
-    );
-    lastFrameAt = now;
-    const tickStartedAt = performance.now();
-    roomManager.tick(dt);
-    const elapsed = performance.now() - tickStartedAt;
-    tickMetrics.record(elapsed);
-    if (elapsed > tickBudgetMs && now - lastSlowTickLogAt >= 5_000) {
-      lastSlowTickLogAt = now;
-      console.warn(
-        `Server tick over budget: ${elapsed.toFixed(1)} ms > ${tickBudgetMs.toFixed(1)} ms`,
-      );
-    }
-  }, 1_000 / TUNING.sim.tickHz);
-  simulationLoop.unref();
+  // One timer drives every room. Timers only measure wall time; the match
+  // still advances through the fixed-step accumulator in RoomManager.
+  const simulationLoop = startSimulationLoop(roomManager, {
+    onTick: (elapsed) => {
+      tickMetrics.record(elapsed);
+      const now = performance.now();
+      if (elapsed > tickBudgetMs && now - lastSlowTickLogAt >= 5_000) {
+        lastSlowTickLogAt = now;
+        console.warn(
+          `Server tick over budget: ${elapsed.toFixed(1)} ms > ${tickBudgetMs.toFixed(1)} ms`,
+        );
+      }
+    },
+  });
 
   const localUrl = formatHttpsUrl("localhost", running.port);
   const lanUrl = formatHttpsUrl(primaryAddress, running.port);
@@ -141,7 +134,7 @@ async function main(): Promise<void> {
     }
     shuttingDown = true;
     console.log(`\n${signal} received; closing connections...`);
-    clearInterval(simulationLoop);
+    simulationLoop.stop();
     roomManager.close();
     void replayStore
       .flush()
