@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 49**:
+both devices are thin clients. This repository is at **Milestone 50**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,59 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 50 scope
+
+Implemented:
+
+- The acceptance server now starts its HTTPS/WSS listener before a goal
+  exists. The deterministic room creates a ready host and waits for a real
+  browser guest instead of pre-capturing the clip
+- The browser acceptance page joins room `ABCD` over WSS with `hello` →
+  `joinRoom`, waits for the room lobby state, sends `setReady`, and waits for
+  the server's normal `replayClips` notification
+- The server forwards WebSocket handlers into the real `RoomManager`; when the
+  guest reports ready, the match starts and the headless loop advances to the
+  natural AI goal
+- The page derives the HTTP replay endpoint from the notified clip ID instead
+  of hard-coding `g1`, then validates the downloaded payload
+- The socket report now exposes `joined`, `ready`, `replayNotified` and
+  `clipId`; PASS/FAIL and the Playwright runner require all of them in addition
+  to the secure-context handshake and pong
+- `capture-room.ts` supports a host-only room so the browser can occupy the
+  real guest seat; the fixture path still creates both seats for deterministic
+  capture
+- The pre-captured room and pre-seeded clip are gone from the acceptance
+  startup path
+
+Verification:
+
+- `pnpm check` passes **733 tests across 97 files**; lint and typecheck pass
+- `pnpm test:browser:replay` reports **PASS**:
+  - protocol `https:`, secure context true
+  - WSS connected, welcome, pong true
+  - guest joined and ready true
+  - replay notification true, clip `g1`
+  - active room `ABCD`, 135 frames
+  - endpoint `/api/replay/ABCD/g1.json`, live payload matches fixture
+  - motion window 33.33 ms, player **0.126 m**, ball **0.434 m**
+  - TAA resets: forward **0**, pause **0**, reverse **1/1**, forward step **2**,
+    backward seek **3**, forward seek **4**, loop wrap **5**
+- Fixture generation remains byte-stable at
+  `cd4509032fd5d4bcc8a92fe49f7cbfc50d15791a8801c5d84cc08e5fa4f58096`
+- `pnpm build` succeeds
+
+Known M50 limitations:
+
+- The server fast-forwards synchronously after the guest is ready, so the room
+  is not simulated in real time during the notification wait
+- The page closes the WebSocket after receiving the notification; the room then
+  pauses on disconnect, though the captured clip stays available
+- The acceptance match still uses AI-only control for both teams
+- The self-signed certificate is trusted only through Playwright's
+  `ignoreHTTPSErrors`
+- The fixture remains the comparison oracle
+- All M49–M35 presentation caveats remain
 
 ## Milestone 49 scope
 

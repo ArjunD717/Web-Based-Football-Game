@@ -117,9 +117,12 @@ try {
     report.socket?.secureContext !== true ||
     report.socket?.connected !== true ||
     report.socket?.welcome !== true ||
-    report.socket?.pong !== true
+    report.socket?.pong !== true ||
+    report.socket?.joined !== true ||
+    report.socket?.ready !== true ||
+    report.socket?.replayNotified !== true
   ) {
-    throw new Error("Replay acceptance WSS handshake/ping did not complete");
+    throw new Error("Replay acceptance WSS room join/notification did not complete");
   }
   const liveResponse = await getInsecure(
     `${BASE_URL}/api/replay/${report.replayCode}/${report.clipId}.json`,

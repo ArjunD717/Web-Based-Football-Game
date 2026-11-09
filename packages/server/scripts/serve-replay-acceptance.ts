@@ -10,7 +10,7 @@ import { startGameServer } from "../src/create-server";
 import { loadTeamRegistry } from "../src/data/registry";
 import {
   CAPTURE_SEED,
-  createAiCaptureRoom,
+  createAiCaptureHost,
   waitForNaturalGoal,
 } from "./capture-room";
 
@@ -49,12 +49,8 @@ if (!Number.isInteger(matchSeed)) {
     `CAPTURE_SEED must be an integer, got ${process.env.CAPTURE_SEED}`,
   );
 }
-const room = createAiCaptureRoom(registry, matchSeed);
-const latest = waitForNaturalGoal(room);
-const captured = room.manager.exportReplayClip(room.code, latest.id);
-if (captured === null) {
-  throw new Error("Active-room replay clip could not be exported");
-}
+const room = createAiCaptureHost(registry, matchSeed);
+let capturing = false;
 
 const server = await startGameServer({
   host: "127.0.0.1",
@@ -66,6 +62,28 @@ const server = await startGameServer({
   tls,
   getReplayClip: (code, clipId) =>
     room.manager.exportReplayClip(code, clipId),
+  handlers: {
+    onReady: (client) => {
+      room.manager.onReady(client);
+    },
+    onMessage: (client, message) => {
+      room.manager.onMessage(client, message);
+      if (message.t === "setReady" && message.ready && !capturing) {
+        capturing = true;
+        try {
+          waitForNaturalGoal(room);
+        } catch (error) {
+          console.error("Natural goal capture failed", error);
+        }
+      }
+    },
+    onBinaryMessage: (client, data) => {
+      room.manager.onBinaryMessage(client, data);
+    },
+    onDisconnect: (client) => {
+      room.manager.onDisconnect(client);
+    },
+  },
 });
 
 let stopping = false;
@@ -87,5 +105,5 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 console.log(
   `Replay acceptance server: https://127.0.0.1:${server.port} ` +
-    `(active room ${room.code}/${latest.id}, ${captured.frames.length} frames)`,
+    `(room ${room.code} waiting for a guest)`,
 );
