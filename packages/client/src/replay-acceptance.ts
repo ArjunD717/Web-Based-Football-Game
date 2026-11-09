@@ -89,7 +89,7 @@ async function joinRoomOverWebSocket(): Promise<SocketReport> {
     };
     const timeout = setTimeout(() => {
       finish("room socket probe timed out");
-    }, 20_000);
+    }, 150_000);
     socket.addEventListener("open", () => {
       connected = true;
       socket.send(

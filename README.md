@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 50**:
+both devices are thin clients. This repository is at **Milestone 51**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,58 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 51 scope
+
+Implemented:
+
+- Extracted `startSimulationLoop` as the server's single asynchronous room
+  ticker. It measures elapsed wall time, caps long frames, feeds the fixed-step
+  accumulator, optionally applies an acceptance speed multiplier, and exposes
+  elapsed-tick metrics
+- The production server now uses the extracted loop instead of an inline
+  `setInterval`, keeping the 60 Hz loop and slow-tick warnings unchanged
+- The replay acceptance server no longer calls `waitForNaturalGoal` on the
+  WebSocket message path. It starts the same asynchronous loop, so a guest
+  joins, reports ready, and the natural goal is simulated while the HTTP/WSS
+  server remains responsive
+- The replay notification now arrives during live play from the normal
+  `replayClips` broadcast; there is no synchronous fast-forward or blocked
+  event loop
+- The acceptance page waits up to 150 seconds for the live goal and the runner
+  waits up to 180 seconds for the report; the report-readiness check now
+  distinguishes an unpublished report from a published one
+- The page still derives the HTTP endpoint from the notified clip ID and
+  compares the live payload with the deterministic fixture
+
+Verification:
+
+- `pnpm check` passes **736 tests across 98 files**; lint and typecheck pass
+- `pnpm test:browser:replay` reports **PASS** in **115 seconds wall time**:
+  - protocol `https:`, secure context true
+  - WSS connected, welcome, pong true
+  - guest joined and ready true
+  - live replay notification true, clip `g1`
+  - active room `ABCD`, 135 frames
+  - endpoint `/api/replay/ABCD/g1.json`, live payload matches fixture
+  - motion window 33.33 ms, player **0.126 m**, ball **0.434 m**
+  - TAA resets: forward **0**, pause **0**, reverse **1/1**, forward step **2**,
+    backward seek **3**, forward seek **4**, loop wrap **5**
+- The fixture remains byte-stable at
+  `cd4509032fd5d4bcc8a92fe49f7cbfc50d15791a8801c5d84cc08e5fa4f58096`
+- `pnpm build` succeeds
+
+Known M51 limitations:
+
+- Acceptance now waits for the natural goal in real time (about 100 seconds of
+  match simulation), so the browser job is slower than the fast-forward path
+- The page closes its WebSocket after the notification; the room pauses on
+  disconnect, though the replay clip remains downloadable
+- Acceptance still uses one fake host and one real browser guest, both AI-only
+- The self-signed certificate is trusted only through Playwright's
+  `ignoreHTTPSErrors`
+- The fixture remains the comparison oracle
+- All M50-M35 presentation caveats remain
 
 ## Milestone 50 scope
 

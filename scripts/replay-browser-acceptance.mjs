@@ -84,9 +84,13 @@ try {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(URL, { waitUntil: "networkidle" });
-  await page.waitForFunction(() => globalThis.__replayAcceptance !== null, null, {
-    timeout: 30_000,
-  });
+  await page.waitForFunction(
+    () =>
+      globalThis.__replayAcceptance !== undefined &&
+      globalThis.__replayAcceptance !== null,
+    null,
+    { timeout: 180_000 },
+  );
   const report = await page.evaluate(() => globalThis.__replayAcceptance);
   if (pageErrors.length > 0) {
     throw new Error(`Browser page errors: ${pageErrors.join(" | ")}`);

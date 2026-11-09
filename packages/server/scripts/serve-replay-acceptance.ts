@@ -8,11 +8,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { startGameServer } from "../src/create-server";
 import { loadTeamRegistry } from "../src/data/registry";
-import {
-  CAPTURE_SEED,
-  createAiCaptureHost,
-  waitForNaturalGoal,
-} from "./capture-room";
+import { CAPTURE_SEED, createAiCaptureHost } from "./capture-room";
+import { startSimulationLoop } from "../src/rooms/simulation-loop";
 
 const execFileAsync = promisify(execFile);
 const tlsDir = await mkdtemp(path.join(tmpdir(), "fb-replay-tls-"));
@@ -50,7 +47,6 @@ if (!Number.isInteger(matchSeed)) {
   );
 }
 const room = createAiCaptureHost(registry, matchSeed);
-let capturing = false;
 
 const server = await startGameServer({
   host: "127.0.0.1",
@@ -68,14 +64,6 @@ const server = await startGameServer({
     },
     onMessage: (client, message) => {
       room.manager.onMessage(client, message);
-      if (message.t === "setReady" && message.ready && !capturing) {
-        capturing = true;
-        try {
-          waitForNaturalGoal(room);
-        } catch (error) {
-          console.error("Natural goal capture failed", error);
-        }
-      }
     },
     onBinaryMessage: (client, data) => {
       room.manager.onBinaryMessage(client, data);
@@ -86,12 +74,15 @@ const server = await startGameServer({
   },
 });
 
+const simulationLoop = startSimulationLoop(room.manager);
+
 let stopping = false;
 const shutdown = async (): Promise<void> => {
   if (stopping) {
     return;
   }
   stopping = true;
+  simulationLoop.stop();
   room.manager.close();
   await server.close();
   await rm(tlsDir, { recursive: true, force: true });
