@@ -51,8 +51,8 @@ function latestReplayClips(client: CaptureClient): readonly WireReplayClip[] {
   return [];
 }
 
-/** Starts a deterministic AI-vs-AI room; both seats stay connected. */
-export function createAiCaptureRoom(
+/** Creates a ready host waiting for a real client to occupy the guest seat. */
+export function createAiCaptureHost(
   registry: TeamRegistry,
   seed = CAPTURE_SEED,
   code = CAPTURE_CODE,
@@ -65,17 +65,27 @@ export function createAiCaptureRoom(
     aiOnly: true,
   });
   const host = new CaptureClient("capture-host");
-  const guest = new CaptureClient("capture-guest");
   manager.onReady(host);
   manager.onMessage(host, { t: "createRoom" });
-  manager.onReady(guest);
-  manager.onMessage(guest, {
+  manager.onMessage(host, { t: "setReady", ready: true });
+  return { manager, host, code };
+}
+
+/** Starts a deterministic AI-vs-AI room; both seats stay connected. */
+export function createAiCaptureRoom(
+  registry: TeamRegistry,
+  seed = CAPTURE_SEED,
+  code = CAPTURE_CODE,
+): AiCaptureRoom {
+  const room = createAiCaptureHost(registry, seed, code);
+  const guest = new CaptureClient("capture-guest");
+  room.manager.onReady(guest);
+  room.manager.onMessage(guest, {
     t: "joinRoom",
     code,
   } satisfies ClientMessage);
-  manager.onMessage(host, { t: "setReady", ready: true });
-  manager.onMessage(guest, { t: "setReady", ready: true });
-  return { manager, host, code };
+  room.manager.onMessage(guest, { t: "setReady", ready: true });
+  return room;
 }
 
 /** Advances the room until its normal score-change hook publishes a clip. */
