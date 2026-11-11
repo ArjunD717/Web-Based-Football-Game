@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 38**:
+both devices are thin clients. This repository is at **Milestone 39**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,56 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 39 scope
+
+Implemented:
+
+- A frame-time pressure gate for TAA. The renderer measures only the 3D draw
+  and TAA passes; display interval is deliberately excluded so a 30 Hz monitor
+  cannot disable software that still finishes inside the render budget
+- After `autoDisableFrames` consecutive draws slower than
+  `autoDisableRenderMs` (90 frames / 16.7 ms by default), TAA disposes its
+  targets, returns to the direct path and notifies the lobby
+- The Settings switch drops to unchecked, explains that TAA was automatically
+  disabled and allows an explicit retry. The automatic opt-out is not saved as
+  a user preference
+- The benchmark harness disables the automatic opt-out so a failing TAA run
+  cannot hide itself after crossing the threshold
+- `TimelineResetTracker` owns replay direction and seek state. Automated tests
+  drive forward playback, reverse, pause, resume, a timed seek and a reverse
+  jump, and verify one reset at each direction change or jump
+- The renderer now feeds the tracker; TAA reset clears proxy matrices as well
+  as color/depth history, so a replay seek cannot reuse stale velocity
+- Existing camera-mode and replay-enter/exit resets remain in place
+
+Verification:
+
+- `pnpm check` passes **717 tests** across **92 files**; lint and typecheck
+  pass
+- `pnpm build` succeeds
+- High-quality benchmark with automatic downgrade disabled for instrumentation:
+  **9.35 ms average**, **10.80 ms p95**, **PASS**
+- A temporary forced-pressure harness set the threshold below zero and two
+  frames required; the auto-disable callback fired **exactly once**, TAA fell
+  back without shader/WebGL errors, and the direct path continued
+- Automated replay tracker acceptance covers forward, reverse, paused,
+  resumed, seek and reverse-jump sequences
+- No unrelated browser errors were logged; only optional KTX2 `HEAD` aborts
+
+Known M39 limitations:
+
+- Automatic downgrade is one-way for the session. A faster scene does not
+  silently re-enable TAA; the user can retry from Settings
+- The pressure counter uses consecutive frame draws, not a percentile or GPU
+  timer query. A one-frame compilation hitch cannot trigger it, but a
+  sustained 16.7 ms draw does
+- Benchmark numbers explicitly bypass the automatic downgrade
+- Replay acceptance is a deterministic state-machine test plus renderer
+  integration; there is no recorded-clip browser automation yet
+- Motion proxies remain rigid root capsules/spheres; no limb or stencil-based
+  disocclusion
+- All M38/M37/M36/M35 presentation caveats remain
 
 ## Milestone 38 scope
 
