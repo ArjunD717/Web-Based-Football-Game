@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 39**:
+both devices are thin clients. This repository is at **Milestone 40**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -180,6 +180,57 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 40 scope
+
+Implemented:
+
+- Automated recorded-replay acceptance using the real `MatchReplayBuffer` and
+  `TimelineResetTracker`. The test drives a saved clip forward, pauses, steps
+  backward, steps forward, seeks and wraps at the end, and asserts the exact
+  number of history resets
+- One capped automatic TAA retry. After an automatic opt-out, the renderer
+  measures the direct path; only after `autoRetryFrames` consecutive direct
+  draws below `autoRetryRenderMs` does it recreate TAA once
+- A second automatic opt-out after the retry uses the retry cap and reports
+  `exhausted` instead of retrying forever. User toggles reset the retry budget
+  and allow a manual retry
+- Automatic state transitions are reported to the lobby as `disabled`,
+  `retried` or `exhausted`; the Settings switch and toast reflect each state
+- Benchmark instrumentation still bypasses automatic disable/retry so it
+  measures the TAA path rather than the fallback
+- Retry thresholds live in `VISUAL_TUNING.temporalAa`: 12 ms direct render for
+  180 consecutive frames, maximum one automatic retry
+
+Verification:
+
+- `pnpm check` passes **720 tests** across **93 files**; lint and typecheck
+  pass
+- `pnpm build` succeeds
+- High-quality benchmark with automatic downgrade disabled for instrumentation:
+  **9.47 ms average**, **11.20 ms p95**, **PASS**
+- Recorded replay acceptance asserts resets at reverse-step, forward-step,
+  backward seek, forward seek and loop wrap, with none during normal forward
+  playback
+- A forced-pressure browser harness observed the exact sequence
+  `disabled → retried → exhausted`; no shader, WebGL or script errors occurred
+- The retry callback recreated TAA once and the final exhausted state returned
+  to the direct path
+- Only optional KTX2 `HEAD` aborts were logged
+
+Known M40 limitations:
+
+- The automatic retry budget is one per renderer session. Manual Settings
+  toggles reset it intentionally
+- Recovery uses consecutive direct-frame draw times, not a long-window
+  percentile or GPU timer query
+- Recorded replay acceptance is a deterministic unit test against the real
+  replay buffer and reset policy; a browser-driven recorded clip test is still
+  absent
+- Motion proxies remain rigid root capsules/spheres; no limb or stencil-based
+  disocclusion
+- Benchmark runs bypass automatic fallback by design
+- All M39/M38/M37/M36/M35 presentation caveats remain
+
 ## Milestone 39 scope
 
 Implemented:
@@ -218,8 +269,8 @@ Verification:
 
 Known M39 limitations:
 
-- Automatic downgrade is one-way for the session. A faster scene does not
-  silently re-enable TAA; the user can retry from Settings
+- M39's automatic downgrade was one-way; M40 adds one capped automatic retry
+  after sustained direct-path recovery
 - The pressure counter uses consecutive frame draws, not a percentile or GPU
   timer query. A one-frame compilation hitch cannot trigger it, but a
   sustained 16.7 ms draw does
