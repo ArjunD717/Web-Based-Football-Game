@@ -42,3 +42,41 @@ export function shouldResetTimeline(
     Math.abs(elapsedDeltaSeconds) > jumpThresholdSeconds
   );
 }
+
+/**
+ * Stateful replay gate used by the renderer. It returns true once for a
+ * direction change or timeline jump, then tracks the new direction while
+ * normal playback continues.
+ */
+export class TimelineResetTracker {
+  private previousElapsedSeconds: number | null = null;
+  private direction: TimelineDirection = 0;
+
+  update(elapsedSeconds: number, jumpThresholdSeconds: number): boolean {
+    const previous = this.previousElapsedSeconds;
+    this.previousElapsedSeconds = elapsedSeconds;
+    if (!Number.isFinite(elapsedSeconds)) {
+      return false;
+    }
+    if (previous === null) {
+      return false;
+    }
+    const delta = elapsedSeconds - previous;
+    const nextDirection = timelineDirection(previous, elapsedSeconds);
+    const reset = shouldResetTimeline(
+      this.direction,
+      nextDirection,
+      delta,
+      jumpThresholdSeconds,
+    );
+    if (nextDirection !== 0) {
+      this.direction = nextDirection;
+    }
+    return reset;
+  }
+
+  reset(): void {
+    this.previousElapsedSeconds = null;
+    this.direction = 0;
+  }
+}
