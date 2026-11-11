@@ -5,7 +5,10 @@ import {
   meetsFrameBudget,
 } from "./render/frame-budget";
 import { createThreeRenderer } from "./render/three-renderer";
-import { VISUAL_TUNING } from "./render/visualTuning";
+import {
+  VISUAL_TUNING,
+  parseVisualQuality,
+} from "./render/visualTuning";
 import type { MatchView, RenderPlayer, RenderTeam } from "./render/view";
 
 const WARMUP_MS = 2_500;
@@ -24,9 +27,12 @@ const status = requireElement<HTMLElement>("#status");
 const results = requireElement<HTMLElement>("#results");
 const rerun = requireElement<HTMLButtonElement>("#rerun");
 
+const requestedQuality = parseVisualQuality(
+  new URLSearchParams(window.location.search).get("quality"),
+);
 const renderer = createThreeRenderer(canvas);
 renderer.resize();
-renderer.setQuality?.("high");
+renderer.setQuality?.(requestedQuality);
 renderer.setCameraMode?.("broadcast");
 
 const pitch = createPitch();
@@ -133,6 +139,7 @@ function showResults(): void {
   const budget = VISUAL_TUNING.frameBudget;
   const passes = meetsFrameBudget(p95Ms, budget);
   const rows: ReadonlyArray<readonly [string, string]> = [
+    ["quality", requestedQuality],
     ["samples", String(renderMs.length)],
     ["render avg", `${avgMs.toFixed(2)} ms`],
     ["render p95", `${p95Ms.toFixed(2)} ms`],
