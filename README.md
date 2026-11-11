@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 37**:
+both devices are thin clients. This repository is at **Milestone 38**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -180,6 +180,60 @@ Useful environment overrides:
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
 
+## Milestone 38 scope
+
+Implemented:
+
+- A WebGL capability probe for TAA. The resolve requires WebGL 2, a float or
+  half-float color-buffer extension and at least a 1024 px maximum texture
+  size. When the probe fails, the renderer never allocates history targets and
+  the Settings switch is disabled with the reason exposed as its title
+- Capability is re-read after a renderer swap. The toggle reflects the
+  effective state (`desired && supported`), so an unsupported context cannot
+  display a checked switch for a resolve that is not running
+- Replay timeline tracking. A change between forward and reverse playback, or
+  a seek/loop jump larger than `VISUAL_TUNING.temporalAa.timelineJumpSeconds`,
+  resets TAA history. Paused frames retain the previous direction
+- `TemporalAa.reset()` now clears the previous proxy matrix cache as well as
+  the color/depth history, so the first frame after a seek cannot use stale
+  motion vectors
+- The benchmark harness accepts `?quality=low|medium|high` and reports the
+  selected tier in its results
+- Camera-mode changes, replay enter/exit, match changes, timeline direction
+  changes, seek jumps and resizes all feed the same history reset path
+
+Verification:
+
+- `pnpm check` passes **713 tests**; lint and typecheck pass
+- `pnpm build` succeeds
+- Capability tests cover WebGL 1, missing color-buffer extensions and small
+  texture limits; timeline tests cover forward, paused, reverse, direction
+  changes and seek/loop jumps
+- Headless browser, default-on TAA, single-tab quality runs:
+  - low: **3.60 ms average**, **4.80 ms p95**, **PASS**
+  - medium: **8.01 ms average**, **12.10 ms p95**, **PASS**
+  - high: **5.63 ms average**, **7.60 ms p95**, **PASS**
+- Supported headless context shows the Settings switch checked with the normal
+  ghosting title; unsupported contexts are covered by the capability tests
+- No shader/WebGL/script errors were reported; only optional KTX2 `HEAD`
+  aborts
+
+Known M38 limitations:
+
+- The capability probe checks required context formats and texture size, not
+  actual GPU throughput. A supported but slow GPU can still hit the frame
+  budget
+- Reverse playback resets once when direction changes, not on every reverse
+  frame; history then accumulates with negative motion vectors. Large seeks
+  reset through the jump threshold
+- No stencil/velocity-mask disocclusion; player and ball motion remain rigid
+  root proxies
+- Replay camera-cut integration is covered by the existing camera mode reset;
+  no automated browser playback test was added
+- Quality-tier numbers were measured in a single headless run and are useful
+  for regression gating, not absolute hardware claims
+- All M37/M36/M35 presentation caveats remain
+
 ## Milestone 37 scope
 
 Implemented:
@@ -227,8 +281,8 @@ Known M37 limitations:
   attachments; there is no byte fallback or stencil/velocity-mask test
 - Sprites and line geometry remain outside the motion pass; number markers and
   the ball trail rely on depth/clamp handling
-- The setting has no automatic GPU capability probe; `?taa=0` or the Settings
-  switch is the manual fallback
+- M37 had no automatic GPU capability probe; M38 adds the WebGL format/size
+  probe and disables the setting when unavailable
 - All other M36 and M35 presentation caveats remain
 
 ## Milestone 36 scope
