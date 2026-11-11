@@ -4,6 +4,8 @@ import type { CameraInputBasis } from "../camera/types";
 import type { FootstepSink } from "./footsteps";
 import type { VisualQuality } from "./visualTuning";
 import type { TemporalAaSupport } from "./temporal-aa-support";
+
+export type TemporalAaAutoState = "disabled" | "retried" | "exhausted";
 import type { MatchView } from "./view";
 
 /**
@@ -36,8 +38,10 @@ export interface MatchRenderer {
   setTemporalAa?(enabled: boolean): void;
   /** Report whether this renderer can host temporal AA history buffers. */
   temporalAaCapability?(): TemporalAaSupport;
-  /** Receives one callback when frame time automatically disables TAA. */
-  setTemporalAaAutoDisabledHandler?(handler: (() => void) | null): void;
+  /** Receives automatic TAA disable, retry and exhaustion transitions. */
+  setTemporalAaAutoStateHandler?(
+    handler: ((state: TemporalAaAutoState) => void) | null,
+  ): void;
   /** Disable automatic TAA opt-out for benchmark instrumentation. */
   setAutoTemporalAaDowngrade?(enabled: boolean): void;
   /**

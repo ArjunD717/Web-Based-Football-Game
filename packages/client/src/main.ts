@@ -3234,10 +3234,16 @@ function updateQualityControl(): void {
 
 function bindTemporalAaHandler(): void {
   temporalAaAutoDisabled = false;
-  renderer.setTemporalAaAutoDisabledHandler?.(() => {
-    temporalAaAutoDisabled = true;
+  renderer.setTemporalAaAutoStateHandler?.((state) => {
+    temporalAaAutoDisabled = state !== "retried";
     updateTemporalAaControl();
-    showToast("Temporal AA disabled to protect frame rate");
+    showToast(
+      state === "retried"
+        ? "Temporal AA resumed after frame time recovered"
+        : state === "exhausted"
+          ? "Temporal AA stays off for this session"
+          : "Temporal AA disabled to protect frame rate",
+    );
   });
 }
 

@@ -3,7 +3,11 @@
 import * as THREE from "three";
 import { TUNING } from "@fb/shared";
 import type { Pitch } from "@fb/sim";
-import type { MatchRenderer, ScreenIndicator } from "./renderer";
+import type {
+  MatchRenderer,
+  ScreenIndicator,
+  TemporalAaAutoState,
+} from "./renderer";
 import { CameraDebugOverlay } from "../camera/CameraDebugOverlay";
 import { CameraDirector } from "../camera/CameraDirector";
 import { cameraGroundBasis } from "../camera/cameraMath";
@@ -57,8 +61,11 @@ import {
 import { TimelineResetTracker } from "./timeline-reset";
 import {
   INITIAL_TAA_PRESSURE_STATE,
+  INITIAL_TAA_RECOVERY_STATE,
   updateTaaPressure,
+  updateTaaRecovery,
   type TaaPressureState,
+  type TaaRecoveryState,
 } from "./taa-pressure";
 import { spatializeFootstep, type FootstepSink } from "./footsteps";
 import {
@@ -142,8 +149,12 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly motionSources: TemporalMotionSource[] = [];
   private readonly timeline = new TimelineResetTracker();
   private taaPressure: TaaPressureState = INITIAL_TAA_PRESSURE_STATE;
+  private taaRecovery: TaaRecoveryState = INITIAL_TAA_RECOVERY_STATE;
+  private taaAutoDisabled = false;
+  private taaRetries = 0;
   private autoTaaDowngradeEnabled = true;
-  private onTaaAutoDisabled: (() => void) | null = null;
+  private onTaaAutoState: ((state: TemporalAaAutoState) => void) | null =
+    null;
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -386,10 +397,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.renderer.render(this.scene, this.camera);
     }
     const renderMs = performance.now() - renderStartedAt;
-    if (
-      this.temporalAa !== null &&
-      this.autoTaaDowngradeEnabled
-    ) {
+    if (this.temporalAa !== null && this.autoTaaDowngradeEnabled) {
       const pressure = updateTaaPressure(
         this.taaPressure,
         renderMs,
@@ -399,6 +407,21 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.taaPressure = pressure.state;
       if (pressure.disable) {
         this.disableTemporalAaAutomatically();
+      }
+    } else if (
+      this.taaAutoDisabled &&
+      this.autoTaaDowngradeEnabled &&
+      this.taaRetries < VISUAL_TUNING.temporalAa.autoRetryMax
+    ) {
+      const recovery = updateTaaRecovery(
+        this.taaRecovery,
+        renderMs,
+        VISUAL_TUNING.temporalAa.autoRetryRenderMs,
+        VISUAL_TUNING.temporalAa.autoRetryFrames,
+      );
+      this.taaRecovery = recovery.state;
+      if (recovery.retry) {
+        this.retryTemporalAaAutomatically();
       }
     }
     if (dt > 0) {
@@ -495,10 +518,27 @@ export class ThreeMatchRenderer implements MatchRenderer {
     if (this.temporalAa === null) {
       return;
     }
+    const exhausted =
+      this.taaRetries >= VISUAL_TUNING.temporalAa.autoRetryMax;
+    this.taaAutoDisabled = true;
     this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
+    this.taaRecovery = INITIAL_TAA_RECOVERY_STATE;
     this.temporalAa.dispose();
     this.temporalAa = null;
-    this.onTaaAutoDisabled?.();
+    this.onTaaAutoState?.(exhausted ? "exhausted" : "disabled");
+  }
+
+  private retryTemporalAaAutomatically(): void {
+    if (!this.taaSupport.supported) {
+      return;
+    }
+    this.taaRetries += 1;
+    this.taaAutoDisabled = false;
+    this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
+    this.taaRecovery = INITIAL_TAA_RECOVERY_STATE;
+    this.temporalAa = new TemporalAa(this.renderer);
+    this.temporalAa.resize();
+    this.onTaaAutoState?.("retried");
   }
 
   setCameraMode(mode: CameraMode): void {
@@ -579,9 +619,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
     if (enabled && !this.taaSupport.supported) {
       return;
     }
-    if (enabled) {
-      this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
-    }
+    this.taaAutoDisabled = false;
+    this.taaRetries = 0;
+    this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
+    this.taaRecovery = INITIAL_TAA_RECOVERY_STATE;
     if (enabled === (this.temporalAa !== null)) {
       return;
     }
@@ -598,8 +639,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
     return this.taaSupport;
   }
 
-  setTemporalAaAutoDisabledHandler(handler: (() => void) | null): void {
-    this.onTaaAutoDisabled = handler;
+  setTemporalAaAutoStateHandler(
+    handler: ((state: TemporalAaAutoState) => void) | null,
+  ): void {
+    this.onTaaAutoState = handler;
   }
 
   setAutoTemporalAaDowngrade(enabled: boolean): void {
