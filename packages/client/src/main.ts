@@ -778,6 +778,10 @@ settingsPredictionButton.addEventListener("click", () => {
 });
 
 settingsTaaButton.addEventListener("click", () => {
+  if (renderer.temporalAaCapability?.().supported === false) {
+    updateTemporalAaControl();
+    return;
+  }
   temporalAaEnabled = !temporalAaEnabled;
   saveTemporalAa(temporalAaEnabled);
   renderer.setTemporalAa?.(temporalAaEnabled);
@@ -3217,15 +3221,17 @@ function updateQualityControl(): void {
 }
 
 function updateTemporalAaControl(): void {
-  settingsTaaButton.setAttribute(
-    "aria-checked",
-    String(temporalAaEnabled),
-  );
-  settingsTaaButton.disabled = rendererMode !== "3d";
+  const capability = renderer.temporalAaCapability?.();
+  const supported = capability?.supported ?? true;
+  const active = temporalAaEnabled && supported;
+  settingsTaaButton.setAttribute("aria-checked", String(active));
+  settingsTaaButton.disabled = rendererMode !== "3d" || !supported;
   settingsTaaButton.title =
-    rendererMode === "3d"
-      ? "Temporal resolve; disable if the GPU shows ghosting"
-      : "Switch to the 3D view to change temporal antialiasing";
+    rendererMode !== "3d"
+      ? "Switch to the 3D view to change temporal antialiasing"
+      : supported
+        ? "Temporal resolve; disable if the GPU shows ghosting"
+        : (capability?.reason ?? "This GPU cannot host temporal antialiasing");
 }
 
 function updateRendererControl(): void {
