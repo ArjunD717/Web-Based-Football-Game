@@ -332,6 +332,7 @@ let cameraMode: CameraMode = loadCameraMode();
 let replayCamera: CameraMode = "broadcast";
 let visualQuality: VisualQuality = loadVisualQuality();
 let temporalAaEnabled: boolean = loadTemporalAa();
+let temporalAaAutoDisabled = false;
 
 const substitutionPanel = new SubstitutionPanel({
   onSubstitute: (outId, inId) => client.substitute(outId, inId),
@@ -386,6 +387,7 @@ settingsQualitySelect.addEventListener("change", () => {
 });
 renderer.setQuality?.(visualQuality);
 renderer.setTemporalAa?.(temporalAaEnabled);
+bindTemporalAaHandler();
 updateQualityControl();
 updateTemporalAaControl();
 
@@ -782,7 +784,16 @@ settingsTaaButton.addEventListener("click", () => {
     updateTemporalAaControl();
     return;
   }
+  if (temporalAaAutoDisabled) {
+    temporalAaAutoDisabled = false;
+    temporalAaEnabled = true;
+    renderer.setTemporalAa?.(true);
+    saveTemporalAa(true);
+    updateTemporalAaControl();
+    return;
+  }
   temporalAaEnabled = !temporalAaEnabled;
+  temporalAaAutoDisabled = false;
   saveTemporalAa(temporalAaEnabled);
   renderer.setTemporalAa?.(temporalAaEnabled);
   updateTemporalAaControl();
@@ -3136,6 +3147,7 @@ function switchRenderer(next: RendererMode): void {
   renderer.setCameraMode?.(cameraMode);
   renderer.setQuality?.(visualQuality);
   renderer.setTemporalAa?.(temporalAaEnabled);
+  bindTemporalAaHandler();
   saveRendererMode(rendererMode);
   if (rendererMode !== "3d") {
     delete pitchStage.dataset.quality;
@@ -3220,18 +3232,30 @@ function updateQualityControl(): void {
       : "Switch to the 3D view to change quality";
 }
 
+function bindTemporalAaHandler(): void {
+  temporalAaAutoDisabled = false;
+  renderer.setTemporalAaAutoDisabledHandler?.(() => {
+    temporalAaAutoDisabled = true;
+    updateTemporalAaControl();
+    showToast("Temporal AA disabled to protect frame rate");
+  });
+}
+
 function updateTemporalAaControl(): void {
   const capability = renderer.temporalAaCapability?.();
   const supported = capability?.supported ?? true;
-  const active = temporalAaEnabled && supported;
+  const active =
+    temporalAaEnabled && supported && !temporalAaAutoDisabled;
   settingsTaaButton.setAttribute("aria-checked", String(active));
   settingsTaaButton.disabled = rendererMode !== "3d" || !supported;
   settingsTaaButton.title =
     rendererMode !== "3d"
       ? "Switch to the 3D view to change temporal antialiasing"
-      : supported
-        ? "Temporal resolve; disable if the GPU shows ghosting"
-        : (capability?.reason ?? "This GPU cannot host temporal antialiasing");
+      : temporalAaAutoDisabled
+        ? "Temporal AA was disabled automatically to protect frame rate; enable to retry"
+        : supported
+          ? "Temporal resolve; disable if the GPU shows ghosting"
+          : (capability?.reason ?? "This GPU cannot host temporal antialiasing");
 }
 
 function updateRendererControl(): void {

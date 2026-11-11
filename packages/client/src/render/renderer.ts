@@ -36,6 +36,10 @@ export interface MatchRenderer {
   setTemporalAa?(enabled: boolean): void;
   /** Report whether this renderer can host temporal AA history buffers. */
   temporalAaCapability?(): TemporalAaSupport;
+  /** Receives one callback when frame time automatically disables TAA. */
+  setTemporalAaAutoDisabledHandler?(handler: (() => void) | null): void;
+  /** Disable automatic TAA opt-out for benchmark instrumentation. */
+  setAutoTemporalAaDowngrade?(enabled: boolean): void;
   /**
    * Suspend context cuts while replaying recorded frames. The 2D renderer
    * ignores this.

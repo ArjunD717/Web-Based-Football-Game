@@ -54,11 +54,12 @@ import {
   temporalAaSupport,
   type TemporalAaSupport,
 } from "./temporal-aa-support";
+import { TimelineResetTracker } from "./timeline-reset";
 import {
-  shouldResetTimeline,
-  timelineDirection,
-  type TimelineDirection,
-} from "./timeline-reset";
+  INITIAL_TAA_PRESSURE_STATE,
+  updateTaaPressure,
+  type TaaPressureState,
+} from "./taa-pressure";
 import { spatializeFootstep, type FootstepSink } from "./footsteps";
 import {
   VISUAL_QUALITY,
@@ -139,8 +140,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
   private readonly taaSupport: TemporalAaSupport;
   private temporalAa: TemporalAa | null;
   private readonly motionSources: TemporalMotionSource[] = [];
-  private lastViewElapsedSeconds: number | null = null;
-  private viewDirection: TimelineDirection = 0;
+  private readonly timeline = new TimelineResetTracker();
+  private taaPressure: TaaPressureState = INITIAL_TAA_PRESSURE_STATE;
+  private autoTaaDowngradeEnabled = true;
+  private onTaaAutoDisabled: (() => void) | null = null;
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -310,8 +313,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.lastRenderAtMs = null;
       this.lastScoreHome = null;
       this.lastScoreAway = null;
-      this.lastViewElapsedSeconds = null;
-      this.viewDirection = 0;
+      this.timeline.reset();
       this.temporalAa?.reset();
       for (const net of this.goalNets) {
         net.reset();
@@ -319,7 +321,14 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.stadium?.reset();
     }
 
-    this.updateTimeline(view);
+    if (
+      this.timeline.update(
+        view.elapsedSeconds,
+        VISUAL_TUNING.temporalAa.timelineJumpSeconds,
+      )
+    ) {
+      this.temporalAa?.reset();
+    }
     this.syncPlayers(view);
     this.updateBall(view);
     this.updateBallEffects(view);
@@ -364,6 +373,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
     for (const rig of this.players.values()) {
       rig.advanceVisualTransition?.(dt);
     }
+    const renderStartedAt = performance.now();
     if (this.temporalAa !== null) {
       this.motionSources.length = 0;
       this.motionSources.push({ object: this.ball, shape: "ball" });
@@ -375,6 +385,22 @@ export class ThreeMatchRenderer implements MatchRenderer {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+    const renderMs = performance.now() - renderStartedAt;
+    if (
+      this.temporalAa !== null &&
+      this.autoTaaDowngradeEnabled
+    ) {
+      const pressure = updateTaaPressure(
+        this.taaPressure,
+        renderMs,
+        VISUAL_TUNING.temporalAa.autoDisableRenderMs,
+        VISUAL_TUNING.temporalAa.autoDisableFrames,
+      );
+      this.taaPressure = pressure.state;
+      if (pressure.disable) {
+        this.disableTemporalAaAutomatically();
+      }
+    }
     if (dt > 0) {
       this.frameBudget = updateFrameBudget(
         this.frameBudget,
@@ -382,28 +408,6 @@ export class ThreeMatchRenderer implements MatchRenderer {
         VISUAL_TUNING.frameBudget,
       );
     }
-  }
-
-  private updateTimeline(view: MatchView): void {
-    const previous = this.lastViewElapsedSeconds;
-    if (previous !== null) {
-      const delta = view.elapsedSeconds - previous;
-      const direction = timelineDirection(previous, view.elapsedSeconds);
-      if (
-        shouldResetTimeline(
-          this.viewDirection,
-          direction,
-          delta,
-          VISUAL_TUNING.temporalAa.timelineJumpSeconds,
-        )
-      ) {
-        this.temporalAa?.reset();
-      }
-      if (direction !== 0) {
-        this.viewDirection = direction;
-      }
-    }
-    this.lastViewElapsedSeconds = view.elapsedSeconds;
   }
 
   /**
@@ -487,6 +491,16 @@ export class ThreeMatchRenderer implements MatchRenderer {
     }
   }
 
+  private disableTemporalAaAutomatically(): void {
+    if (this.temporalAa === null) {
+      return;
+    }
+    this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
+    this.temporalAa.dispose();
+    this.temporalAa = null;
+    this.onTaaAutoDisabled?.();
+  }
+
   setCameraMode(mode: CameraMode): void {
     if (mode === this.cameraMode) {
       return;
@@ -508,6 +522,7 @@ export class ThreeMatchRenderer implements MatchRenderer {
       return;
     }
     this.replayActive = active;
+    this.timeline.reset();
     this.temporalAa?.reset();
     this.cameraDirector.reset();
     this.contextController.reset();
@@ -564,6 +579,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
     if (enabled && !this.taaSupport.supported) {
       return;
     }
+    if (enabled) {
+      this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
+    }
     if (enabled === (this.temporalAa !== null)) {
       return;
     }
@@ -578,6 +596,15 @@ export class ThreeMatchRenderer implements MatchRenderer {
 
   temporalAaCapability(): TemporalAaSupport {
     return this.taaSupport;
+  }
+
+  setTemporalAaAutoDisabledHandler(handler: (() => void) | null): void {
+    this.onTaaAutoDisabled = handler;
+  }
+
+  setAutoTemporalAaDowngrade(enabled: boolean): void {
+    this.autoTaaDowngradeEnabled = enabled;
+    this.taaPressure = INITIAL_TAA_PRESSURE_STATE;
   }
 
   indicatorStates(): readonly ScreenIndicator[] {

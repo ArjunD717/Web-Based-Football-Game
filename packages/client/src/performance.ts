@@ -34,6 +34,7 @@ const renderer = createThreeRenderer(canvas);
 renderer.resize();
 renderer.setQuality?.(requestedQuality);
 renderer.setCameraMode?.("broadcast");
+renderer.setAutoTemporalAaDowngrade?.(false);
 
 const pitch = createPitch();
 const homeColours = {
