@@ -241,7 +241,7 @@ export class TemporalAa {
   private readonly motionProxies = new Map<THREE.Object3D, THREE.Mesh>();
   private readonly playerProxyGeometry: THREE.CapsuleGeometry;
   private readonly ballProxyGeometry: THREE.SphereGeometry;
-  private readonly previousMotionMatrices = new WeakMap<
+  private previousMotionMatrices = new WeakMap<
     THREE.Object3D,
     THREE.Matrix4
   >();
@@ -346,6 +346,9 @@ export class TemporalAa {
   reset(): void {
     this.historyValid = false;
     this.frame = 0;
+    // After a cut or a replay seek the previous proxy matrix is unrelated to
+    // the next frame's history, so start motion vectors from zero again.
+    this.previousMotionMatrices = new WeakMap();
   }
 
   resize(): void {

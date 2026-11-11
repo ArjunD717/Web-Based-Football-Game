@@ -3,6 +3,7 @@ import type { CameraMode } from "../camera/modes";
 import type { CameraInputBasis } from "../camera/types";
 import type { FootstepSink } from "./footsteps";
 import type { VisualQuality } from "./visualTuning";
+import type { TemporalAaSupport } from "./temporal-aa-support";
 import type { MatchView } from "./view";
 
 /**
@@ -33,6 +34,8 @@ export interface MatchRenderer {
   setQuality?(quality: VisualQuality): void;
   /** Enable or bypass the temporal resolve; the 2D renderer ignores this. */
   setTemporalAa?(enabled: boolean): void;
+  /** Report whether this renderer can host temporal AA history buffers. */
+  temporalAaCapability?(): TemporalAaSupport;
   /**
    * Suspend context cuts while replaying recorded frames. The 2D renderer
    * ignores this.

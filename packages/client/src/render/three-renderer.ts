@@ -46,7 +46,19 @@ import { projectScreenIndicator } from "./screen-indicators";
 import { PlayerRig, type MatchPlayerRig } from "./three-player";
 import { AuthoredPlayerLibrary } from "./three-authored-player";
 import { configureGeometryFadeBudget } from "./geometry-dissolve-pool";
-import { TemporalAa, type TemporalMotionSource } from "./temporal-aa";
+import {
+  TemporalAa,
+  type TemporalMotionSource,
+} from "./temporal-aa";
+import {
+  temporalAaSupport,
+  type TemporalAaSupport,
+} from "./temporal-aa-support";
+import {
+  shouldResetTimeline,
+  timelineDirection,
+  type TimelineDirection,
+} from "./timeline-reset";
 import { spatializeFootstep, type FootstepSink } from "./footsteps";
 import {
   VISUAL_QUALITY,
@@ -124,8 +136,11 @@ export class ThreeMatchRenderer implements MatchRenderer {
     PlayerGeometryRequest
   >();
   private frameBudget: FrameBudgetState = INITIAL_FRAME_BUDGET_STATE;
+  private readonly taaSupport: TemporalAaSupport;
   private temporalAa: TemporalAa | null;
   private readonly motionSources: TemporalMotionSource[] = [];
+  private lastViewElapsedSeconds: number | null = null;
+  private viewDirection: TimelineDirection = 0;
   private readonly contextController: ContextCameraController;
   private readonly cameraDebug: CameraDebugOverlay;
 
@@ -147,9 +162,20 @@ export class ThreeMatchRenderer implements MatchRenderer {
     this.renderer.toneMappingExposure = 1.08;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.temporalAa = temporalAaEnabled()
-      ? new TemporalAa(this.renderer)
-      : null;
+    this.taaSupport = temporalAaSupport({
+      isWebGL2: this.renderer.capabilities.isWebGL2,
+      colorBufferFloat: this.renderer.extensions.has(
+        "EXT_color_buffer_float",
+      ),
+      colorBufferHalfFloat: this.renderer.extensions.has(
+        "EXT_color_buffer_half_float",
+      ),
+      maxTextureSize: this.renderer.capabilities.maxTextureSize,
+    });
+    this.temporalAa =
+      temporalAaEnabled() && this.taaSupport.supported
+        ? new TemporalAa(this.renderer)
+        : null;
 
     this.backdrop = createBackdropTexture();
     this.scene.background = this.backdrop;
@@ -284,12 +310,16 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.lastRenderAtMs = null;
       this.lastScoreHome = null;
       this.lastScoreAway = null;
+      this.lastViewElapsedSeconds = null;
+      this.viewDirection = 0;
+      this.temporalAa?.reset();
       for (const net of this.goalNets) {
         net.reset();
       }
       this.stadium?.reset();
     }
 
+    this.updateTimeline(view);
     this.syncPlayers(view);
     this.updateBall(view);
     this.updateBallEffects(view);
@@ -352,6 +382,28 @@ export class ThreeMatchRenderer implements MatchRenderer {
         VISUAL_TUNING.frameBudget,
       );
     }
+  }
+
+  private updateTimeline(view: MatchView): void {
+    const previous = this.lastViewElapsedSeconds;
+    if (previous !== null) {
+      const delta = view.elapsedSeconds - previous;
+      const direction = timelineDirection(previous, view.elapsedSeconds);
+      if (
+        shouldResetTimeline(
+          this.viewDirection,
+          direction,
+          delta,
+          VISUAL_TUNING.temporalAa.timelineJumpSeconds,
+        )
+      ) {
+        this.temporalAa?.reset();
+      }
+      if (direction !== 0) {
+        this.viewDirection = direction;
+      }
+    }
+    this.lastViewElapsedSeconds = view.elapsedSeconds;
   }
 
   /**
@@ -509,6 +561,9 @@ export class ThreeMatchRenderer implements MatchRenderer {
   }
 
   setTemporalAa(enabled: boolean): void {
+    if (enabled && !this.taaSupport.supported) {
+      return;
+    }
     if (enabled === (this.temporalAa !== null)) {
       return;
     }
@@ -519,6 +574,10 @@ export class ThreeMatchRenderer implements MatchRenderer {
       this.temporalAa?.dispose();
       this.temporalAa = null;
     }
+  }
+
+  temporalAaCapability(): TemporalAaSupport {
+    return this.taaSupport;
   }
 
   indicatorStates(): readonly ScreenIndicator[] {
