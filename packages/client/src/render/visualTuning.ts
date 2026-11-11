@@ -84,6 +84,10 @@ export interface VisualTuning {
     readonly disocclusionDepthM: number;
     /** Replay elapsed-time jump that resets history and proxy matrices. */
     readonly timelineJumpSeconds: number;
+    /** Sustained TAA render time above this disables the resolve. */
+    readonly autoDisableRenderMs: number;
+    /** Consecutive slow TAA frames required before automatic opt-out. */
+    readonly autoDisableFrames: number;
     /**
      * Cheap rigid proxies for screen-space motion. They cover the player body
      * and ball rather than re-rendering every skinned mesh into the velocity
@@ -265,6 +269,8 @@ export const VISUAL_TUNING: VisualTuning = {
     cameraCutAngleRadians: 0.4,
     disocclusionDepthM: 0.6,
     timelineJumpSeconds: 0.5,
+    autoDisableRenderMs: 16.7,
+    autoDisableFrames: 90,
     motionProxy: {
       playerRadiusM: 0.35,
       playerLengthM: 1.1,
