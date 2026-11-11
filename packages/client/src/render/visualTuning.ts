@@ -82,6 +82,8 @@ export interface VisualTuning {
     readonly cameraCutAngleRadians: number;
     /** World-space depth mismatch that invalidates reprojected history. */
     readonly disocclusionDepthM: number;
+    /** Replay elapsed-time jump that resets history and proxy matrices. */
+    readonly timelineJumpSeconds: number;
     /**
      * Cheap rigid proxies for screen-space motion. They cover the player body
      * and ball rather than re-rendering every skinned mesh into the velocity
@@ -262,6 +264,7 @@ export const VISUAL_TUNING: VisualTuning = {
     cameraCutDistanceM: 8,
     cameraCutAngleRadians: 0.4,
     disocclusionDepthM: 0.6,
+    timelineJumpSeconds: 0.5,
     motionProxy: {
       playerRadiusM: 0.35,
       playerLengthM: 1.1,
