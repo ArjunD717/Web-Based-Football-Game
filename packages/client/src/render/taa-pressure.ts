@@ -44,3 +44,41 @@ export function updateTaaPressure(
     disable: slowFrames >= Math.max(1, Math.floor(framesToDisable)),
   };
 }
+
+export interface TaaRecoveryState {
+  /** Consecutive direct-path frames below the recovery threshold. */
+  readonly fastFrames: number;
+}
+
+export const INITIAL_TAA_RECOVERY_STATE: TaaRecoveryState = {
+  fastFrames: 0,
+};
+
+export interface TaaRecoveryUpdate {
+  readonly state: TaaRecoveryState;
+  readonly retry: boolean;
+}
+
+/**
+ * Re-enable TAA only after the direct path has sustained a lower render cost.
+ * The gap between disable and recovery thresholds is deliberate hysteresis.
+ */
+export function updateTaaRecovery(
+  state: TaaRecoveryState,
+  renderMs: number,
+  thresholdMs: number,
+  framesToRetry: number,
+): TaaRecoveryUpdate {
+  if (!Number.isFinite(renderMs) || renderMs > thresholdMs) {
+    return {
+      state:
+        state.fastFrames === 0
+          ? state
+          : INITIAL_TAA_RECOVERY_STATE,
+      retry: false,
+    };
+  }
+  const target = Math.max(1, Math.floor(framesToRetry));
+  const fastFrames = Math.min(target, state.fastFrames + 1);
+  return { state: { fastFrames }, retry: fastFrames >= target };
+}
