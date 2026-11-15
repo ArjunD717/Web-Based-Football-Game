@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 51**:
+both devices are thin clients. This repository is at **Milestone 52**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -179,6 +179,61 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 52 scope
+
+Implemented:
+
+- The replay acceptance server no longer creates a fake host or pre-seats an
+  opponent. It starts the real `RoomManager` with the fixed acceptance room
+  code and match seed, then waits for both browser clients
+- The host acceptance page creates the room over WSS, selects the home team,
+  and readies up. A separate lightweight guest page joins the same room,
+  selects the away team, and readies up. Kick-off follows from the normal
+  lobby state machine
+- Both pages use the shared `connectAcceptanceRoom` client, which covers
+  `hello`, ping/pong, create/join, explicit `setTeam`, `setReady`, `matchStart`
+  and the `replayClips` notification
+- The guest retries `joinRoom` while the host is still creating the room
+- Both clients must receive the same live replay notification; the host then
+  fetches the clip and runs the complete replay/TAA checks
+- The server keeps `aiOnly` for deterministic AI-vs-AI football because this
+  milestone tests the real lobby and transport lifecycle, not user input
+- The fixture remains byte-identical because the selected teams, sheets,
+  settings and seed match the capture room
+
+Verification:
+
+- `pnpm check` passes **736 tests across 98 files**; lint and typecheck pass
+- `pnpm test:browser:replay` reports **PASS** in **111 seconds wall time**:
+  - host and guest are distinct browser contexts
+  - host: created room, selected team, ready, match started, notified `g1`
+  - guest: joined, selected team, ready, match started, notified `g1`
+  - no page errors in either client
+  - active room `ABCD`, 135 frames
+  - endpoint `/api/replay/ABCD/g1.json`, live payload matches fixture
+  - motion window 33.33 ms, player **0.126 m**, ball **0.434 m**
+  - TAA resets: forward **0**, pause **0**, reverse **1/1**, forward step **2**,
+    backward seek **3**, forward seek **4**, loop wrap **5**
+- `pnpm build` succeeds
+- The fixture SHA-256 remains
+  `cd4509032fd5d4bcc8a92fe49f7cbfc50d15791a8801c5d84cc08e5fa4f58096`
+
+Known M52 limitations:
+
+- Both seats remain AI-controlled during the match; this milestone verifies
+  the real host/guest lobby lifecycle rather than player input
+- The host page performs the visual replay/TAA checks; the guest page verifies
+  only the room and notification lifecycle
+- Acceptance uses fixed room code, team IDs and a fixed seed
+- Team sheets are the generated defaults; no pre-match editor changes are
+  exercised
+- The page closes its WebSocket after notification, so the room pauses on
+  disconnect while the replay remains downloadable
+- The self-signed certificate is trusted only through Playwright's
+  `ignoreHTTPSErrors`
+- The fixture remains the comparison oracle
+- All M51-M35 presentation caveats remain
 
 ## Milestone 51 scope
 
