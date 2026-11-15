@@ -86,6 +86,10 @@ export default defineConfig(({ command, isPreview = false }) => {
             packageDir,
             "replay-acceptance.html",
           ),
+          replayGuestAcceptance: path.resolve(
+            packageDir,
+            "replay-guest-acceptance.html",
+          ),
         },
       },
     },

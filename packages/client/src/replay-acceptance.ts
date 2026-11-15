@@ -1,11 +1,9 @@
 // packages/client/src/replay-acceptance.ts
 
 import {
-  PROTOCOL_VERSION,
-  WS_PATH,
-  encodeClientMessage,
-  parseServerMessage,
-} from "@fb/shared";
+  ACCEPTANCE_ROOM_CODE,
+  connectAcceptanceRoom,
+} from "./acceptance/room-socket";
 import { parseReplayExport } from "./match/replay-gallery";
 import { WireViewBuilder } from "./match/view-from-wire";
 import { MatchReplayBuffer } from "./presentation/replay";
@@ -18,141 +16,15 @@ import { createThreeRenderer } from "./render/three-renderer";
 const canvas = document.querySelector<HTMLCanvasElement>("#pitch")!;
 const result = document.querySelector<HTMLElement>("#result")!;
 
-interface SocketReport {
-  readonly secureContext: boolean;
-  readonly connected: boolean;
-  readonly welcome: boolean;
-  readonly pong: boolean;
-  readonly joined: boolean;
-  readonly ready: boolean;
-  readonly replayNotified: boolean;
-  readonly clipId: string | null;
-  readonly error: string | null;
-}
-
-const ROOM_CODE = "ABCD";
-
-async function joinRoomOverWebSocket(): Promise<SocketReport> {
-  const secureContext = window.isSecureContext;
-  if (!secureContext) {
-    return {
-      secureContext,
-      connected: false,
-      welcome: false,
-      pong: false,
-      joined: false,
-      ready: false,
-      replayNotified: false,
-      clipId: null,
-      error: "page is not a secure context",
-    };
-  }
-  return new Promise((resolve) => {
-    let connected = false;
-    let welcome = false;
-    let pong = false;
-    let joined = false;
-    let ready = false;
-    let replayNotified = false;
-    let clipId: string | null = null;
-    let settled = false;
-    const socket = new WebSocket(
-      `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${WS_PATH}`,
-    );
-    const finish = (error: string | null): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      try {
-        socket.close();
-      } catch {
-        // The socket may already be closed.
-      }
-      resolve({
-        secureContext,
-        connected,
-        welcome,
-        pong,
-        joined,
-        ready,
-        replayNotified,
-        clipId,
-        error,
-      });
-    };
-    const completeIfReady = (): void => {
-      if (pong && joined && replayNotified) {
-        finish(null);
-      }
-    };
-    const timeout = setTimeout(() => {
-      finish("room socket probe timed out");
-    }, 150_000);
-    socket.addEventListener("open", () => {
-      connected = true;
-      socket.send(
-        encodeClientMessage({ t: "hello", protocolVersion: PROTOCOL_VERSION }),
-      );
-    });
-    socket.addEventListener("message", (event) => {
-      if (typeof event.data !== "string") {
-        return;
-      }
-      const message = parseServerMessage(event.data);
-      if (message === null) {
-        return;
-      }
-      if (message.t === "welcome") {
-        welcome = true;
-        socket.send(
-          encodeClientMessage({ t: "ping", clientTimeMs: Date.now() }),
-        );
-        socket.send(encodeClientMessage({ t: "joinRoom", code: ROOM_CODE }));
-      } else if (message.t === "pong") {
-        pong = true;
-        completeIfReady();
-      } else if (message.t === "lobbyState") {
-        if (message.room?.code !== ROOM_CODE) {
-          return;
-        }
-        joined = true;
-        if (!ready) {
-          ready = true;
-          socket.send(encodeClientMessage({ t: "setReady", ready: true }));
-        }
-        completeIfReady();
-      } else if (message.t === "replayClips") {
-        const latest = message.clips.at(-1);
-        if (latest !== undefined) {
-          replayNotified = true;
-          clipId = latest.id;
-        }
-        completeIfReady();
-      } else if (message.t === "error") {
-        finish(`${message.code}: ${message.message}`);
-      }
-    });
-    socket.addEventListener("error", () => {
-      finish("socket error");
-    });
-    socket.addEventListener("close", () => {
-      if (!settled) {
-        finish("socket closed before replay notification");
-      }
-    });
-  });
-}
-
-const socketReport = await joinRoomOverWebSocket();
+const socketReport = await connectAcceptanceRoom("host");
 if (socketReport.error !== null) {
   throw new Error(socketReport.error);
 }
 if (socketReport.clipId === null) {
   throw new Error("Room did not notify a replay clip");
 }
-const endpoint = `/api/replay/${ROOM_CODE}/${socketReport.clipId}.json`;
+const endpoint =
+  `/api/replay/${ACCEPTANCE_ROOM_CODE}/${socketReport.clipId}.json`;
 const response = await fetch(endpoint);
 if (!response.ok) {
   throw new Error(`Could not load replay from ${endpoint} (${response.status})`);
@@ -307,12 +179,16 @@ renderSample(looped, "loop");
 const failed = checks.filter((check) => check.actual !== check.expected);
 const motionPassed = motion !== null && motion.moved;
 const socketPassed =
+  socketReport.role === "host" &&
   socketReport.secureContext &&
   socketReport.connected &&
   socketReport.welcome &&
   socketReport.pong &&
+  socketReport.createdRoom &&
   socketReport.joined &&
+  socketReport.teamSelected &&
   socketReport.ready &&
+  socketReport.matchStarted &&
   socketReport.replayNotified;
 const report = {
   status:
@@ -334,4 +210,7 @@ const report = {
   checks,
 };
 result.textContent = JSON.stringify(report, null, 2);
-(window as { __replayAcceptance?: typeof report }).__replayAcceptance = report;
+const acceptanceWindow = window as Window & {
+  __replayAcceptance?: typeof report;
+};
+acceptanceWindow.__replayAcceptance = report;

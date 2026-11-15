@@ -6,10 +6,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { startGameServer } from "../src/create-server";
+import { consoleLogger, startGameServer } from "../src/create-server";
 import { loadTeamRegistry } from "../src/data/registry";
-import { CAPTURE_SEED, createAiCaptureHost } from "./capture-room";
+import { RoomManager } from "../src/rooms/room-manager";
 import { startSimulationLoop } from "../src/rooms/simulation-loop";
+import { CAPTURE_CODE, CAPTURE_SEED } from "./capture-room";
 
 const execFileAsync = promisify(execFile);
 const tlsDir = await mkdtemp(path.join(tmpdir(), "fb-replay-tls-"));
@@ -46,7 +47,13 @@ if (!Number.isInteger(matchSeed)) {
     `CAPTURE_SEED must be an integer, got ${process.env.CAPTURE_SEED}`,
   );
 }
-const room = createAiCaptureHost(registry, matchSeed);
+const roomManager = new RoomManager({
+  logger: consoleLogger,
+  registry,
+  generateCode: () => CAPTURE_CODE,
+  matchSeed,
+  aiOnly: true,
+});
 
 const server = await startGameServer({
   host: "127.0.0.1",
@@ -57,24 +64,24 @@ const server = await startGameServer({
   dataDir: fileURLToPath(new URL("../../../data/", import.meta.url)),
   tls,
   getReplayClip: (code, clipId) =>
-    room.manager.exportReplayClip(code, clipId),
+    roomManager.exportReplayClip(code, clipId),
   handlers: {
     onReady: (client) => {
-      room.manager.onReady(client);
+      roomManager.onReady(client);
     },
     onMessage: (client, message) => {
-      room.manager.onMessage(client, message);
+      roomManager.onMessage(client, message);
     },
     onBinaryMessage: (client, data) => {
-      room.manager.onBinaryMessage(client, data);
+      roomManager.onBinaryMessage(client, data);
     },
     onDisconnect: (client) => {
-      room.manager.onDisconnect(client);
+      roomManager.onDisconnect(client);
     },
   },
 });
 
-const simulationLoop = startSimulationLoop(room.manager);
+const simulationLoop = startSimulationLoop(roomManager);
 
 let stopping = false;
 const shutdown = async (): Promise<void> => {
@@ -83,7 +90,7 @@ const shutdown = async (): Promise<void> => {
   }
   stopping = true;
   simulationLoop.stop();
-  room.manager.close();
+  roomManager.close();
   await server.close();
   await rm(tlsDir, { recursive: true, force: true });
 };
@@ -96,5 +103,5 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 console.log(
   `Replay acceptance server: https://127.0.0.1:${server.port} ` +
-    `(room ${room.code} waiting for a guest)`,
+    `(waiting for host and guest to create room ${CAPTURE_CODE})`,
 );
