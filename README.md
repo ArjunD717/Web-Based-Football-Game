@@ -2,7 +2,7 @@
 # Web Football
 
 Private, LAN-only browser football game. The host machine owns the simulation;
-both devices are thin clients. This repository is at **Milestone 52**:
+both devices are thin clients. This repository is at **Milestone 53**:
 server-authoritative matches, a live two-player team editor, the referee laws,
 the data pipeline, a layered attribute-driven AI, selectable club and national
 teams, a complete match-management layer with substitutions, injuries, added
@@ -41,7 +41,8 @@ geometry dissolve and pools transition resources. M33 moves that dither to a
 static generated blue-noise texture, shares the transition cache across rigs
 and lowers the dissolve budget automatically when frames are under pressure.
 M34 anchors that pattern to each player's projected root so it no longer
-slides across the screen as the camera moves.
+slides across the screen as the camera moves. M53 removes the 2D match renderer
+and makes Three.js/WebGL 2 the only renderer for both the match and practice.
 
 ## Requirements
 
@@ -179,6 +180,52 @@ Useful environment overrides:
 | `FB_SKIP_BUILD` | unset | Set `1` to skip the launcher's client build |
 | `FB_SKIP_CERTS` | unset | Set `1` to fail instead of creating missing certificates |
 | `FB_AUTO_CERTS` | unset | Set `0` to fail instead of creating missing certificates |
+
+## Milestone 53 scope
+
+Implemented:
+
+- Deleted the Canvas 2D player renderer and the renderer-mode factory
+- Removed the `2D view` / `3D view` toggle, `?renderer=2d`, the
+  `fb.renderer` preference and the automatic 2D fallback
+- The main match now mounts `ThreeMatchRenderer` directly. If WebGL 2 is
+  unavailable, the pitch stage shows an explicit unsupported message instead
+  of falling back to a top-down player view
+- Practice mode now uses the same `ThreeMatchRenderer`, broadcast camera and
+  medium quality preset, and preloads the authored player assets
+- Removed renderer-mode conditions from the camera, quality, TAA and replay
+  camera controls; those controls are now always driven by their real
+  capabilities
+- Updated the renderer contract and Three.js comments to describe the 3D-only
+  architecture
+- Deleted the Canvas 2D renderer source and mode factory so they cannot be
+  bundled again
+
+Verification:
+
+- `pnpm check` passes **736 tests across 98 files**; lint and typecheck pass
+- `pnpm build` succeeds; no `canvas-renderer` or renderer-mode chunk remains
+- Playwright smoke on `/practice.html` reports a WebGL 2 canvas at
+  **1134 x 566**, rendered 3D players and spectators, and no page errors
+- The match page has no `#renderer-toggle`; its pitch canvas is WebGL 2
+- The replay acceptance still reports **PASS**:
+  - host and guest both complete the WSS room lifecycle
+  - 135 frames, replay clip `g1`
+  - player motion **0.126 m**, ball motion **0.434 m**
+  - TAA timeline resets **5**
+- Fixture SHA-256 remains
+  `cd4509032fd5d4bcc8a92fe49f7cbfc50d15791a8801c5d84cc08e5fa4f58096`
+
+Known M53 limitations:
+
+- A device without WebGL 2 cannot render the match; there is deliberately no
+  2D fallback
+- Practice uses the broadcast camera and medium quality; it does not expose the
+  full camera or quality selectors
+- Small 2D canvas textures remain for number markers and the controlled-player
+  arrow, but all player bodies, pitch, stadium and ball render in Three.js
+- The replay fixture remains the comparison oracle
+- All M52-M35 presentation caveats remain
 
 ## Milestone 52 scope
 
@@ -3134,8 +3181,7 @@ The two-minute match check:
     End to end, Player and Drone; confirm the view changes and the choice
     survives a reload. In End to end and Player, push the stick toward the top
     of the screen and confirm the player moves toward the far end, not sideways.
-    Switch to **2D view** and confirm the Camera picker disables. Switch back and
-    confirm the 3D camera returns. In Player camera, sprint and shoot: confirm
+    In Player camera, sprint and shoot: confirm
     knees bend through the stride, elbows counter-swing, and the shooting leg
     swings from backswing through contact. Take an on-target shot: the opposing
     goalkeeper must tilt into a left/right dive before the save or goal resolves.
