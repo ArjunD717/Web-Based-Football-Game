@@ -81,9 +81,9 @@ const BALL_LANDING_WORLD_HEIGHT_M = 0.025;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 /**
- * Three.js presentation layer. It consumes the same immutable MatchView as the
- * 2D renderer, so simulation and network code remain unaware of the camera,
- * meshes or animation.
+ * Three.js presentation layer. It consumes the immutable MatchView, so
+ * simulation and network code remain unaware of the camera, meshes or
+ * animation.
  */
 export class ThreeMatchRenderer implements MatchRenderer {
   private readonly renderer: THREE.WebGLRenderer;

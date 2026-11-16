@@ -5,7 +5,8 @@ import {
   stepMatch,
   type MatchState,
 } from "@fb/sim";
-import { createCanvasRenderer } from "../render/canvas-renderer";
+import { preloadAuthoredPlayer } from "../render/authored-asset";
+import { createThreeRenderer } from "../render/three-renderer";
 import { matchStateToView } from "../render/view";
 import "./practice.css";
 
@@ -26,7 +27,8 @@ const lastTouch = byId<HTMLElement>("last-touch");
 const seed = byId<HTMLElement>("seed");
 const toast = byId<HTMLElement>("toast");
 
-const renderer = createCanvasRenderer(canvas);
+preloadAuthoredPlayer();
+const renderer = createThreeRenderer(canvas);
 
 let match = createMatch({ seed: initialSeed() });
 let paused = false;
@@ -35,6 +37,9 @@ let lastFrameAt = performance.now();
 let lastHudAt = 0;
 let toastTimer: number | null = null;
 
+renderer.setCameraMode?.("broadcast");
+renderer.setQuality?.("medium");
+renderer.resize();
 syncUrlWithSeed();
 updateHud();
 renderer.render(matchStateToView(match));

@@ -48,12 +48,8 @@ import {
 import { LocalPlayerPrediction } from "./net/local-prediction";
 import { TeamEditor } from "./lobby/team-editor";
 import { preloadAuthoredPlayer } from "./render/authored-asset";
-import {
-  mountMatchRenderer,
-  preferredRendererMode,
-  saveRendererMode,
-  type RendererMode,
-} from "./render/factory";
+import type { MatchRenderer } from "./render/renderer";
+import { createThreeRenderer } from "./render/three-renderer";
 import type { MatchView, RenderPlayer } from "./render/view";
 import {
   loadTemporalAa,
@@ -140,10 +136,18 @@ const cameraIndicatorElements: Readonly<
     '[data-indicator="controlled"]',
   ),
 };
-let mounted = mountMatchRenderer(pitchStage, preferredRendererMode());
-let renderer = mounted.renderer;
-let rendererMode: RendererMode = mounted.mode;
-let rendererFellBack = mounted.fellBack;
+const pitchCanvas = byId<HTMLCanvasElement>("pitch");
+let renderer: MatchRenderer;
+try {
+  renderer = createThreeRenderer(pitchCanvas);
+} catch (error) {
+  const message = document.createElement("p");
+  message.className = "renderer-unsupported";
+  message.textContent =
+    "3D match rendering requires WebGL 2. Enable hardware acceleration or use a WebGL 2 browser.";
+  pitchStage.replaceChildren(message);
+  throw error;
+}
 const client = new GameClient();
 const replay = new MatchReplayBuffer();
 const audio = new MatchAudio();
@@ -230,8 +234,6 @@ const replayGallery = byId<HTMLElement>("replay-gallery");
 const replayGalleryList = byId<HTMLElement>("replay-gallery-list");
 const closeReplaysButton = byId<HTMLButtonElement>("close-replays");
 const pauseMatchButton = byId<HTMLButtonElement>("pause-match");
-const rendererToggleButton =
-  byId<HTMLButtonElement>("renderer-toggle");
 const cameraModeSelect =
   byId<HTMLSelectElement>("camera-mode");
 const replayButton = byId<HTMLButtonElement>("replay-button");
@@ -259,7 +261,6 @@ const replayPrevClipButton =
 const replayNextClipButton =
   byId<HTMLButtonElement>("replay-next-clip");
 const replayShareButton = byId<HTMLButtonElement>("replay-share");
-const replayAngles = byId<HTMLElement>("replay-angles");
 const replayCameraButtons = [
   ...document.querySelectorAll<HTMLButtonElement>("[data-replay-camera]"),
 ];
@@ -393,12 +394,8 @@ bindTemporalAaHandler();
 updateQualityControl();
 updateTemporalAaControl();
 
-updateRendererControl();
 updateAudioControl();
 updateHapticsControl();
-if (rendererFellBack) {
-  showToast("3D view unavailable; using the 2D renderer");
-}
 
 const queryCode = readQueryRoomCode();
 const replayDeepLink = readReplayDeepLink();
@@ -584,11 +581,6 @@ statsNextLegButton.addEventListener("click", () => {
   statsNextLegButton.disabled = true;
   statsNextLegButton.textContent = "Preparing room…";
   client.prepareNextLeg();
-});
-
-rendererToggleButton.addEventListener("click", () => {
-  const next: RendererMode = rendererMode === "3d" ? "2d" : "3d";
-  switchRenderer(next);
 });
 
 replayButton.addEventListener("click", () => {
@@ -3130,47 +3122,10 @@ function setReplayCamera(mode: CameraMode): void {
 }
 
 function updateReplayCameraButtons(): void {
-  replayAngles.hidden = rendererMode !== "3d";
   for (const button of replayCameraButtons) {
     const mode = parseCameraMode(button.dataset.replayCamera);
     button.setAttribute("aria-pressed", String(mode === replayCamera));
-    button.disabled = !replay.active || rendererMode !== "3d";
-  }
-}
-
-function switchRenderer(next: RendererMode): void {
-  if (next === rendererMode) {
-    return;
-  }
-  if (replay.active) {
-    stopReplay();
-  }
-  renderer.destroy();
-  mounted = mountMatchRenderer(pitchStage, next);
-  renderer = mounted.renderer;
-  rendererMode = mounted.mode;
-  connectFootstepAudio();
-  rendererFellBack = mounted.fellBack;
-  renderer.setCameraMode?.(cameraMode);
-  renderer.setQuality?.(visualQuality);
-  renderer.setTemporalAa?.(temporalAaEnabled);
-  bindTemporalAaHandler();
-  saveRendererMode(rendererMode);
-  if (rendererMode !== "3d") {
-    delete pitchStage.dataset.quality;
-  }
-  updateRendererControl();
-  updateCameraControl();
-  updateQualityControl();
-  updateTemporalAaControl();
-  updateReplayCameraButtons();
-  if (latestView !== null) {
-    renderer.render(latestView);
-    updateCameraIndicators();
-  }
-  renderer.resize();
-  if (rendererFellBack) {
-    showToast("3D view unavailable; using the 2D renderer");
+    button.disabled = !replay.active;
   }
 }
 
@@ -3222,21 +3177,15 @@ function updateHapticsControl(): void {
 function updateCameraControl(): void {
   const option = CAMERA_MODES.find((entry) => entry.id === cameraMode);
   cameraModeSelect.value = cameraMode;
-  cameraModeSelect.disabled = rendererMode !== "3d" || replay.active;
+  cameraModeSelect.disabled = replay.active;
   cameraModeSelect.title = replay.active
     ? "Pick a replay angle in the replay bar"
-    : rendererMode === "3d"
-      ? (option?.description ?? "Gameplay camera")
-      : "Switch to the 3D view to change the camera";
+    : (option?.description ?? "Gameplay camera");
 }
 
 function updateQualityControl(): void {
   settingsQualitySelect.value = visualQuality;
-  settingsQualitySelect.disabled = rendererMode !== "3d";
-  settingsQualitySelect.title =
-    rendererMode === "3d"
-      ? "3D shadows, crowd and effects quality"
-      : "Switch to the 3D view to change quality";
+  settingsQualitySelect.title = "3D shadows, crowd and effects quality";
 }
 
 function bindTemporalAaHandler(): void {
@@ -3260,15 +3209,12 @@ function updateTemporalAaControl(): void {
   const active =
     temporalAaEnabled && supported && !temporalAaAutoDisabled;
   settingsTaaButton.setAttribute("aria-checked", String(active));
-  settingsTaaButton.disabled = rendererMode !== "3d" || !supported;
-  settingsTaaButton.title =
-    rendererMode !== "3d"
-      ? "Switch to the 3D view to change temporal antialiasing"
-      : temporalAaAutoDisabled
-        ? "Temporal AA was disabled automatically to protect frame rate; enable to retry"
-        : supported
-          ? "Temporal resolve; disable if the GPU shows ghosting"
-          : (capability?.reason ?? "This GPU cannot host temporal antialiasing");
+  settingsTaaButton.disabled = !supported;
+  settingsTaaButton.title = temporalAaAutoDisabled
+    ? "Temporal AA was disabled automatically to protect frame rate; enable to retry"
+    : supported
+      ? "Temporal resolve; disable if the GPU shows ghosting"
+      : (capability?.reason ?? "This GPU cannot host temporal antialiasing");
   updateTaaDiagnostics();
 }
 
@@ -3290,21 +3236,6 @@ function updateTaaDiagnostics(): void {
     `${diagnostics.timelineResets} replay resets`,
     `${diagnostics.autoRetries} auto retries`,
   ].join(" · ");
-}
-
-function updateRendererControl(): void {
-  rendererToggleButton.textContent =
-    rendererMode === "3d" ? "2D view" : "3D view";
-  rendererToggleButton.setAttribute(
-    "aria-pressed",
-    String(rendererMode === "3d"),
-  );
-  rendererToggleButton.title =
-    rendererFellBack
-      ? "WebGL unavailable; using 2D"
-      : rendererMode === "3d"
-        ? "Switch to the top-down renderer"
-        : "Switch to the 3D renderer";
 }
 
 function showMatch(): void {
